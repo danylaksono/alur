@@ -82,10 +82,18 @@ export const useStore = create<AppState>((set, get) => ({
     )
   })),
 
-  removeNode: (id) => set((state) => ({
-    nodes: state.nodes.filter((node) => node.id !== id),
-    edges: state.edges.filter((edge) => edge.source !== id && edge.target !== id),
-  })),
+  removeNode: (id) => set((state) => {
+    const node = state.nodes.find((n) => n.id === id);
+    const tableName = node?.data?.config?.tableName as string | undefined;
+    return {
+      nodes: state.nodes.filter((n) => n.id !== id),
+      edges: state.edges.filter((edge) => edge.source !== id && edge.target !== id),
+      // Cascade: remove the associated map layer if this input node had data loaded
+      mapLayers: tableName
+        ? state.mapLayers.filter((layer) => layer.id !== tableName)
+        : state.mapLayers,
+    };
+  }),
 
   duplicateNode: (id, newId = `node-${Date.now()}`, position) => set((state) => {
     const node = state.nodes.find((item) => item.id === id);

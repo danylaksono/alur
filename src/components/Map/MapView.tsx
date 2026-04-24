@@ -7,6 +7,8 @@ export const MapView = () => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const mapLayers = useStore((state) => state.mapLayers);
+  // Track which layer IDs have been added to the MapLibre instance
+  const renderedLayerIds = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!mapContainer.current || map.current) return;
@@ -105,6 +107,19 @@ export const MapView = () => {
         return;
       }
 
+      // --- Remove layers that are no longer in the store ---
+      const currentIds = new Set(mapLayers.map((l) => l.id));
+      renderedLayerIds.current.forEach((renderedId) => {
+        if (!currentIds.has(renderedId)) {
+          const layerId = `input-layer-${renderedId}`;
+          const sourceId = `input-source-${renderedId}`;
+          if (map.current?.getLayer(layerId)) map.current.removeLayer(layerId);
+          if (map.current?.getSource(sourceId)) map.current.removeSource(sourceId);
+          renderedLayerIds.current.delete(renderedId);
+        }
+      });
+
+      // --- Add / update layers present in the store ---
       mapLayers.forEach((layer) => {
         const sourceId = `input-source-${layer.id}`;
         const layerId = `input-layer-${layer.id}`;
@@ -124,22 +139,29 @@ export const MapView = () => {
         const isPoint = geometryType.includes('Point');
         const isLine = geometryType.includes('Line');
         const layerType = isPoint ? 'circle' : isLine ? 'line' : 'fill';
+
+        // Assign a color per layer index
+        const layerColors = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
+        const colorIdx = mapLayers.indexOf(layer) % layerColors.length;
+        const color = layerColors[colorIdx];
+
         const paint: any = isPoint
           ? {
-              'circle-radius': 4,
-              'circle-color': '#2563eb',
+              'circle-radius': 3,
+              'circle-color': color,
+              'circle-opacity': 0.75,
               'circle-stroke-color': '#ffffff',
-              'circle-stroke-width': 1,
+              'circle-stroke-width': 0.5,
             }
           : isLine
           ? {
-              'line-color': '#2563eb',
+              'line-color': color,
               'line-width': 2,
             }
           : {
-              'fill-color': '#2563eb',
+              'fill-color': color,
               'fill-opacity': 0.3,
-              'fill-outline-color': '#1e40af',
+              'fill-outline-color': color,
             };
 
         map.current?.addLayer({
@@ -148,6 +170,8 @@ export const MapView = () => {
           source: sourceId,
           paint,
         });
+
+        renderedLayerIds.current.add(layer.id);
       });
 
       const latestLayer = mapLayers[mapLayers.length - 1];
@@ -178,9 +202,17 @@ export const MapView = () => {
           </div>
           {mapLayers.length ? (
             mapLayers.map((layer) => (
-              <div key={layer.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-2 text-[10px] text-slate-700">
+              <div key={layer.id} className="rounded-xl border border-slate-200 bg-slate-50 p-2 text-[10px] text-slate-700">
                 <div className="font-semibold text-slate-900 truncate">{layer.name}</div>
-                <div className="text-muted-foreground mt-1 uppercase tracking-[0.15em]">input layer</div>
+                <div className="flex items-center gap-2 mt-1">
+                  <div
+                    className="w-2 h-2 rounded-full"
+                    style={{ backgroundColor: ['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4'][mapLayers.indexOf(layer) % 6] }}
+                  />
+                  <span className="text-muted-foreground uppercase tracking-[0.15em]">
+                    {layer.geojson.features.length.toLocaleString()} features
+                  </span>
+                </div>
               </div>
             ))
           ) : (
