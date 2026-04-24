@@ -1,9 +1,12 @@
-import React, { type ReactNode } from 'react';
-import { Database, Zap, Eye, Plus, Info } from 'lucide-react';
+import React, { useState, type ReactNode } from 'react';
+import { Database, Zap, Eye, Plus, Info, Loader2 } from 'lucide-react';
 import { useStore } from '../store/useStore';
+import { buildWorkflowSQL } from '../utils/workflowEngine';
+import { duckdbService } from '../services/duckdb';
 
 export const Sidebar = ({ children, className }: { children?: ReactNode; className?: string }) => {
-  const { addNode, duckdbReady } = useStore();
+  const { addNode, duckdbReady, addMapLayer, addChatMessage } = useStore();
+  const [executing, setExecuting] = useState(false);
 
   const handleAddNode = (type: 'input' | 'analysis' | 'attribute' | 'output') => {
     const id = `${type}-${Date.now()}`;
@@ -21,9 +24,39 @@ export const Sidebar = ({ children, className }: { children?: ReactNode; classNa
   };
 
   const handleExecute = async () => {
-    // Traverse the graph and generate SQL
-    console.log('Executing workflow with nodes:', useStore.getState().nodes);
-    // In a real app, this would build a CTE or a set of VIEWs
+    const { nodes, edges } = useStore.getState();
+
+    try {
+      setExecuting(true);
+      addChatMessage('system', '⚙️ Building workflow SQL...');
+
+      const { sql, outputLayerName } = buildWorkflowSQL(nodes, edges);
+      addChatMessage('system', `📝 Generated SQL:\n\`\`\`sql\n${sql}\n\`\`\``);
+
+      addChatMessage('system', '🚀 Executing workflow against DuckDB...');
+      const geojson = await duckdbService.getGeoJSON(sql);
+
+      if (!geojson || geojson.features.length === 0) {
+        addChatMessage('system', '⚠️ Workflow executed but produced no features.');
+        return;
+      }
+
+      addMapLayer({
+        id: outputLayerName,
+        name: `Workflow Result (${geojson.features.length} features)`,
+        geojson,
+      });
+
+      addChatMessage(
+        'system',
+        `✅ Workflow complete — ${geojson.features.length.toLocaleString()} features added to the map as "${outputLayerName}".`
+      );
+    } catch (err: any) {
+      console.error('Workflow execution error:', err);
+      addChatMessage('system', `❌ Workflow error: ${err.message}`);
+    } finally {
+      setExecuting(false);
+    }
   };
 
   return (
@@ -83,11 +116,20 @@ export const Sidebar = ({ children, className }: { children?: ReactNode; classNa
       <div className="p-4 border-t bg-muted/20">
         <button 
           onClick={handleExecute}
-          disabled={!duckdbReady}
+          disabled={!duckdbReady || executing}
           className="w-full bg-slate-900 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-black transition-all active:scale-[0.98] shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <Zap className="w-4 h-4 fill-white" />
-          Execute Workflow
+          {executing ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Executing...
+            </>
+          ) : (
+            <>
+              <Zap className="w-4 h-4 fill-white" />
+              Execute Workflow
+            </>
+          )}
         </button>
       </div>
     </aside>
@@ -111,3 +153,4 @@ const NodeLibraryItem = ({ icon, title, description, onClick, color }: any) => (
     <Plus className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
   </div>
 );
+

@@ -126,6 +126,15 @@ export const InputNode = ({ data, id }: any) => {
               accept=".parquet,.csv,.json"
             />
           </label>
+          {/* Load bundled sample */}
+          <button
+            type="button"
+            onClick={handleLoadSample}
+            className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg border border-blue-200 bg-blue-50 text-[10px] font-semibold text-blue-600 hover:bg-blue-100 transition-colors"
+          >
+            <Sparkles className="w-3 h-3" />
+            Load Sample (London NEED)
+          </button>
         </div>
       )}
 

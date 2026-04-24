@@ -3,6 +3,7 @@ import { ReactFlow, Controls, Background } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useStore } from './store/useStore';
 import { duckdbService } from './services/duckdb';
+import { buildWorkflowSQL } from './utils/workflowEngine';
 import { 
   Workflow, 
   Map as MapIcon, 
@@ -52,34 +53,12 @@ export default function App() {
       return '-- SQL preview will appear here once you add input and analysis nodes.';
     }
 
-    const lines: string[] = ['-- SQL Workflow Preview'];
-
-    nodes.forEach((node, index) => {
-      const { type, config, label } = node.data;
-      lines.push(`-- Node ${index + 1}: ${label}`);
-
-      if (type === 'input') {
-        lines.push(config.tableName ? `-- Source table: ${config.tableName}` : '-- Source table: <unknown>');
-      } else if (type === 'analysis') {
-        const operation = config.operation || 'ST_Buffer';
-        const sourceTable = config.sourceTable || '<source_table>';
-        if (operation === 'ST_Buffer') {
-          lines.push(`SELECT ST_Buffer(geom, ${config.distance ?? 100}) AS buffered_geom FROM ${sourceTable};`);
-        } else if (operation === 'ST_Transform') {
-          lines.push(`SELECT ST_Transform(geom, '${config.sourceCrs ?? 'EPSG:4326'}', '${config.targetCrs ?? 'EPSG:3857'}') AS geom_transformed FROM ${sourceTable};`);
-        } else {
-          lines.push(`SELECT ${operation}(geom) FROM ${sourceTable};`);
-        }
-      } else if (type === 'attribute') {
-        lines.push(`SELECT *, ${config.expression ?? '<expression>'} AS ${config.resultField ?? 'new_field'} FROM ${config.sourceTable ?? '<source_table>'};`);
-      } else if (type === 'output') {
-        lines.push('-- Output node (visualization)');
-      }
-
-      lines.push('');
-    });
-
-    return lines.join('\n');
+    try {
+      const { sql } = buildWorkflowSQL(nodes, edges);
+      return sql;
+    } catch (err: any) {
+      return `-- Preview unavailable: ${err.message}`;
+    }
   };
 
   const sqlPreview = buildSqlPreview();

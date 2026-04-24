@@ -86,10 +86,15 @@ export const MapView = () => {
 
     if (!coords.length) return null;
 
-    const lons = coords.map((c) => c[0]);
-    const lats = coords.map((c) => c[1]);
-    const sw: [number, number] = [Math.min(...lons), Math.min(...lats)];
-    const ne: [number, number] = [Math.max(...lons), Math.max(...lats)];
+    let minLon = Infinity, maxLon = -Infinity, minLat = Infinity, maxLat = -Infinity;
+    for (const [lon, lat] of coords) {
+      if (lon < minLon) minLon = lon;
+      if (lon > maxLon) maxLon = lon;
+      if (lat < minLat) minLat = lat;
+      if (lat > maxLat) maxLat = lat;
+    }
+    const sw: [number, number] = [minLon, minLat];
+    const ne: [number, number] = [maxLon, maxLat];
 
     if (!isValidLon(sw[0]) || !isValidLat(sw[1]) || !isValidLon(ne[0]) || !isValidLat(ne[1])) {
       return null;

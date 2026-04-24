@@ -29,9 +29,21 @@ export const AnalysisNode = ({ data, id }: any) => {
     updateConfig({ distance: Number(e.target.value) });
   };
 
+  const spatialHelper = selectedFunction ? (
+    <>
+      <div className="font-semibold text-slate-800">{selectedFunction.name}</div>
+      <div>{selectedFunction.summary}</div>
+      <div className="text-[9px] text-slate-500">Required inputs: {requiredInputCount} geometry{requiredInputCount > 1 ? 's' : ''}</div>
+    </>
+  ) : null;
+
+  const attributeHelper = (
+    <div>Build a new attribute using a DuckDB expression. The output adds one computed field to each row.</div>
+  );
+
   return (
     <div className={`relative px-4 py-3 min-w-[280px] bg-white border-l-4 rounded-xl shadow-lg ${isAttribute ? 'border-l-slate-500' : 'border-l-purple-500'}`}>
-      <NodeActions id={id} />
+      <NodeActions id={id} helperContent={isAttribute ? attributeHelper : spatialHelper} />
       <div className="text-[10px] font-bold text-muted-foreground uppercase mb-1 flex items-center gap-1">
         {isAttribute ? <Calculator className="w-3 h-3 text-slate-500" /> : <Zap className="w-3 h-3 text-purple-500" />} {isAttribute ? 'Attribute Op' : 'Spatial Op'}
       </div>
@@ -100,11 +112,7 @@ export const AnalysisNode = ({ data, id }: any) => {
               </div>
             )}
 
-            <div className="rounded-2xl bg-slate-50 border border-slate-100 p-3 text-[10px] text-slate-600 space-y-1">
-              <div className="font-semibold text-slate-800">{selectedFunction?.name}</div>
-              <div>{selectedFunction?.summary}</div>
-              <div className="text-[9px] text-slate-500">Required inputs: {requiredInputCount} geometry{requiredInputCount > 1 ? 's' : ''}</div>
-            </div>
+
           </>
         ) : (
           <>
@@ -144,9 +152,7 @@ export const AnalysisNode = ({ data, id }: any) => {
                 placeholder="new_value"
               />
             </div>
-            <div className="rounded-2xl bg-slate-50 border border-slate-100 p-3 text-[10px] text-slate-600">
-              Build a new attribute using a DuckDB expression. The output adds one computed field to each row.
-            </div>
+
           </>
         )}
       </div>
