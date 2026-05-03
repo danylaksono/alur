@@ -4,9 +4,12 @@ import { Database, Upload, FileJson, Loader2, Sparkles } from 'lucide-react';
 import { duckdbService } from '../../services/duckdb';
 import { useStore } from '../../store/useStore';
 import { NodeActions } from './NodeActions';
+import { NodeSchema } from './NodeSchema';
 
 export const InputNode = ({ data, id }: any) => {
-  const { updateNode, addChatMessage, addMapLayer } = useStore();
+  const updateNode = useStore((s) => s.updateNode);
+  const addChatMessage = useStore((s) => s.addChatMessage);
+  const addMapLayer = useStore((s) => s.addMapLayer);
   const [loading, setLoading] = useState(false);
 
   const loadAndRegister = async (
@@ -39,11 +42,13 @@ export const InputNode = ({ data, id }: any) => {
     updateNode(id, { ...data.config, tableName, fileName });
     addChatMessage('system', `Registered table: ${tableName} from ${fileName}`);
 
+    await duckdbService.optimizeTable(tableName);
+
     addChatMessage('system', `Extracting geometry and building GeoJSON layer...`);
     const layerGeoJSON = await duckdbService.getGeoJSONFromTable(tableName);
 
     if (layerGeoJSON) {
-      addMapLayer({ id: tableName, name: fileName, geojson: layerGeoJSON });
+      addMapLayer({ id: tableName, name: fileName, geojson: layerGeoJSON, sourceNodeId: id });
       addChatMessage(
         'system',
         `✅ Loaded ${layerGeoJSON.features.length.toLocaleString()} features from ${fileName} onto the map.`,
@@ -77,12 +82,39 @@ export const InputNode = ({ data, id }: any) => {
     setLoading(true);
     addChatMessage('system', 'Loading sample dataset: need_london.parquet ...');
     try {
-      const response = await fetch('/need_london.parquet');
-      if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      const buffer = new Uint8Array(await response.arrayBuffer());
       const fileName = 'need_london.parquet';
       const filePath = `sample_${Date.now()}_need_london.parquet`;
-      await loadAndRegister(buffer, fileName, filePath);
+      const url = new URL('/need_london.parquet', window.location.origin).href;
+      
+      await duckdbService.registerFileUrl(filePath, url);
+
+      let tableName = 'need_london';
+      const quotedTableName = `"${tableName}"`;
+      const escapeSqlString = (v: string) => v.replace(/'/g, "''");
+      
+      const query = `CREATE OR REPLACE VIEW ${quotedTableName} AS SELECT * FROM read_parquet('${escapeSqlString(filePath)}');`;
+      await duckdbService.query(query);
+      
+      updateNode(id, { ...data.config, tableName, fileName });
+      addChatMessage('system', `Registered table: ${tableName} from ${fileName}`);
+
+      await duckdbService.optimizeTable(tableName);
+
+      addChatMessage('system', `Extracting geometry and building GeoJSON layer...`);
+      const layerGeoJSON = await duckdbService.getGeoJSONFromTable(tableName);
+
+      if (layerGeoJSON) {
+        addMapLayer({ id: tableName, name: fileName, geojson: layerGeoJSON, sourceNodeId: id });
+        addChatMessage(
+          'system',
+          `✅ Loaded ${layerGeoJSON.features.length.toLocaleString()} features from ${fileName} onto the map.`,
+        );
+      } else {
+        addChatMessage(
+          'system',
+          `Table ${tableName} registered, but no geometry or lat/lon columns were found to render a map layer.`,
+        );
+      }
     } catch (err: any) {
       addChatMessage('system', `Error loading sample data: ${err.message}`);
     } finally {
@@ -137,6 +169,8 @@ export const InputNode = ({ data, id }: any) => {
           </button>
         </div>
       )}
+
+      <NodeSchema nodeId={id} />
 
       <Handle type="source" position={Position.Right} className="!bg-blue-400" />
     </div>

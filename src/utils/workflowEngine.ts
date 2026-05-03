@@ -17,6 +17,8 @@ import { spatialFunctions } from './spatialFunctions';
 
 export interface WorkflowResult {
   sql: string;
+  withClause: string;
+  lastAlias: string;
   outputLayerName: string;
 }
 
@@ -60,37 +62,38 @@ function qi(name: string): string {
 }
 
 /** Create a safe CTE alias from a node id. */
-function cteAlias(nodeId: string): string {
+export function cteAlias(nodeId: string): string {
   return nodeId.replace(/[^a-zA-Z0-9_]/g, '_');
 }
 
 // ─── main builder ─────────────────────────────────────────────────────
 
-export function buildWorkflowSQL(nodes: GISNode[], edges: Edge[]): WorkflowResult {
+export function buildWorkflowSQL(nodes: GISNode[], edges: Edge[], options?: { limit?: number }): WorkflowResult {
   if (!nodes.length) {
     throw new Error('No nodes in the workflow.');
   }
 
+  const resultLimit = options?.limit ?? 5000;
+
   const sorted = topoSort(nodes, edges);
 
-  // Map each node to its parent CTE alias (the node that feeds into it)
-  const parentOf = new Map<string, string>();
+  // Map each node to its parent(s) CTE aliases
+  const parentsMap = new Map<string, string[]>();
   edges.forEach((e) => {
-    parentOf.set(e.target, e.source);
+    const existing = parentsMap.get(e.target) || [];
+    parentsMap.set(e.target, [...existing, e.source]);
   });
 
   const ctes: string[] = [];
   let lastAlias = '';
-  let geomColumn = 'geometry'; // track which column holds the geometry
-  // Track the current CRS so we know when we need to transform back
-  let currentCrs = 'EPSG:4326';
+  // Track geometry column and CRS per CTE
+  const nodeMetadata = new Map<string, { geom: string; crs: string }>();
 
   for (const node of sorted) {
     const alias = cteAlias(node.id);
     const { type, config } = node.data;
-    const parentAlias = parentOf.has(node.id)
-      ? cteAlias(parentOf.get(node.id)!)
-      : null;
+    const parentIds = parentsMap.get(node.id) || [];
+    const parentAliases = parentIds.map(id => cteAlias(id));
 
     if (type === 'input') {
       const tableName = config?.tableName;
@@ -99,61 +102,127 @@ export function buildWorkflowSQL(nodes: GISNode[], edges: Edge[]): WorkflowResul
       }
       ctes.push(`${alias} AS (\n  SELECT * FROM ${qi(tableName)}\n)`);
       lastAlias = alias;
-      geomColumn = 'geometry';
-      currentCrs = 'EPSG:4326';
+      nodeMetadata.set(alias, { geom: 'geometry', crs: 'EPSG:4326' });
     } else if (type === 'analysis') {
-      const source = parentAlias ?? lastAlias;
-      if (!source) throw new Error(`Analysis node "${node.id}" has no source.`);
-
       const operation = config?.operation || 'ST_Buffer';
+      const fn = spatialFunctions.find((f) => f.name === operation);
+      const inputCount = fn?.requiredInputCount ?? 1;
 
-      if (operation === 'ST_Transform') {
-        const srcCrs = config?.sourceCrs || 'EPSG:4326';
-        const tgtCrs = config?.targetCrs || 'EPSG:3857';
-        ctes.push(
-          `${alias} AS (\n  SELECT *, ST_Transform(${qi(geomColumn)}, '${srcCrs}', '${tgtCrs}') AS geom_transformed\n  FROM ${source}\n)`
-        );
-        geomColumn = 'geom_transformed';
-        currentCrs = tgtCrs;
-        lastAlias = alias;
-      } else if (operation === 'ST_Buffer') {
-        const distance = config?.distance ?? 100;
-        ctes.push(
-          `${alias} AS (\n  SELECT *, ST_Buffer(${qi(geomColumn)}, ${distance}) AS geom_buffered\n  FROM ${source}\n)`
-        );
-        geomColumn = 'geom_buffered';
+      const buildExtraArgs = (): string => {
+        const args: string[] = [];
+
+        // Named parameters from node config (generic system)
+        const extraParams = config?.params as Record<string, unknown> | undefined;
+        if (extraParams) {
+          for (const [k, v] of Object.entries(extraParams)) {
+            if (v === undefined || v === null || v === '') continue;
+            if (typeof v === 'number' || typeof v === 'boolean') {
+              args.push(String(v));
+            } else if (typeof v === 'string') {
+              // Check if it's a numeric string
+              const num = Number(v);
+              if (!Number.isNaN(num)) {
+                args.push(v);
+              } else {
+                args.push(`'${v.replace(/'/g, "''")}'`);
+              }
+            }
+          }
+        }
+
+        return args.length > 0 ? `, ${args.join(', ')}` : '';
+      };
+
+      if (inputCount === 1) {
+        const source = parentAliases[0] || lastAlias;
+        if (!source) throw new Error(`Analysis node "${node.id}" has no source.`);
+        const meta = nodeMetadata.get(source) || { geom: 'geometry', crs: 'EPSG:4326' };
+        
+        let sql = '';
+        let newGeom = 'geom_result';
+        let newCrs = meta.crs;
+
+        if (operation === 'ST_Transform') {
+          const srcCrs = config?.sourceCrs || meta.crs;
+          const tgtCrs = config?.targetCrs || 'EPSG:3857';
+          sql = `SELECT *, ST_Transform(${qi(meta.geom)}, '${srcCrs}', '${tgtCrs}') AS geom_transformed FROM ${source}`;
+          newGeom = 'geom_transformed';
+          newCrs = tgtCrs;
+        } else if (operation === 'ST_Buffer') {
+          const distance = config?.distance ?? config?.params?.distance ?? 100;
+          sql = `SELECT *, ST_Buffer(${qi(meta.geom)}, ${distance}) AS geom_buffered FROM ${source}`;
+          newGeom = 'geom_buffered';
+        } else {
+          const funcArgs = `${qi(meta.geom)}${buildExtraArgs()}`;
+          sql = `SELECT *, ${operation}(${funcArgs}) AS geom_result FROM ${source}`;
+        }
+
+        ctes.push(`${alias} AS (\n  ${sql}\n)`);
+        nodeMetadata.set(alias, { geom: newGeom, crs: newCrs });
         lastAlias = alias;
       } else {
-        // Generic single-geometry function
-        const fn = spatialFunctions.find((f) => f.name === operation);
-        const inputCount = fn?.requiredInputCount ?? 1;
-        if (inputCount === 1) {
-          ctes.push(
-            `${alias} AS (\n  SELECT *, ${operation}(${qi(geomColumn)}) AS geom_result\n  FROM ${source}\n)`
-          );
-          geomColumn = 'geom_result';
-        } else {
-          // For 2-input functions we'd need a second source via a JOIN.
-          // For now, just apply with the same geom to avoid errors.
-          ctes.push(
-            `${alias} AS (\n  SELECT *, ${operation}(${qi(geomColumn)}, ${qi(geomColumn)}) AS geom_result\n  FROM ${source}\n)`
-          );
-          geomColumn = 'geom_result';
+        // Multi-input functions (e.g., ST_Intersection, ST_Difference)
+        if (parentAliases.length < 2) {
+          throw new Error(`Operation "${operation}" requires 2 input connections.`);
         }
+        const sourceA = parentAliases[0];
+        const sourceB = parentAliases[1];
+        const metaA = nodeMetadata.get(sourceA)!;
+        const metaB = nodeMetadata.get(sourceB)!;
+
+        // Optimization: Use a spatial join (filtered cross join) for 2-input operations
+        // This avoids N*M complexity by only calculating results for intersecting geometries
+        ctes.push(
+          `${alias} AS (\n  SELECT a.*, ${operation}(a.${qi(metaA.geom)}, b.${qi(metaB.geom)}) AS geom_multi_result\n  FROM ${sourceA} a, ${sourceB} b\n  WHERE ST_Intersects(a.${qi(metaA.geom)}, b.${qi(metaB.geom)})\n)`
+        );
+        nodeMetadata.set(alias, { geom: 'geom_multi_result', crs: metaA.crs });
         lastAlias = alias;
       }
+    } else if (type === 'aggregate') {
+      const source = parentAliases[0] || lastAlias;
+      if (!source) throw new Error(`Aggregate node "${node.id}" has no source.`);
+      const meta = nodeMetadata.get(source)!;
+      const operation = config?.operation || 'ST_Union_Agg';
+      const groupBy = config?.groupBy || '';
+      
+      const selectClause = groupBy 
+        ? `${qi(groupBy)}, ${operation}(${qi(meta.geom)}) AS geom_agg`
+        : `${operation}(${qi(meta.geom)}) AS geom_agg`;
+      
+      const groupByClause = groupBy ? ` GROUP BY ${qi(groupBy)}` : '';
+      
+      ctes.push(
+        `${alias} AS (\n  SELECT ${selectClause}\n  FROM ${source}${groupByClause}\n)`
+      );
+      nodeMetadata.set(alias, { geom: 'geom_agg', crs: meta.crs });
+      lastAlias = alias;
+    } else if (type === 'filter') {
+      const source = parentAliases[0] || lastAlias;
+      if (!source) throw new Error(`Filter node "${node.id}" has no source.`);
+      const meta = nodeMetadata.get(source)!;
+      const condition = config?.condition || '1=1';
+      ctes.push(
+        `${alias} AS (\n  SELECT * FROM ${source} WHERE ${condition}\n)`
+      );
+      nodeMetadata.set(alias, meta);
+      lastAlias = alias;
     } else if (type === 'attribute') {
-      const source = parentAlias ?? lastAlias;
+      const source = parentAliases[0] || lastAlias;
       if (!source) throw new Error(`Attribute node "${node.id}" has no source.`);
+      const meta = nodeMetadata.get(source)!;
       const expression = config?.expression || '1';
       const resultField = config?.resultField || 'new_value';
       ctes.push(
         `${alias} AS (\n  SELECT *, ${expression} AS ${qi(resultField)}\n  FROM ${source}\n)`
       );
+      nodeMetadata.set(alias, meta);
       lastAlias = alias;
     } else if (type === 'output') {
-      // Output nodes don't change data; they just mark the end
-      if (parentAlias) lastAlias = parentAlias;
+      if (parentAliases.length > 0) {
+        const source = parentAliases[0];
+        lastAlias = source;
+        nodeMetadata.set(alias, nodeMetadata.get(source)!);
+      }
     }
   }
 
@@ -161,18 +230,50 @@ export function buildWorkflowSQL(nodes: GISNode[], edges: Edge[]): WorkflowResul
     throw new Error('Could not determine the final step in the workflow.');
   }
 
-  // If current CRS is not 4326, we need to transform back for map display
+  const finalMeta = nodeMetadata.get(lastAlias)!;
   let finalGeomExpr: string;
-  if (currentCrs !== 'EPSG:4326') {
-    finalGeomExpr = `ST_AsGeoJSON(ST_Transform(${qi(geomColumn)}, '${currentCrs}', 'EPSG:4326'))`;
+  if (finalMeta.crs !== 'EPSG:4326') {
+    finalGeomExpr = `ST_AsGeoJSON(ST_Transform(${qi(finalMeta.geom)}, '${finalMeta.crs}', 'EPSG:4326'))`;
   } else {
-    finalGeomExpr = `ST_AsGeoJSON(${qi(geomColumn)})`;
+    finalGeomExpr = `ST_AsGeoJSON(${qi(finalMeta.geom)})`;
   }
 
-  const sql = `WITH ${ctes.join(',\n')}\nSELECT *, ${finalGeomExpr} AS geojson\nFROM ${lastAlias}\nLIMIT 5000;`;
+  const withClause = `WITH ${ctes.join(',\n')}`;
+  const sql = `${withClause}\nSELECT *, ${finalGeomExpr} AS geojson\nFROM ${lastAlias}\nLIMIT ${resultLimit};`;
 
   return {
     sql,
+    withClause,
+    lastAlias,
     outputLayerName: 'workflow_result',
   };
+}
+
+/**
+ * Build SQL that executes the workflow up to (and including) a specific target node.
+ * Useful for step-through / per-node execution.
+ */
+export function buildUpToSQL(nodes: GISNode[], edges: Edge[], targetNodeId: string, options?: { limit?: number }): WorkflowResult {
+  if (!nodes.length) throw new Error('No nodes in the workflow.');
+
+  // Find all nodes that are ancestors of the target (including the target itself)
+  const parentMap = new Map<string, string[]>();
+  edges.forEach((e) => {
+    const existing = parentMap.get(e.target) || [];
+    parentMap.set(e.target, [...existing, e.source]);
+  });
+
+  const ancestors = new Set<string>();
+  const walk = (id: string) => {
+    if (ancestors.has(id)) return;
+    ancestors.add(id);
+    (parentMap.get(id) || []).forEach(walk);
+  };
+  walk(targetNodeId);
+
+  const relevantNodes = nodes.filter((n) => ancestors.has(n.id));
+  const relevantEdgeIds = new Set(edges.filter((e) => relevantNodes.some((n) => n.id === e.source) && relevantNodes.some((n) => n.id === e.target)).map((e) => e.id));
+  const relevantEdges = edges.filter((e) => relevantEdgeIds.has(e.id));
+
+  return buildWorkflowSQL(relevantNodes, relevantEdges, options);
 }

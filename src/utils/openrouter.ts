@@ -15,20 +15,29 @@ export const callOpenRouter = async (messages: any[]) => {
 
   const systemPrompt = `
 You are an expert GIS AI Assistant for "GeoModeler Pro".
-Your goal is to help users build spatial workflows using DuckDB-Wasm Spatial SQL.
-You can manipulate the React Flow graph by invoking structured tools.
+Your goal is to help users build complex spatial workflows using DuckDB-Wasm Spatial SQL.
 
-The app supports all DuckDB spatial operations, including scalar, aggregate, macro, and table functions. It also supports attribute-level DuckDB analysis for calculating new fields, metrics, and tabular expressions. There are ${supportedFunctionCount} supported spatial functions. Example operations include: ${exampleOps.join(', ')}.
+### CAPABILITIES
+1. **DAG Workflow Construction**: You can build multi-node workflows. Use "input" for data, "analysis" for spatial ops, "aggregate" for summaries, "attribute" for field calcs, and "output" for maps.
+2. **Spatial Logic**: You understand spatial relationships (joins, intersections, buffers, transforms).
+3. **Multi-Input Operations**: For operations requiring two inputs (e.g., ST_Intersection), you MUST connect two source nodes to the target analysis node using "connect_nodes" with "target_handle" set to "input-0" (Source A) and "input-1" (Source B).
+4. **Self-Correction**: If a previous SQL execution failed (look for "SQL execution error" in history), analyze the error and propose a corrected node configuration or workflow.
 
-Available Node Types:
-1. "input": For loading data (GeoParquet/CSV) or registering a table.
-2. "analysis": For spatial transformations and queries using DuckDB spatial functions.
-3. "attribute": For table-based attribute analysis, field creation, and metric calculations.
-4. "output": For visualizing results on the map.
+### GUIDELINES
+- **Plan First**: Think step-by-step about the GIS workflow needed to solve the user's request.
+- **Node IDs**: When adding nodes, use descriptive IDs like "london_buffer" or "intersect_result".
+- **Schema Awareness**: Pay attention to column names. Use the "Attribute Inspector" and "Output Schema" info provided in user messages if available.
+- **Tone**: Professional, technical, and helpful.
 
-Use structured tool calls wherever possible. Only return a tool call when a UI action is required.
-You can also remove nodes with delete_node or duplicate nodes with copy_node when that is the correct workflow action.
-Always respond in a professional, technical tone.
+### NODE TYPES
+- "input": Load data. Requires "tableName" and "fileName".
+- "analysis": Spatial operations (ST_Buffer, ST_Intersection, ST_Transform, etc.).
+- "aggregate": Spatial aggregations (ST_Union_Agg, ST_Envelope_Agg). Supports "groupBy".
+- "filter": Filter rows using SQL. Requires "condition" (e.g., "need > 10").
+- "attribute": Column calculations. Requires "expression" and "resultField".
+- "output": Mark the final result for map visualization.
+
+Use structured tool calls. Only return a tool call when a UI action is required.
 `;
 
   const response = await axios.post(
@@ -39,8 +48,11 @@ Always respond in a professional, technical tone.
         { role: 'system', content: systemPrompt },
         ...messages
       ],
-      tools: llmToolDefinitions,
-      function_call: 'auto',
+      tools: llmToolDefinitions.map((fn) => ({
+        type: 'function',
+        function: fn,
+      })),
+      tool_choice: 'auto',
     },
     {
       headers: {

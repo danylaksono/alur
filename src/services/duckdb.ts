@@ -20,6 +20,7 @@ class DuckDBService {
     private conn: duckdb.AsyncDuckDBConnection | null = null;
     private initialized = false;
     private spatialLoaded = false;
+    private h3Loaded = false;
 
     async init() {
         if (this.initialized) return;
@@ -33,14 +34,18 @@ class DuckDBService {
         this.db = db;
         this.conn = await db.connect();
         
-        // Try to load spatial extension
         try {
             await this.conn.query(`INSTALL spatial; LOAD spatial;`);
             this.spatialLoaded = true;
-            console.log('DuckDB Wasm with Spatial initialized');
         } catch (e) {
-            console.warn('DuckDB Spatial extension not available, will use lat/lon fallback:', e);
             this.spatialLoaded = false;
+        }
+
+        try {
+            await this.conn.query(`INSTALL h3; LOAD h3;`);
+            this.h3Loaded = true;
+        } catch (e) {
+            this.h3Loaded = false;
         }
         
         this.initialized = true;
@@ -48,6 +53,10 @@ class DuckDBService {
 
     get isSpatialLoaded() {
         return this.spatialLoaded;
+    }
+
+    get isH3Loaded() {
+        return this.h3Loaded;
     }
 
     async query(sql: string) {
@@ -63,12 +72,33 @@ class DuckDBService {
 
     async registerFileUrl(name: string, url: string) {
         if (!this.db) throw new Error('DuckDB not initialized');
-        // Fetch the file from the URL and register as buffer
-        const response = await fetch(url);
-        if (!response.ok) throw new Error(`Failed to fetch ${url}: ${response.statusText}`);
-        const buffer = new Uint8Array(await response.arrayBuffer());
-        await this.db.registerFileBuffer(name, buffer);
+        // Use DuckDB Wasm's native URL registration
+        await this.db.registerFileURL(name, url, duckdb.DuckDBDataProtocol.HTTP, false);
         return name;
+    }
+
+    async optimizeTable(tableName: string) {
+        if (!this.conn || !this.spatialLoaded) return;
+        try {
+            // Check if geometry column exists
+            const info = await this.getTableSchema(tableName);
+            const columns = info.toArray();
+            const hasGeom = columns.some((c: any) => {
+                const name = String(c.name).toLowerCase();
+                return name === 'geometry' || name === 'geom';
+            });
+
+            if (hasGeom) {
+                const geomCol = columns.find((c: any) => {
+                    const name = String(c.name).toLowerCase();
+                    return name === 'geometry' || name === 'geom';
+                }).name;
+                
+                await this.conn.query(`CREATE INDEX IF NOT EXISTS ${tableName}_spatial_idx ON "${tableName}" USING RTREE(${geomCol});`);
+            }
+        } catch (e) {
+            console.warn(`Optimization failed for ${tableName}:`, e);
+        }
     }
 
     async getTableSchema(tableName: string) {
@@ -213,6 +243,29 @@ class DuckDBService {
         }
 
         return null;
+    }
+
+    async exportTable(sql: string, format: 'parquet' | 'csv' | 'json' = 'parquet'): Promise<{ buffer: Uint8Array; fileName: string }> {
+        if (!this.db || !this.conn) throw new Error('DuckDB not initialized');
+
+        const fileName = `export_${Date.now()}.${format}`;
+        let copySql = '';
+
+        switch (format) {
+            case 'parquet':
+                copySql = `COPY (${sql}) TO '${fileName}' (FORMAT PARQUET);`;
+                break;
+            case 'csv':
+                copySql = `COPY (${sql}) TO '${fileName}' (FORMAT CSV, HEADER);`;
+                break;
+            case 'json':
+                copySql = `COPY (${sql}) TO '${fileName}' (FORMAT JSON);`;
+                break;
+        }
+
+        await this.conn.query(copySql);
+        const buffer = await this.db.copyFileToBuffer(fileName);
+        return { buffer, fileName };
     }
 }
 
