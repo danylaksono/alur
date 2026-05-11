@@ -70,6 +70,7 @@ interface AppState {
   isManualSQL: boolean;
   selectedNodeId: string | null;
   selectedLayerId: string | null;
+  layerFocusRequest: { layerId: string; requestedAt: number } | null;
   nodeSchemas: Record<string, any[]>;
   nodeExecutionStates: Record<string, NodeExecutionState>;
   toasts: Toast[];
@@ -81,6 +82,7 @@ interface AppState {
   setSelectedNodeId: (id: string | null) => void;
   setSelectedLayerId: (id: string | null) => void;
   selectLayer: (layerId: string | null) => void;
+  focusLayer: (layerId: string) => void;
   setNodeSchema: (id: string, schema: any[]) => void;
   setNodeExecutionState: (id: string, state: NodeExecutionState) => void;
   resetNodeExecutionStates: () => void;
@@ -131,6 +133,7 @@ export const useStore = create<AppState>()((set, get) => ({
   isManualSQL: false,
   selectedNodeId: null,
   selectedLayerId: null,
+  layerFocusRequest: null,
   nodeSchemas: {},
   nodeExecutionStates: {},
   toasts: [],
@@ -146,6 +149,14 @@ export const useStore = create<AppState>()((set, get) => ({
     return {
       selectedLayerId: layerId,
       selectedNodeId: layer?.sourceNodeId ?? state.selectedNodeId,
+    };
+  }),
+  focusLayer: (layerId) => set((state) => {
+    const layer = state.mapLayers.find((item) => item.id === layerId);
+    return {
+      selectedLayerId: layerId,
+      selectedNodeId: layer?.sourceNodeId ?? state.selectedNodeId,
+      layerFocusRequest: { layerId, requestedAt: Date.now() },
     };
   }),
   setNodeSchema: (id, schema) => set((state) => ({
@@ -168,6 +179,7 @@ export const useStore = create<AppState>()((set, get) => ({
     isManualSQL: false,
     selectedNodeId: null,
     selectedLayerId: null,
+    layerFocusRequest: null,
     nodeSchemas: {},
     nodeExecutionStates: {},
   }),

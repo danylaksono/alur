@@ -140,9 +140,32 @@ describe('sample GIS workflow smoke test', () => {
     expect(toolNames).toEqual(expect.arrayContaining(['add_node', 'connect_nodes', 'run_spatial_query']));
     expect(html).toContain('GIS Copilot Agent');
     expect(html).toContain('Node Diagram');
+    expect(html).toContain('Layer Output');
+    expect(html).toContain('Visualize or export the final result');
     expect(html).toContain('SQL Editor &amp; Workflow Preview');
     expect(html).toContain('Map Layers');
     expect(html).toContain('Basemap');
     expect(html).toContain('Synced to Workflow');
+  });
+
+  it('exposes output node configuration for map preview and file export modes', () => {
+    const outputTool = llmToolDefinitions.find((tool) => tool.name === 'add_node');
+    const configProperties = outputTool?.parameters.properties.config?.properties;
+
+    expect(configProperties).toBeDefined();
+    if (!configProperties) throw new Error('add_node config schema is missing');
+    expect(configProperties.outputMode.enum).toEqual(['visualize', 'export']);
+    expect(configProperties.exportFormat.enum).toEqual(['geojson', 'csv', 'json', 'parquet']);
+
+    const nodes: GISNode[] = [
+      node('sample_need', 'input', { tableName: 'need_london', fileName: 'need_london.parquet' }),
+      node('export_output', 'output', { outputMode: 'export', exportFormat: 'parquet', maxFeatures: 5000 }),
+    ];
+    const edges: Edge[] = [{ id: 'e1', source: 'sample_need', target: 'export_output', type: 'smoothstep' }];
+
+    const result = buildWorkflowSQL(nodes, edges);
+
+    expect(result.withClause).toContain('export_output AS');
+    expect(result.sql).toContain('FROM export_output');
   });
 });

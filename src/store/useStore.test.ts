@@ -77,6 +77,25 @@ describe('layer state', () => {
     expect(useStore.getState().selectedNodeId).toBe('input-a');
   });
 
+  it('creates a fresh focus request when zooming to a layer', () => {
+    useStore.setState({ nodes: [node('input-a', 'a')] });
+    useStore.getState().addMapLayer({
+      id: 'a',
+      name: 'A',
+      geojson: fc(),
+      sourceNodeId: 'input-a',
+      sourceKind: 'input',
+    });
+
+    useStore.getState().focusLayer('a');
+
+    const state = useStore.getState();
+    expect(state.selectedLayerId).toBe('a');
+    expect(state.selectedNodeId).toBe('input-a');
+    expect(state.layerFocusRequest?.layerId).toBe('a');
+    expect(state.layerFocusRequest?.requestedAt).toBeGreaterThan(0);
+  });
+
   it('removing a node cleans up linked layers and active layer selection', () => {
     useStore.setState({
       nodes: [node('input-a', 'roads'), node('input-b', 'parcels')],

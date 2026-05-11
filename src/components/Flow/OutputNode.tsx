@@ -1,10 +1,13 @@
 import { Handle, Position } from '@xyflow/react';
-import { Eye, Map as MapIcon, ClipboardCopy, Settings2 } from 'lucide-react';
+import { Download, Eye, FileArchive, Map as MapIcon, Settings2 } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { NodeSchema } from './NodeSchema';
 import { buildUpToSQL } from '../../utils/workflowEngine';
 import { duckdbService } from '../../services/duckdb';
-import { FlowNodeShell, inputClass, nodeHandleClass } from './FlowNodeShell';
+import { FlowNodeShell, inputClass, nodeHandleClass, selectClass } from './FlowNodeShell';
+
+type OutputMode = 'visualize' | 'export';
+type ExportFormat = 'geojson' | 'csv' | 'json' | 'parquet';
 
 export const OutputNode = ({ data, id }: any) => {
   const setSelectedNodeId = useStore((s) => s.setSelectedNodeId);
@@ -13,6 +16,11 @@ export const OutputNode = ({ data, id }: any) => {
   const updateNode = useStore((s) => s.updateNode);
 
   const maxFeatures = data.config?.maxFeatures ?? 5000;
+  const outputMode: OutputMode = data.config?.outputMode ?? 'visualize';
+  const exportFormat: ExportFormat = data.config?.exportFormat ?? 'geojson';
+  const isExportMode = outputMode === 'export';
+
+  const updateConfig = (payload: Record<string, unknown>) => updateNode(id, { ...data.config, ...payload });
 
   const handlePreview = async () => {
     setSelectedNodeId(id);
@@ -40,20 +48,44 @@ export const OutputNode = ({ data, id }: any) => {
     }
   };
 
-  const handleShare = async () => {
+  const downloadBlob = (blob: Blob, fileName: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExport = async () => {
     const { nodes, edges } = useStore.getState();
     try {
       const { sql } = buildUpToSQL(nodes, edges, id, { limit: maxFeatures });
-      const geojson = await duckdbService.getGeoJSON(sql);
-      if (!geojson || geojson.features.length === 0) {
-        addChatMessage('system', '⚠️ Nothing to share.');
+
+      if (exportFormat === 'geojson') {
+        const geojson = await duckdbService.getGeoJSON(sql);
+        if (!geojson || geojson.features.length === 0) {
+          addChatMessage('system', '⚠️ Export node produced no features.');
+          return;
+        }
+        downloadBlob(
+          new Blob([JSON.stringify(geojson, null, 2)], { type: 'application/geo+json' }),
+          `output-${id}.geojson`
+        );
+        addChatMessage('system', `📦 Exported ${geojson.features.length.toLocaleString()} features as GeoJSON.`);
         return;
       }
-      const text = JSON.stringify(geojson, null, 2);
-      await navigator.clipboard.writeText(text);
-      addChatMessage('system', `📋 Copied ${geojson.features.length} features as GeoJSON to clipboard.`);
+
+      const { buffer, fileName } = await duckdbService.exportTable(sql, exportFormat);
+      const mimeType = exportFormat === 'csv'
+        ? 'text/csv'
+        : exportFormat === 'json'
+        ? 'application/json'
+        : 'application/octet-stream';
+      downloadBlob(new Blob([buffer as BlobPart], { type: mimeType }), fileName);
+      addChatMessage('system', `📦 Exported output as ${exportFormat.toUpperCase()}.`);
     } catch (err: any) {
-      addChatMessage('system', `❌ Share failed: ${err.message}`);
+      addChatMessage('system', `❌ Export failed: ${err.message}`);
     }
   };
 
@@ -61,15 +93,50 @@ export const OutputNode = ({ data, id }: any) => {
     <FlowNodeShell
       id={id}
       tone="emerald"
-      icon={Eye}
-      label="Map Output"
-      title="Visualize results"
+      icon={isExportMode ? FileArchive : Eye}
+      label={isExportMode ? 'Export Output' : 'Map Output'}
+      title={isExportMode ? exportFormat.toUpperCase() : 'Visualize results'}
     >
-      <div className="text-xs font-bold text-slate-700 flex items-center gap-2">
-        <MapIcon className="w-3 h-3 text-emerald-600" /> Visualize Results
+      <div>
+        <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+          Output Type
+        </label>
+        <select
+          className={selectClass}
+          value={outputMode}
+          onChange={(e) => updateConfig({ outputMode: e.target.value })}
+        >
+          <option value="visualize">Visualize to map</option>
+          <option value="export">Export file</option>
+        </select>
       </div>
 
-      <div className="mt-2 flex items-center gap-2">
+      {/* <div className="text-xs font-bold text-slate-700 flex items-center gap-2">
+        {isExportMode ? (
+          <><FileArchive className="w-3 h-3 text-emerald-600" /> Export Result</>
+        ) : (
+          <><MapIcon className="w-3 h-3 text-emerald-600" /> Visualize Result</>
+        )}
+      </div> */}
+
+      {isExportMode ? (
+        <div>
+          <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+            Format
+          </label>
+          <select
+            className={selectClass}
+            value={exportFormat}
+            onChange={(e) => updateConfig({ exportFormat: e.target.value })}
+          >
+            <option value="geojson">GeoJSON</option>
+            <option value="csv">CSV</option>
+            <option value="json">JSON</option>
+            <option value="parquet">Parquet</option>
+          </select>
+        </div>
+      ) : (
+        <div className="mt-2 flex items-center gap-2">
         <Settings2 className="w-2.5 h-2.5 text-slate-400" />
         <label className="text-[9px] text-slate-500 font-medium">Max features:</label>
         <input
@@ -77,24 +144,28 @@ export const OutputNode = ({ data, id }: any) => {
           min={1}
           max={100000}
           value={maxFeatures}
-          onChange={(e) => updateNode(id, { ...data.config, maxFeatures: Number(e.target.value) })}
+          onChange={(e) => updateConfig({ maxFeatures: Number(e.target.value) })}
           className={`${inputClass} w-24 px-2 py-1 text-[10px] font-mono`}
         />
       </div>
+      )}
 
       <div className="flex gap-2 mt-2 pt-2 border-t">
-        <button
-          onClick={handlePreview}
-          className="flex-1 bg-emerald-50 text-emerald-700 py-1.5 rounded-lg text-[10px] font-bold hover:bg-emerald-100 transition-colors"
-        >
-          PREVIEW
-        </button>
-        <button
-          onClick={handleShare}
-          className="flex items-center gap-1 px-2 bg-slate-50 text-slate-600 rounded-lg hover:bg-slate-100 text-[9px] font-semibold transition-colors"
-        >
-          <ClipboardCopy className="w-3 h-3" /> Copy
-        </button>
+        {isExportMode ? (
+          <button
+            onClick={handleExport}
+            className="flex flex-1 items-center justify-center gap-1.5 bg-emerald-50 text-emerald-700 py-1.5 rounded-lg text-[10px] font-bold hover:bg-emerald-100 transition-colors"
+          >
+            <Download className="w-3 h-3" /> EXPORT
+          </button>
+        ) : (
+          <button
+            onClick={handlePreview}
+            className="flex-1 bg-emerald-50 text-emerald-700 py-1.5 rounded-lg text-[10px] font-bold hover:bg-emerald-100 transition-colors"
+          >
+            PREVIEW
+          </button>
+        )}
       </div>
 
       <NodeSchema nodeId={id} />

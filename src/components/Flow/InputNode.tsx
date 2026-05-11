@@ -16,6 +16,7 @@ export const InputNode = ({ data, id }: any) => {
     buffer: Uint8Array,
     fileName: string,
     filePath: string,
+    alreadyRegistered = false,
   ) => {
     const baseName = fileName.replace(/\.[^/.]+$/, '');
     let tableName = baseName.replace(/[^a-zA-Z0-9]/g, '_');
@@ -24,7 +25,9 @@ export const InputNode = ({ data, id }: any) => {
     const escapeSqlString = (v: string) => v.replace(/'/g, "''");
     const fileNameLower = fileName.toLowerCase();
 
-    await duckdbService.registerFileBuffer(filePath, buffer);
+    if (!alreadyRegistered) {
+      await duckdbService.registerFileBuffer(filePath, buffer);
+    }
 
     let query = '';
     if (fileNameLower.endsWith('.parquet')) {
@@ -85,14 +88,8 @@ export const InputNode = ({ data, id }: any) => {
       const fileName = 'need_london.parquet';
       const filePath = `sample_${Date.now()}_need_london.parquet`;
       const url = new URL('/need_london.parquet', window.location.origin).href;
-      const response = await fetch(url);
-
-      if (!response.ok) {
-        throw new Error(`Unable to fetch sample dataset (${response.status} ${response.statusText})`);
-      }
-
-      const buffer = new Uint8Array(await response.arrayBuffer());
-      await loadAndRegister(buffer, fileName, filePath);
+      await duckdbService.registerFileUrl(filePath, url);
+      await loadAndRegister(new Uint8Array(), fileName, filePath, true);
     } catch (err: any) {
       addChatMessage('system', `Error loading sample data: ${err.message}`);
     } finally {

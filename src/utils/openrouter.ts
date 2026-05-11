@@ -35,7 +35,7 @@ Your goal is to help users build complex spatial workflows using DuckDB-Wasm Spa
 - "aggregate": Spatial aggregations (ST_Union_Agg, ST_Envelope_Agg). Supports "groupBy".
 - "filter": Filter rows using SQL. Requires "condition" (e.g., "need > 10").
 - "attribute": Column calculations. Requires "expression" and "resultField".
-- "output": Mark the final result for map visualization.
+- "output": Mark the final result. Use config.outputMode="visualize" to add it to the map, or config.outputMode="export" with exportFormat ("geojson", "csv", "json", "parquet") to download it.
 
 Use structured tool calls. Only return a tool call when a UI action is required.
 `;

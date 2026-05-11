@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { Database, Zap, Eye, Plus, Info, Loader2, Layers, Filter, Calculator, Search, Workflow } from 'lucide-react';
+import { Database, Zap, Eye, Plus, Loader2, Layers, Filter, Calculator, Search, Workflow } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { buildWorkflowSQL } from '../utils/workflowEngine';
 import { duckdbService } from '../services/duckdb';
@@ -20,7 +20,7 @@ const nodeTypes = [
   { type: 'attribute' as const, icon: Calculator, title: 'Attribute Calc', desc: 'Add computed columns', color: 'slate' },
   { type: 'filter' as const, icon: Filter, title: 'Filter', desc: 'SQL WHERE conditions', color: 'amber' },
   { type: 'aggregate' as const, icon: Layers, title: 'Aggregate', desc: 'ST_Union_Agg, GROUP BY, dissolve', color: 'orange' },
-  { type: 'output' as const, icon: Eye, title: 'Map Preview', desc: 'Visualize the final result', color: 'emerald' },
+  { type: 'output' as const, icon: Eye, title: 'Layer Output', desc: 'Visualize or export the final result', color: 'emerald', config: { outputMode: 'visualize' } },
 ];
 
 const spatialSearchTerms = [
@@ -54,7 +54,11 @@ export const Sidebar = ({ children, className }: { children?: ReactNode; classNa
     (op) => op.name.toLowerCase().includes(searchQuery.toLowerCase()) || op.desc.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleAddNode = (type: 'input' | 'analysis' | 'attribute' | 'filter' | 'aggregate' | 'output') => {
+  const handleAddNode = (
+    type: 'input' | 'analysis' | 'attribute' | 'filter' | 'aggregate' | 'output',
+    config: Record<string, unknown> = {},
+    title?: string,
+  ) => {
     const id = `${type}-${Date.now()}`;
     const labels: Record<string, string> = {
       input: 'Data Source',
@@ -62,7 +66,7 @@ export const Sidebar = ({ children, className }: { children?: ReactNode; classNa
       attribute: 'Attribute Op',
       filter: 'Filter',
       aggregate: 'Aggregate',
-      output: 'Map Output',
+      output: title || 'Layer Output',
     };
     const newNode = {
       id,
@@ -71,7 +75,7 @@ export const Sidebar = ({ children, className }: { children?: ReactNode; classNa
       data: {
         label: labels[type] || type,
         type,
-        config: {},
+        config,
       },
     };
     addNode(newNode);
@@ -120,7 +124,7 @@ export const Sidebar = ({ children, className }: { children?: ReactNode; classNa
               return (
                 <div
                   key={item.type}
-                  onClick={() => handleAddNode(item.type)}
+                  onClick={() => handleAddNode(item.type, item.config, item.title)}
                   className={cn('group cursor-pointer flex items-center justify-between p-2.5 text-xs border rounded-xl transition-all', cs.hoverBg, cs.hoverBorder)}
                 >
                   <div className="flex items-center gap-2.5 min-w-0">

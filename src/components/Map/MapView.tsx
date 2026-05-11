@@ -59,6 +59,7 @@ export const MapView = () => {
   const mapLayers = useStore((s) => s.mapLayers);
   const selectedNodeId = useStore((s) => s.selectedNodeId);
   const selectedLayerId = useStore((s) => s.selectedLayerId);
+  const layerFocusRequest = useStore((s) => s.layerFocusRequest);
   const setSelectedNodeId = useStore((s) => s.setSelectedNodeId);
   const selectLayer = useStore((s) => s.selectLayer);
 
@@ -140,10 +141,10 @@ export const MapView = () => {
         const type = isPoint ? 'circle' : isLine ? 'line' : 'fill';
 
         const paint: any = isPoint
-          ? { 'circle-radius': 4, 'circle-color': color, 'circle-opacity': 0.8, 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 0.5 }
+          ? { 'circle-radius': 4, 'circle-color': color, 'circle-opacity': layer.opacity, 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 0.5, 'circle-stroke-opacity': Math.min(1, layer.opacity + 0.15) }
           : isLine
-          ? { 'line-color': color, 'line-width': 2, 'line-opacity': 0.8 }
-          : { 'fill-color': color, 'fill-opacity': 0.25, 'fill-outline-color': color };
+          ? { 'line-color': color, 'line-width': 2, 'line-opacity': layer.opacity }
+          : { 'fill-color': color, 'fill-opacity': Math.max(0.05, layer.opacity * 0.35), 'fill-outline-color': color };
 
         m.addLayer({ id: layerId, type: type as any, source: sourceId, paint });
         m.setLayoutProperty(layerId, 'visibility', layer.visible ? 'visible' : 'none');
@@ -187,7 +188,7 @@ export const MapView = () => {
     syncLayers();
   }, [mapLayers, selectedBasemapId, setSelectedNodeId, selectLayer]);
 
-  // Node selection → zoom & highlight
+  // Layer state → visibility, opacity, and highlight
   useEffect(() => {
     const m = map.current;
     if (!m) return;
@@ -205,19 +206,31 @@ export const MapView = () => {
       const geomType = layer.geojson.features?.[0]?.geometry?.type || 'Point';
       const isPoint = geomType.includes('Point');
       const isLine = geomType.includes('Line');
+      const baseOpacity = layer.visible ? layer.opacity : 0;
 
       if (isSelected) {
-        m.setPaintProperty(layerId, isPoint ? 'circle-opacity' : isLine ? 'line-opacity' : 'fill-opacity', isPoint ? 1 : isLine ? 1 : Math.max(0.35, layer.opacity * 0.5));
+        m.setPaintProperty(layerId, isPoint ? 'circle-opacity' : isLine ? 'line-opacity' : 'fill-opacity', isPoint || isLine ? baseOpacity : Math.max(0.05, baseOpacity * 0.5));
+        if (isPoint) m.setPaintProperty(layerId, 'circle-stroke-opacity', Math.min(1, baseOpacity + 0.15));
         m.setPaintProperty(layerId, isPoint ? 'circle-radius' : isLine ? 'line-width' : 'fill-outline-color', isPoint ? 6 : isLine ? 3 : '#000');
-        const bounds = getLayerBounds(layer.geojson);
-        if (bounds) m.fitBounds(bounds, { padding: 50, duration: 600, maxZoom: 16 });
       } else {
-        const inactiveOpacity = activeLayerId ? Math.min(0.2, layer.opacity * 0.4) : layer.opacity;
+        const inactiveOpacity = activeLayerId ? Math.min(0.2, baseOpacity * 0.4) : baseOpacity;
         m.setPaintProperty(layerId, isPoint ? 'circle-opacity' : isLine ? 'line-opacity' : 'fill-opacity', isPoint ? inactiveOpacity : isLine ? inactiveOpacity : Math.max(0.05, inactiveOpacity * 0.35));
+        if (isPoint) m.setPaintProperty(layerId, 'circle-stroke-opacity', Math.min(1, inactiveOpacity + 0.15));
         m.setPaintProperty(layerId, isPoint ? 'circle-radius' : isLine ? 'line-width' : 'fill-outline-color', isPoint ? 4 : isLine ? 2 : undefined);
       }
     });
   }, [selectedNodeId, selectedLayerId, mapLayers]);
+
+  useEffect(() => {
+    const m = map.current;
+    if (!m || !layerFocusRequest) return;
+    const layer = mapLayers.find((item) => item.id === layerFocusRequest.layerId);
+    if (!layer) return;
+    const bounds = getLayerBounds(layer.geojson);
+    if (bounds) {
+      m.fitBounds(bounds, { padding: 50, duration: 600, maxZoom: 16 });
+    }
+  }, [layerFocusRequest, mapLayers]);
 
   return (
     <div className="w-full h-full relative">

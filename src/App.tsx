@@ -265,8 +265,8 @@ export default function App() {
             <Workflow className="w-5 h-5" />
           </div>
           <div>
-            <h1 className="font-bold text-sm tracking-tight leading-none uppercase">GeoModeler Pro</h1>
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Top-bottom modeler + map split view</p>
+            <h1 className="font-bold text-sm tracking-tight leading-none uppercase">YMNNGIS</h1>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">You Might Not Need A Desktop GIS</p>
           </div>
         </div>
 
@@ -274,7 +274,7 @@ export default function App() {
           <div className="hidden md:flex items-center gap-2 text-[10px] font-mono text-muted-foreground">
             <span className="flex items-center gap-1">
               <Terminal className="w-3 h-3" />
-              duckdb_wasm: {duckdbReady ? 'ready' : 'initializing...'}
+              Dashboard Status: {duckdbReady ? 'ready' : 'initializing...'}
             </span>
           </div>
           <button className="p-2 text-muted-foreground hover:bg-muted rounded-full transition-colors">

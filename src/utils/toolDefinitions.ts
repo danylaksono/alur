@@ -30,7 +30,10 @@ export const llmToolDefinitions = [
             expression: { type: 'string', description: 'For attribute nodes: the SQL expression.' },
             resultField: { type: 'string', description: 'For attribute nodes: the name of the new field.' },
             groupBy: { type: 'string', description: 'For aggregate nodes: the column name to group by.' },
-            condition: { type: 'string', description: 'For filter nodes: the SQL WHERE condition (e.g. need > 10).' }
+            condition: { type: 'string', description: 'For filter nodes: the SQL WHERE condition (e.g. need > 10).' },
+            outputMode: { type: 'string', enum: ['visualize', 'export'], description: 'For output nodes: visualize to map or export to a file.' },
+            exportFormat: { type: 'string', enum: ['geojson', 'csv', 'json', 'parquet'], description: 'For export output nodes: file format.' },
+            maxFeatures: { type: 'number', description: 'For output nodes: maximum features to preview or export.' }
           }
         }
       },

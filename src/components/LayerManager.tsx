@@ -25,6 +25,7 @@ export const LayerManager = () => {
   const selectedLayerId = useStore((s) => s.selectedLayerId);
   const selectedNodeId = useStore((s) => s.selectedNodeId);
   const selectLayer = useStore((s) => s.selectLayer);
+  const focusLayer = useStore((s) => s.focusLayer);
   const toggleMapLayerVisibility = useStore((s) => s.toggleMapLayerVisibility);
   const updateMapLayer = useStore((s) => s.updateMapLayer);
   const removeMapLayer = useStore((s) => s.removeMapLayer);
@@ -118,7 +119,7 @@ export const LayerManager = () => {
                     </button>
                     <button
                       type="button"
-                      onClick={() => selectLayer(layer.id)}
+                      onClick={() => focusLayer(layer.id)}
                       className="rounded-md border border-slate-200 bg-white p-1.5 text-slate-600 hover:bg-slate-50"
                       title="Zoom to layer"
                     >
