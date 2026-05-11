@@ -107,6 +107,77 @@ describe('buildWorkflowSQL', () => {
     expect(result.sql).toContain('geom_multi_result');
   });
 
+  it('respects target handles for two-input operations', () => {
+    const nodes: GISNode[] = [
+      makeNode({ id: 'a', data: { label: 'A', type: 'input', config: { tableName: 'polygons' } } }),
+      makeNode({ id: 'b', data: { label: 'B', type: 'input', config: { tableName: 'lines' } } }),
+      makeNode({ id: 'diff', position: { x: 200, y: 0 }, data: { label: 'Diff', type: 'analysis', config: { operation: 'ST_Difference' } } }),
+    ];
+    const edges: Edge[] = [
+      { id: 'e1', source: 'b', target: 'diff', targetHandle: 'input-1', type: 'smoothstep' },
+      { id: 'e2', source: 'a', target: 'diff', targetHandle: 'input-0', type: 'smoothstep' },
+    ];
+
+    const result = buildWorkflowSQL(nodes, edges);
+
+    expect(result.sql).toContain('ST_Difference(a."geometry", b."geometry")');
+  });
+
+  it('keeps geometry when a scalar single-input function is used', () => {
+    const nodes: GISNode[] = [
+      makeNode({ id: 'src', data: { label: 'Src', type: 'input', config: { tableName: 'polygons' } } }),
+      makeNode({ id: 'area', position: { x: 200, y: 0 }, data: { label: 'Area', type: 'analysis', config: { operation: 'ST_Area' } } }),
+    ];
+    const edges: Edge[] = [{ id: 'e1', source: 'src', target: 'area', type: 'smoothstep' }];
+
+    const result = buildWorkflowSQL(nodes, edges);
+
+    expect(result.sql).toContain('ST_Area("geometry") AS "area_result"');
+    expect(result.sql).toContain('ST_AsGeoJSON("geometry")');
+  });
+
+  it('uses boolean two-input predicates as filters while preserving source geometry', () => {
+    const nodes: GISNode[] = [
+      makeNode({ id: 'a', data: { label: 'A', type: 'input', config: { tableName: 'polygons' } } }),
+      makeNode({ id: 'b', data: { label: 'B', type: 'input', config: { tableName: 'points' } } }),
+      makeNode({ id: 'contains', position: { x: 200, y: 0 }, data: { label: 'Contains', type: 'analysis', config: { operation: 'ST_Contains' } } }),
+    ];
+    const edges: Edge[] = [
+      { id: 'e1', source: 'a', target: 'contains', targetHandle: 'input-0', type: 'smoothstep' },
+      { id: 'e2', source: 'b', target: 'contains', targetHandle: 'input-1', type: 'smoothstep' },
+    ];
+
+    const result = buildWorkflowSQL(nodes, edges);
+
+    expect(result.sql).toContain('ST_Contains(a."geometry", b."geometry") AS "contains_result"');
+    expect(result.sql).toContain('WHERE ST_Contains(a."geometry", b."geometry")');
+    expect(result.sql).toContain('ST_AsGeoJSON("geometry")');
+  });
+
+  it('rejects table functions as normal analysis nodes', () => {
+    const nodes: GISNode[] = [
+      makeNode({ id: 'src', data: { label: 'Src', type: 'input', config: { tableName: 'polygons' } } }),
+      makeNode({ id: 'read', position: { x: 200, y: 0 }, data: { label: 'Read', type: 'analysis', config: { operation: 'ST_Read' } } }),
+    ];
+    const edges: Edge[] = [{ id: 'e1', source: 'src', target: 'read', type: 'smoothstep' }];
+
+    expect(() => buildWorkflowSQL(nodes, edges)).toThrow('cannot be used as a row-by-row analysis node');
+  });
+
+  it('creates an addressable CTE for output nodes', () => {
+    const nodes: GISNode[] = [
+      makeNode({ id: 'src', data: { label: 'Src', type: 'input', config: { tableName: 'data' } } }),
+      makeNode({ id: 'out', position: { x: 200, y: 0 }, data: { label: 'Out', type: 'output', config: {} } }),
+    ];
+    const edges: Edge[] = [{ id: 'e1', source: 'src', target: 'out', type: 'smoothstep' }];
+
+    const result = buildWorkflowSQL(nodes, edges);
+
+    expect(result.withClause).toContain('out AS');
+    expect(result.sql).toContain('FROM out');
+    expect(result.outputLayerName).toBe('workflow_out');
+  });
+
   it('topologically sorts nodes correctly', () => {
     const nodes: GISNode[] = [
       makeNode({ id: 'z', position: { x: 400, y: 0 }, data: { label: 'Output', type: 'output', config: {} } }),
@@ -146,6 +217,6 @@ describe('buildUpToSQL', () => {
 
   it('throws for unknown target node', () => {
     const nodes = [makeNode({ id: 'src', data: { label: 'Src', type: 'input', config: { tableName: 'data' } } })];
-    expect(() => buildUpToSQL(nodes, [], 'nonexistent')).toThrow('No nodes in the workflow');
+    expect(() => buildUpToSQL(nodes, [], 'nonexistent')).toThrow('does not exist');
   });
 });

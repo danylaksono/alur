@@ -137,6 +137,7 @@ export const Chat = () => {
               id: `llm-layer-${Date.now()}`,
               name: layerName,
               geojson: fc,
+              sourceKind: 'llm',
             });
             addChatMessage('assistant', `Added "${layerName}" to the map`, { kind: 'tool_result', summary: `${fc.features.length} features added to map` });
             break;
@@ -175,6 +176,7 @@ export const Chat = () => {
                 id: `h3-layer-${Date.now()}`,
                 name: h3LayerName,
                 geojson: fc,
+                sourceKind: 'h3',
               });
               addChatMessage('assistant', `Added H3 grid "${h3LayerName}"`, { kind: 'tool_result', summary: `${fc.features.length} hex cells at res ${h3Resolution}` });
             } catch (err: any) {

@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 import {
   Connection,
   Edge,
@@ -10,6 +9,7 @@ import {
   applyNodeChanges,
   applyEdgeChanges
 } from '@xyflow/react';
+import { DEFAULT_BASEMAP_ID, type BasemapId } from '../utils/basemaps';
 
 export type NodeExecutionState = {
   status: 'idle' | 'running' | 'done' | 'error';
@@ -17,13 +17,21 @@ export type NodeExecutionState = {
   featureCount?: number;
 };
 
+const initialChatMessages: ChatMessage[] = [
+  { role: 'assistant', content: "I can help you build spatial workflows. Try asking 'Create a 500m buffer around the input'." }
+];
+
 export type MapLayer = {
   id: string;
   name: string;
   geojson: GeoJSON.FeatureCollection;
-  visible?: boolean;
+  visible: boolean;
   sourceNodeId?: string;
+  sourceKind?: 'input' | 'workflow' | 'step' | 'output' | 'manual' | 'llm' | 'h3';
   color?: string;
+  opacity: number;
+  createdAt: number;
+  featureCount: number;
 };
 
 export type GISNode = Node & {
@@ -55,22 +63,28 @@ interface AppState {
   nodes: GISNode[];
   edges: Edge[];
   duckdbReady: boolean;
+  selectedBasemapId: BasemapId;
   mapLayers: MapLayer[];
   chatMessages: ChatMessage[];
   manualSQL: string;
   isManualSQL: boolean;
   selectedNodeId: string | null;
+  selectedLayerId: string | null;
   nodeSchemas: Record<string, any[]>;
   nodeExecutionStates: Record<string, NodeExecutionState>;
   toasts: Toast[];
 
   setDuckDBReady: (ready: boolean) => void;
+  setSelectedBasemapId: (id: BasemapId) => void;
   setManualSQL: (sql: string) => void;
   setIsManualSQL: (isManual: boolean) => void;
   setSelectedNodeId: (id: string | null) => void;
+  setSelectedLayerId: (id: string | null) => void;
+  selectLayer: (layerId: string | null) => void;
   setNodeSchema: (id: string, schema: any[]) => void;
   setNodeExecutionState: (id: string, state: NodeExecutionState) => void;
   resetNodeExecutionStates: () => void;
+  resetWorkspace: () => void;
   onNodesChange: (changes: NodeChange[]) => void;
   onEdgesChange: (changes: EdgeChange[]) => void;
   onConnect: (connection: Connection) => void;
@@ -78,34 +92,62 @@ interface AppState {
   updateNode: (id: string, config: any) => void;
   removeNode: (id: string) => void;
   duplicateNode: (id: string, newId?: string, position?: { x: number; y: number }) => void;
-  addMapLayer: (layer: MapLayer) => void;
+  addMapLayer: (layer: NewMapLayer) => void;
   removeMapLayer: (layerId: string) => void;
+  toggleMapLayerVisibility: (layerId: string) => void;
+  updateMapLayer: (layerId: string, patch: Partial<Pick<MapLayer, 'visible' | 'opacity' | 'color' | 'name'>>) => void;
   addChatMessage: (role: 'user' | 'assistant' | 'system', content: string, data?: { kind?: string; toolName?: string; summary?: string; icon?: string }) => void;
   addToast: (toast: Omit<Toast, 'id'>) => void;
   removeToast: (id: string) => void;
 }
 
-export const useStore = create<AppState>()(
-  persist(
-    (set, get) => ({
+export type NewMapLayer = Omit<MapLayer, 'visible' | 'opacity' | 'createdAt' | 'featureCount'> &
+  Partial<Pick<MapLayer, 'visible' | 'opacity' | 'createdAt' | 'featureCount'>>;
+
+if (typeof window !== 'undefined') {
+  window.localStorage.removeItem('ymnngis-workflow');
+}
+
+const removeRecordKeys = <T>(record: Record<string, T>, ids: Set<string>) =>
+  Object.fromEntries(Object.entries(record).filter(([id]) => !ids.has(id)));
+
+const hydrateLayer = (layer: NewMapLayer, previous?: MapLayer): MapLayer => ({
+  ...previous,
+  ...layer,
+  visible: layer.visible ?? previous?.visible ?? true,
+  opacity: layer.opacity ?? previous?.opacity ?? 0.8,
+  createdAt: layer.createdAt ?? previous?.createdAt ?? Date.now(),
+  featureCount: layer.featureCount ?? layer.geojson.features.length,
+});
+
+export const useStore = create<AppState>()((set, get) => ({
   nodes: [],
   edges: [],
   duckdbReady: false,
+  selectedBasemapId: DEFAULT_BASEMAP_ID,
   mapLayers: [],
-  chatMessages: [
-    { role: 'assistant', content: "I can help you build spatial workflows. Try asking 'Create a 500m buffer around the input'." }
-  ],
+  chatMessages: initialChatMessages,
   manualSQL: '',
   isManualSQL: false,
   selectedNodeId: null,
+  selectedLayerId: null,
   nodeSchemas: {},
   nodeExecutionStates: {},
   toasts: [],
 
   setDuckDBReady: (ready) => set({ duckdbReady: ready }),
+  setSelectedBasemapId: (id) => set({ selectedBasemapId: id }),
   setManualSQL: (sql) => set({ manualSQL: sql }),
   setIsManualSQL: (isManual) => set({ isManualSQL: isManual }),
   setSelectedNodeId: (id) => set({ selectedNodeId: id }),
+  setSelectedLayerId: (id) => set({ selectedLayerId: id }),
+  selectLayer: (layerId) => set((state) => {
+    const layer = layerId ? state.mapLayers.find((item) => item.id === layerId) : null;
+    return {
+      selectedLayerId: layerId,
+      selectedNodeId: layer?.sourceNodeId ?? state.selectedNodeId,
+    };
+  }),
   setNodeSchema: (id, schema) => set((state) => ({
     nodeSchemas: { ...state.nodeSchemas, [id]: schema }
   })),
@@ -116,9 +158,46 @@ export const useStore = create<AppState>()(
 
   resetNodeExecutionStates: () => set({ nodeExecutionStates: {} }),
 
+  resetWorkspace: () => set({
+    nodes: [],
+    edges: [],
+    selectedBasemapId: DEFAULT_BASEMAP_ID,
+    mapLayers: [],
+    chatMessages: initialChatMessages,
+    manualSQL: '',
+    isManualSQL: false,
+    selectedNodeId: null,
+    selectedLayerId: null,
+    nodeSchemas: {},
+    nodeExecutionStates: {},
+  }),
+
   onNodesChange: (changes) => {
+    const removedNodeIds = new Set(
+      changes
+        .filter((change) => change.type === 'remove')
+        .map((change) => change.id)
+    );
+    const nextNodes = applyNodeChanges(changes, get().nodes) as GISNode[];
+    const nextNodeIds = new Set(nextNodes.map((node) => node.id));
+
+    const nextLayers = removedNodeIds.size
+      ? get().mapLayers.filter((layer) => !layer.sourceNodeId || !removedNodeIds.has(layer.sourceNodeId))
+      : get().mapLayers;
+    const nextLayerIds = new Set(nextLayers.map((layer) => layer.id));
+
     set({
-      nodes: applyNodeChanges(changes, get().nodes) as GISNode[],
+      nodes: nextNodes,
+      edges: get().edges.filter((edge) => nextNodeIds.has(edge.source) && nextNodeIds.has(edge.target)),
+      mapLayers: nextLayers,
+      selectedNodeId: get().selectedNodeId && nextNodeIds.has(get().selectedNodeId!)
+        ? get().selectedNodeId
+        : null,
+      selectedLayerId: get().selectedLayerId && nextLayerIds.has(get().selectedLayerId!)
+        ? get().selectedLayerId
+        : null,
+      nodeSchemas: removeRecordKeys(get().nodeSchemas, removedNodeIds),
+      nodeExecutionStates: removeRecordKeys(get().nodeExecutionStates, removedNodeIds),
     });
   },
 
@@ -145,13 +224,20 @@ export const useStore = create<AppState>()(
   removeNode: (id) => set((state) => {
     const node = state.nodes.find((n) => n.id === id);
     const tableName = node?.data?.config?.tableName as string | undefined;
+    const removedIds = new Set([id]);
+    const mapLayers = state.mapLayers.filter((layer) => (
+      layer.sourceNodeId !== id && (!tableName || layer.id !== tableName)
+    ));
+    const layerIds = new Set(mapLayers.map((layer) => layer.id));
+
     return {
       nodes: state.nodes.filter((n) => n.id !== id),
       edges: state.edges.filter((edge) => edge.source !== id && edge.target !== id),
-      // Cascade: remove the associated map layer if this input node had data loaded
-      mapLayers: tableName
-        ? state.mapLayers.filter((layer) => layer.id !== tableName)
-        : state.mapLayers,
+      mapLayers,
+      selectedNodeId: state.selectedNodeId === id ? null : state.selectedNodeId,
+      selectedLayerId: state.selectedLayerId && layerIds.has(state.selectedLayerId) ? state.selectedLayerId : null,
+      nodeSchemas: removeRecordKeys(state.nodeSchemas, removedIds),
+      nodeExecutionStates: removeRecordKeys(state.nodeExecutionStates, removedIds),
     };
   }),
 
@@ -177,12 +263,31 @@ export const useStore = create<AppState>()(
     };
   }),
 
-  addMapLayer: (layer) => set((state) => ({
-    mapLayers: [...state.mapLayers.filter((item) => item.id !== layer.id), layer],
-  })),
+  addMapLayer: (layer) => set((state) => {
+    const previous = state.mapLayers.find((item) => item.id === layer.id);
+    const nextLayer = hydrateLayer(layer, previous);
+    return {
+      mapLayers: [...state.mapLayers.filter((item) => item.id !== layer.id), nextLayer],
+      selectedLayerId: nextLayer.id,
+      selectedNodeId: nextLayer.sourceNodeId ?? state.selectedNodeId,
+    };
+  }),
 
   removeMapLayer: (layerId) => set((state) => ({
     mapLayers: state.mapLayers.filter((item) => item.id !== layerId),
+    selectedLayerId: state.selectedLayerId === layerId ? null : state.selectedLayerId,
+  })),
+
+  toggleMapLayerVisibility: (layerId) => set((state) => ({
+    mapLayers: state.mapLayers.map((layer) =>
+      layer.id === layerId ? { ...layer, visible: !layer.visible } : layer
+    ),
+  })),
+
+  updateMapLayer: (layerId, patch) => set((state) => ({
+    mapLayers: state.mapLayers.map((layer) =>
+      layer.id === layerId ? { ...layer, ...patch } : layer
+    ),
   })),
 
   addChatMessage: (role, content, data) => set((state) => ({
@@ -196,14 +301,4 @@ export const useStore = create<AppState>()(
   removeToast: (id) => set((state) => ({
     toasts: state.toasts.filter((t) => t.id !== id)
   })),
-}),
-    {
-      name: 'ymnngis-workflow',
-      partialize: (state) => ({
-        nodes: state.nodes,
-        edges: state.edges,
-        chatMessages: state.chatMessages,
-      }),
-    }
-  )
-);
+}));

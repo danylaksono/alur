@@ -3,8 +3,8 @@ import { Handle, Position } from '@xyflow/react';
 import { Database, Upload, FileJson, Loader2, Sparkles } from 'lucide-react';
 import { duckdbService } from '../../services/duckdb';
 import { useStore } from '../../store/useStore';
-import { NodeActions } from './NodeActions';
 import { NodeSchema } from './NodeSchema';
+import { FlowNodeShell, nodeHandleClass } from './FlowNodeShell';
 
 export const InputNode = ({ data, id }: any) => {
   const updateNode = useStore((s) => s.updateNode);
@@ -48,7 +48,7 @@ export const InputNode = ({ data, id }: any) => {
     const layerGeoJSON = await duckdbService.getGeoJSONFromTable(tableName);
 
     if (layerGeoJSON) {
-      addMapLayer({ id: tableName, name: fileName, geojson: layerGeoJSON, sourceNodeId: id });
+      addMapLayer({ id: tableName, name: fileName, geojson: layerGeoJSON, sourceNodeId: id, sourceKind: 'input' });
       addChatMessage(
         'system',
         `✅ Loaded ${layerGeoJSON.features.length.toLocaleString()} features from ${fileName} onto the map.`,
@@ -85,36 +85,14 @@ export const InputNode = ({ data, id }: any) => {
       const fileName = 'need_london.parquet';
       const filePath = `sample_${Date.now()}_need_london.parquet`;
       const url = new URL('/need_london.parquet', window.location.origin).href;
-      
-      await duckdbService.registerFileUrl(filePath, url);
+      const response = await fetch(url);
 
-      let tableName = 'need_london';
-      const quotedTableName = `"${tableName}"`;
-      const escapeSqlString = (v: string) => v.replace(/'/g, "''");
-      
-      const query = `CREATE OR REPLACE VIEW ${quotedTableName} AS SELECT * FROM read_parquet('${escapeSqlString(filePath)}');`;
-      await duckdbService.query(query);
-      
-      updateNode(id, { ...data.config, tableName, fileName });
-      addChatMessage('system', `Registered table: ${tableName} from ${fileName}`);
-
-      await duckdbService.optimizeTable(tableName);
-
-      addChatMessage('system', `Extracting geometry and building GeoJSON layer...`);
-      const layerGeoJSON = await duckdbService.getGeoJSONFromTable(tableName);
-
-      if (layerGeoJSON) {
-        addMapLayer({ id: tableName, name: fileName, geojson: layerGeoJSON, sourceNodeId: id });
-        addChatMessage(
-          'system',
-          `✅ Loaded ${layerGeoJSON.features.length.toLocaleString()} features from ${fileName} onto the map.`,
-        );
-      } else {
-        addChatMessage(
-          'system',
-          `Table ${tableName} registered, but no geometry or lat/lon columns were found to render a map layer.`,
-        );
+      if (!response.ok) {
+        throw new Error(`Unable to fetch sample dataset (${response.status} ${response.statusText})`);
       }
+
+      const buffer = new Uint8Array(await response.arrayBuffer());
+      await loadAndRegister(buffer, fileName, filePath);
     } catch (err: any) {
       addChatMessage('system', `Error loading sample data: ${err.message}`);
     } finally {
@@ -123,12 +101,13 @@ export const InputNode = ({ data, id }: any) => {
   };
 
   return (
-    <div className="relative box-border px-4 py-3 w-[260px] bg-white border-l-4 border-l-blue-500 rounded-xl shadow-lg">
-      <NodeActions id={id} />
-      <div className="text-[10px] font-bold text-muted-foreground uppercase mb-2 flex items-center gap-1">
-        <Database className="w-3 h-3 text-blue-500" /> Data Source
-      </div>
-
+    <FlowNodeShell
+      id={id}
+      tone="blue"
+      icon={Database}
+      label="Data Source"
+      title={data.config.tableName || 'Load data'}
+    >
       {loading ? (
         <div className="flex flex-col items-center justify-center py-4 gap-2">
           <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />
@@ -172,7 +151,7 @@ export const InputNode = ({ data, id }: any) => {
 
       <NodeSchema nodeId={id} />
 
-      <Handle type="source" position={Position.Right} className="!bg-blue-400" />
-    </div>
+      <Handle type="source" position={Position.Right} className={nodeHandleClass('blue')} />
+    </FlowNodeShell>
   );
 };

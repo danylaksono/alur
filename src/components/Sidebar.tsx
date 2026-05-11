@@ -94,6 +94,7 @@ export const Sidebar = ({ children, className }: { children?: ReactNode; classNa
         id: outputLayerName,
         name: `Workflow Result (${geojson.features.length} features)`,
         geojson,
+        sourceKind: 'workflow',
       });
       addChatMessage('system', `✅ Workflow complete — ${geojson.features.length.toLocaleString()} features added to the map as "${outputLayerName}".`);
     } catch (err: any) {
@@ -187,10 +188,10 @@ export const Sidebar = ({ children, className }: { children?: ReactNode; classNa
         ) : (
           <div className="pt-4 border-t">
             <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-3">
-              Loaded Tables
+              Workspace
             </h3>
             <div className="text-[11px] text-muted-foreground italic p-2 bg-muted/30 rounded border border-dashed">
-              No tables loaded. Use a "Data Input" node.
+              Add a data input node to start building a workflow.
             </div>
           </div>
         )}

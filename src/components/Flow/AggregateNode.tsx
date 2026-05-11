@@ -1,11 +1,11 @@
-import { useMemo, type ChangeEvent } from 'react';
+import { useMemo } from 'react';
 import { Handle, Position } from '@xyflow/react';
 import { Layers } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { spatialFunctions } from '../../utils/spatialFunctions';
-import { NodeActions } from './NodeActions';
 import { NodeSchema } from './NodeSchema';
 import { cn } from '../../utils/cn';
+import { FlowNodeShell, fieldLabelClass, inputClass, nodeHandleClass, selectClass } from './FlowNodeShell';
 
 export const AggregateNode = ({ data, id }: any) => {
   const updateNode = useStore((s) => s.updateNode);
@@ -38,19 +38,20 @@ export const AggregateNode = ({ data, id }: any) => {
   );
 
   return (
-    <div className="relative px-4 py-3 min-w-[280px] bg-white border-l-4 border-l-orange-500 rounded-xl shadow-lg">
-      <NodeActions id={id} helperContent={helperContent} />
-      <div className="text-[10px] font-bold text-muted-foreground uppercase mb-1 flex items-center gap-1">
-        <Layers className="w-3 h-3 text-orange-500" /> Spatial Aggregate
-      </div>
-
-      <div className="space-y-3">
+    <FlowNodeShell
+      id={id}
+      tone="orange"
+      icon={Layers}
+      label="Spatial Aggregate"
+      title={operation}
+      helperContent={helperContent}
+    >
         <div>
-          <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1">
+          <label className={cn(fieldLabelClass, 'mb-1')}>
             Aggregate Function
           </label>
           <select
-            className="w-full rounded-lg border border-slate-200 bg-slate-50 text-sm text-slate-700 px-3 py-2 focus:border-orange-400 focus:ring-orange-200 focus:ring-2 outline-none"
+            className={selectClass}
             value={operation}
             onChange={(e) => updateConfig({ operation: e.target.value })}
           >
@@ -61,7 +62,7 @@ export const AggregateNode = ({ data, id }: any) => {
         </div>
 
         <div>
-          <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1">
+          <label className={cn(fieldLabelClass, 'mb-1')}>
             Group By Column <span className="text-slate-400 normal-case">(optional)</span>
           </label>
           {columnNames.length > 0 && (
@@ -84,22 +85,17 @@ export const AggregateNode = ({ data, id }: any) => {
           )}
           <input
             type="text"
-            className="w-full rounded-lg border border-slate-200 bg-white text-sm text-slate-700 px-3 py-2 focus:border-orange-400 focus:ring-orange-200 focus:ring-2 outline-none"
+            className={inputClass}
             value={groupBy}
             onChange={(e) => updateConfig({ groupBy: e.target.value })}
             placeholder="e.g. city_name"
           />
         </div>
-      </div>
-
-      <div className="mt-3 text-[10px] font-mono bg-slate-50 p-2 rounded text-slate-500 border border-slate-100 break-words">
-        {`SELECT ${groupBy ? `${groupBy}, ` : ''}${operation}(geom) FROM source${groupBy ? ` GROUP BY ${groupBy}` : ''};`}
-      </div>
 
       <NodeSchema nodeId={id} />
 
-      <Handle type="target" position={Position.Left} className="!w-3 !h-3 !bg-orange-400" />
-      <Handle type="source" position={Position.Right} className="!w-3 !h-3 !bg-orange-400" />
-    </div>
+      <Handle type="target" position={Position.Left} className={nodeHandleClass('orange')} />
+      <Handle type="source" position={Position.Right} className={nodeHandleClass('orange')} />
+    </FlowNodeShell>
   );
 };

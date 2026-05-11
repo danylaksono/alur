@@ -1,10 +1,10 @@
 import { Handle, Position } from '@xyflow/react';
 import { Eye, Map as MapIcon, ClipboardCopy, Settings2 } from 'lucide-react';
 import { useStore } from '../../store/useStore';
-import { NodeActions } from './NodeActions';
 import { NodeSchema } from './NodeSchema';
 import { buildUpToSQL } from '../../utils/workflowEngine';
 import { duckdbService } from '../../services/duckdb';
+import { FlowNodeShell, inputClass, nodeHandleClass } from './FlowNodeShell';
 
 export const OutputNode = ({ data, id }: any) => {
   const setSelectedNodeId = useStore((s) => s.setSelectedNodeId);
@@ -29,6 +29,7 @@ export const OutputNode = ({ data, id }: any) => {
         name: `Output: ${data.label}`,
         geojson,
         sourceNodeId: id,
+        sourceKind: 'output',
       });
       const msg = geojson.features.length >= maxFeatures
         ? `✅ Output rendered: ${geojson.features.length.toLocaleString()}+ features (limited to ${maxFeatures})`
@@ -57,13 +58,14 @@ export const OutputNode = ({ data, id }: any) => {
   };
 
   return (
-    <div className="relative box-border px-4 py-3 w-[260px] bg-white border-l-4 border-l-emerald-500 rounded-xl shadow-lg">
-      <NodeActions id={id} />
-      <div className="text-[10px] font-bold text-muted-foreground uppercase mb-1 flex items-center gap-1">
-        <Eye className="w-3 h-3 text-emerald-500" /> Map Output
-      </div>
-
-      <div className="text-xs font-bold text-slate-700 mt-2 flex items-center gap-2">
+    <FlowNodeShell
+      id={id}
+      tone="emerald"
+      icon={Eye}
+      label="Map Output"
+      title="Visualize results"
+    >
+      <div className="text-xs font-bold text-slate-700 flex items-center gap-2">
         <MapIcon className="w-3 h-3 text-emerald-600" /> Visualize Results
       </div>
 
@@ -76,7 +78,7 @@ export const OutputNode = ({ data, id }: any) => {
           max={100000}
           value={maxFeatures}
           onChange={(e) => updateNode(id, { ...data.config, maxFeatures: Number(e.target.value) })}
-          className="w-20 text-[10px] border border-slate-200 rounded px-1.5 py-0.5 font-mono text-slate-700"
+          className={`${inputClass} w-24 px-2 py-1 text-[10px] font-mono`}
         />
       </div>
 
@@ -97,7 +99,7 @@ export const OutputNode = ({ data, id }: any) => {
 
       <NodeSchema nodeId={id} />
 
-      <Handle type="target" position={Position.Left} className="!bg-emerald-400" />
-    </div>
+      <Handle type="target" position={Position.Left} className={nodeHandleClass('emerald')} />
+    </FlowNodeShell>
   );
 };

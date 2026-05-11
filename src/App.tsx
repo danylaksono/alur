@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ReactFlow, Controls, Background } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useStore } from './store/useStore';
@@ -10,12 +10,12 @@ import {
   Play,
   Settings,
   Terminal,
-  ChevronDown,
   Download
 } from 'lucide-react';
 import { Sidebar } from './components/Sidebar';
 import { Chat } from './components/Chat';
 import { MapView } from './components/Map/MapView';
+import { LayerManager } from './components/LayerManager';
 import { InputNode } from './components/Flow/InputNode';
 import { AnalysisNode } from './components/Flow/AnalysisNode';
 import { AttributeNode } from './components/Flow/AttributeNode';
@@ -54,7 +54,9 @@ export default function App() {
     isManualSQL,
     setIsManualSQL,
     selectedNodeId,
+    selectedLayerId,
     setSelectedNodeId,
+    setSelectedLayerId,
     addNode,
     removeNode,
     duplicateNode,
@@ -63,11 +65,31 @@ export default function App() {
 
   const [previewData, setPreviewData] = useState<any[]>([]);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
-  const [showTable, setShowTable] = useState(false);
+  const [workspaceTab, setWorkspaceTab] = useState<'diagram' | 'attributes'>('diagram');
   const [lastManualSql, setLastManualSql] = useState<string | null>(null);
 
   useWorkflowSync();
   useSchemaFetcher();
+
+  const selectedLayer = useMemo(
+    () => mapLayers.find((layer) => layer.id === selectedLayerId) || null,
+    [mapLayers, selectedLayerId]
+  );
+  const selectedNode = useMemo(
+    () => nodes.find((node) => node.id === selectedNodeId) || null,
+    [nodes, selectedNodeId]
+  );
+  const layerAttributeRows = useMemo(
+    () => (selectedLayer?.geojson.features || []).map((feature, index) => ({
+      _feature: index + 1,
+      ...(feature.properties || {}),
+    })),
+    [selectedLayer]
+  );
+  const attributeData = selectedLayer ? layerAttributeRows : previewData;
+  const attributeSourceLabel = selectedLayer
+    ? selectedLayer.name
+    : selectedNode?.data.label || 'No node or layer selected';
 
   const handleRunSQL = async () => {
     if (!manualSQL) return;
@@ -75,14 +97,15 @@ export default function App() {
       setIsPreviewLoading(true);
       const geojson = await duckdbService.getGeoJSON(manualSQL);
       addMapLayer({
-        id: 'manual_query_result',
+        id: `manual-query-${Date.now()}`,
         name: 'Query Result',
         geojson,
+        sourceKind: 'manual',
       });
       setLastManualSql(manualSQL);
       const result = await duckdbService.query(manualSQL);
       setPreviewData(result.toArray().map((r: any) => typeof r.toJSON === 'function' ? r.toJSON() : r));
-      setShowTable(true);
+      setWorkspaceTab('attributes');
     } catch (err: any) {
       addToast({ type: 'error', message: `SQL Error: ${err.message}` });
     } finally {
@@ -147,7 +170,6 @@ export default function App() {
         
         const result = await duckdbService.query(previewSql);
         setPreviewData(result.toArray().map((r: any) => typeof r.toJSON === 'function' ? r.toJSON() : r));
-        setShowTable(true);
       } catch (err) {
         console.error('Failed to fetch node preview:', err);
         setPreviewData([]);
@@ -284,93 +306,106 @@ export default function App() {
             onPointerDown={() => setIsResizing(true)}
           />
 
-          <ErrorBoundary name="Workflow" fallback={
-            <div className="flex items-center justify-center h-full bg-slate-100 text-slate-400 text-[11px] italic">Workflow editor error</div>
-          }>
-            <div className="min-h-0 overflow-hidden" style={{ flexBasis: `${(1 - topRatio) * 100}%` }}>
-              <ReactFlow
-                nodes={nodes}
-                edges={edges}
-                onNodesChange={onNodesChange}
-                onEdgesChange={onEdgesChange}
-                onConnect={onConnect}
-                onNodeClick={(_, node) => setSelectedNodeId(node.id)}
-                onPaneClick={() => setSelectedNodeId(null)}
-                nodeTypes={nodeTypes}
-                fitView
-                className="h-full bg-background"
-              >
-                <Background gap={24} size={1} />
-                <Controls />
-              </ReactFlow>
-            </div>
-          </ErrorBoundary>
-
-          {/* Attribute Data Table Panel */}
-          <ErrorBoundary name="DataTable">
-            <div className={cn(
-              "border-t bg-white transition-all duration-300 flex flex-col",
-              showTable ? "h-64" : "h-10"
-            )}>
-              <div 
-                className="flex items-center justify-between px-4 py-2 bg-slate-50 cursor-pointer border-b hover:bg-slate-100 transition-colors"
-                onClick={() => setShowTable(!showTable)}
-              >
-                <div className="flex items-center gap-2">
-                  <Database className="w-3 h-3 text-slate-500" />
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                    Attribute Inspector {selectedNodeId ? `— ${nodes.find(n => n.id === selectedNodeId)?.data.label}` : ''}
-                  </span>
-                </div>
-                <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
-                  {selectedNodeId && (
-                    <button 
-                      onClick={() => handleExport('csv')}
-                      className="flex items-center gap-1.5 px-2 py-1 bg-white border border-slate-200 rounded text-[9px] font-bold text-slate-600 hover:bg-slate-50 transition-colors"
-                    >
-                      <Download className="w-2.5 h-2.5" /> CSV
-                    </button>
+          <div
+            className="flex min-h-0 flex-col overflow-hidden border-t bg-white"
+            style={{ flexBasis: `${(1 - topRatio) * 100}%` }}
+          >
+            <div className="flex h-11 shrink-0 items-center justify-between border-b bg-slate-50 px-3">
+              <div className="flex items-center gap-1 rounded-md border border-slate-200 bg-white p-1">
+                <button
+                  type="button"
+                  onClick={() => setWorkspaceTab('diagram')}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest transition-colors",
+                    workspaceTab === 'diagram'
+                      ? "bg-slate-900 text-white"
+                      : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
                   )}
-                  {isPreviewLoading && <div className="w-3 h-3 border border-primary border-t-transparent rounded-full animate-spin" />}
-                  <ChevronDown 
-                    className={cn("w-4 h-4 text-slate-400 transition-transform cursor-pointer", !showTable && "rotate-180")} 
-                    onClick={() => setShowTable(!showTable)}
-                />
+                >
+                  <Workflow className="w-3 h-3" />
+                  Node Diagram
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setWorkspaceTab('attributes');
+                  }}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest transition-colors",
+                    workspaceTab === 'attributes'
+                      ? "bg-slate-900 text-white"
+                      : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                  )}
+                >
+                  <Database className="w-3 h-3" />
+                  Attribute Inspector
+                </button>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <span className="max-w-64 truncate text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                  {attributeSourceLabel}
+                </span>
+                {workspaceTab === 'attributes' && selectedNodeId && (
+                  <button
+                    onClick={() => handleExport('csv')}
+                    className="flex items-center gap-1.5 rounded border border-slate-200 bg-white px-2 py-1 text-[9px] font-bold text-slate-600 transition-colors hover:bg-slate-50"
+                  >
+                    <Download className="w-2.5 h-2.5" /> CSV
+                  </button>
+                )}
+                {workspaceTab === 'attributes' && isPreviewLoading && (
+                  <div className="h-3 w-3 animate-spin rounded-full border border-primary border-t-transparent" />
+                )}
               </div>
             </div>
-            {showTable && (
-              <div className="flex-1 overflow-hidden">
-                <DataTable data={previewData} isLoading={isPreviewLoading} />
-              </div>
-            )}
+
+            <div className="min-h-0 flex-1 overflow-hidden">
+              {workspaceTab === 'diagram' ? (
+                <ErrorBoundary name="Workflow" fallback={
+                  <div className="flex items-center justify-center h-full bg-slate-100 text-slate-400 text-[11px] italic">Workflow editor error</div>
+                }>
+                  <ReactFlow
+                    nodes={nodes}
+                    edges={edges}
+                    onNodesChange={onNodesChange}
+                    onEdgesChange={onEdgesChange}
+                    onConnect={onConnect}
+                    onNodeClick={(_, node) => {
+                      setSelectedNodeId(node.id);
+                      setSelectedLayerId(null);
+                    }}
+                    onPaneClick={() => {
+                      setSelectedNodeId(null);
+                      setSelectedLayerId(null);
+                    }}
+                    nodeTypes={nodeTypes}
+                    fitView
+                    className="h-full bg-background"
+                  >
+                    <Background gap={24} size={1} />
+                    <Controls />
+                  </ReactFlow>
+                </ErrorBoundary>
+              ) : (
+                <ErrorBoundary name="DataTable">
+                  <DataTable data={attributeData} isLoading={!selectedLayer && isPreviewLoading} />
+                </ErrorBoundary>
+              )}
+            </div>
           </div>
-          </ErrorBoundary>
         </main>
 
-        {/* Loaded Tables */}
-        <ErrorBoundary name="SQL Panel">
-        <div className="w-80 border-l bg-white flex flex-col shadow-sm z-40 shrink-0">
-          <div className="p-4 border-b bg-muted/20">
-            <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-3 flex items-center justify-between">
-              Loaded Tables
-            </h3>
-            {mapLayers.length ? (
-              <div className="space-y-2">
-                {mapLayers.map((layer) => (
-                  <div key={layer.id} className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-800">
-                    <div className="font-semibold truncate">{layer.name}</div>
-                    <div className="text-[10px] text-muted-foreground">{layer.id}</div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-[11px] text-muted-foreground italic p-2 bg-muted/30 rounded border border-dashed">
-                No tables loaded. Drag a "Data Input" node to start.
-              </div>
-            )}
+        <aside className="w-96 shrink-0 border-l bg-white shadow-sm z-40 flex min-h-0 flex-col">
+          <div className="min-h-0 border-b" style={{ flexBasis: '42%' }}>
+            <ErrorBoundary name="Layer Manager">
+              <LayerManager />
+            </ErrorBoundary>
           </div>
 
-          <div className="flex-1 overflow-hidden p-4 flex flex-col bg-slate-50">
+          <ErrorBoundary name="SQL Panel">
+          <div className="flex min-h-0 flex-1 flex-col bg-slate-50">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4">
             <div className="flex items-center justify-between gap-2 pb-4">
               <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
                 SQL Editor & Workflow Preview
@@ -431,34 +466,10 @@ export default function App() {
               </div>
             </div>
           </div>
-        </div>
-        </ErrorBoundary>
+          </div>
+          </ErrorBoundary>
+        </aside>
       </div>
-
-      {/* Footer / Status Bar */}
-      <footer className="h-10 bg-slate-900 flex items-center px-4 justify-between border-t border-slate-700 shrink-0 text-white z-50">
-        <div className="flex items-center gap-4 text-[10px] font-mono text-slate-400">
-          <span className={cn(
-            "flex items-center gap-1",
-            duckdbReady ? "text-emerald-400" : "text-amber-400"
-          )}>
-            <span className={cn("w-1.5 h-1.5 rounded-full", duckdbReady ? "bg-emerald-400 animate-pulse" : "bg-amber-400")}></span>
-            {duckdbReady ? "SYSTEM ONLINE" : "ENGINE WARMING"}
-          </span>
-          <span className="hover:text-white cursor-pointer transition-colors max-w-lg truncate">
-            {duckdbReady ? "spatial extension loaded. ready for queries." : "loading spatial extension..."}
-          </span>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="text-[10px] font-mono text-slate-500">CLIENT-SIDE SQL • DUCKDB WASM</span>
-          <button 
-            onClick={() => handleExport('parquet')}
-            className="text-[10px] text-slate-300 hover:text-white flex items-center gap-1 bg-slate-800 px-2 py-0.5 rounded border border-slate-700 transition-colors"
-          >
-            <Download className="w-3 h-3" /> Export GeoParquet
-          </button>
-        </div>
-      </footer>
 
       <ToastContainer />
     </div>

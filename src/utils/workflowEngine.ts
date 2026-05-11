@@ -22,6 +22,57 @@ export interface WorkflowResult {
   outputLayerName: string;
 }
 
+const GEOMETRY_RETURNING_FUNCTIONS = new Set([
+  'ST_Affine',
+  'ST_Boundary',
+  'ST_Buffer',
+  'ST_BuildArea',
+  'ST_Centroid',
+  'ST_Collect',
+  'ST_CollectionExtract',
+  'ST_ConcaveHull',
+  'ST_ConvexHull',
+  'ST_Difference',
+  'ST_EndPoint',
+  'ST_Envelope',
+  'ST_Force2D',
+  'ST_Force3D',
+  'ST_GeomFromGeoJSON',
+  'ST_GeomFromText',
+  'ST_GeomFromWKB',
+  'ST_Intersection',
+  'ST_LineMerge',
+  'ST_MakeEnvelope',
+  'ST_MakeLine',
+  'ST_MakePolygon',
+  'ST_Multi',
+  'ST_Normalize',
+  'ST_PointN',
+  'ST_ReducePrecision',
+  'ST_RemoveRepeatedPoints',
+  'ST_Reverse',
+  'ST_Simplify',
+  'ST_SimplifyPreserveTopology',
+  'ST_StartPoint',
+  'ST_Transform',
+  'ST_Union',
+]);
+
+const BOOLEAN_SPATIAL_PREDICATES = new Set([
+  'ST_Contains',
+  'ST_ContainsProperly',
+  'ST_CoveredBy',
+  'ST_Covers',
+  'ST_Crosses',
+  'ST_Disjoint',
+  'ST_DWithin',
+  'ST_Equals',
+  'ST_Intersects',
+  'ST_Overlaps',
+  'ST_Touches',
+  'ST_Within',
+]);
+
 // ─── helpers ──────────────────────────────────────────────────────────
 
 /** Topologically sort nodes from sources (no incoming edges) to sinks. */
@@ -66,6 +117,18 @@ export function cteAlias(nodeId: string): string {
   return nodeId.replace(/[^a-zA-Z0-9_]/g, '_');
 }
 
+function resultFieldName(operation: string): string {
+  return `${operation.replace(/^ST_/, '').toLowerCase()}_result`;
+}
+
+function isGeometryReturning(operation: string): boolean {
+  return GEOMETRY_RETURNING_FUNCTIONS.has(operation);
+}
+
+function isBooleanPredicate(operation: string): boolean {
+  return BOOLEAN_SPATIAL_PREDICATES.has(operation);
+}
+
 // ─── main builder ─────────────────────────────────────────────────────
 
 export function buildWorkflowSQL(nodes: GISNode[], edges: Edge[], options?: { limit?: number }): WorkflowResult {
@@ -77,11 +140,11 @@ export function buildWorkflowSQL(nodes: GISNode[], edges: Edge[], options?: { li
 
   const sorted = topoSort(nodes, edges);
 
-  // Map each node to its parent(s) CTE aliases
-  const parentsMap = new Map<string, string[]>();
+  // Map each node to its parent edges. Handles keep two-input spatial ops deterministic.
+  const parentsMap = new Map<string, Edge[]>();
   edges.forEach((e) => {
     const existing = parentsMap.get(e.target) || [];
-    parentsMap.set(e.target, [...existing, e.source]);
+    parentsMap.set(e.target, [...existing, e]);
   });
 
   const ctes: string[] = [];
@@ -92,8 +155,10 @@ export function buildWorkflowSQL(nodes: GISNode[], edges: Edge[], options?: { li
   for (const node of sorted) {
     const alias = cteAlias(node.id);
     const { type, config } = node.data;
-    const parentIds = parentsMap.get(node.id) || [];
-    const parentAliases = parentIds.map(id => cteAlias(id));
+    const parentEdges = [...(parentsMap.get(node.id) || [])].sort((a, b) =>
+      String(a.targetHandle || '').localeCompare(String(b.targetHandle || ''))
+    );
+    const parentAliases = parentEdges.map(edge => cteAlias(edge.source));
 
     if (type === 'input') {
       const tableName = config?.tableName;
@@ -106,6 +171,12 @@ export function buildWorkflowSQL(nodes: GISNode[], edges: Edge[], options?: { li
     } else if (type === 'analysis') {
       const operation = config?.operation || 'ST_Buffer';
       const fn = spatialFunctions.find((f) => f.name === operation);
+      if (!fn) {
+        throw new Error(`Unsupported spatial operation "${operation}".`);
+      }
+      if (fn.category === 'Table' || fn.category === 'Macro') {
+        throw new Error(`Operation "${operation}" is a ${fn.category.toLowerCase()} function and cannot be used as a row-by-row analysis node.`);
+      }
       const inputCount = fn?.requiredInputCount ?? 1;
 
       const buildExtraArgs = (): string => {
@@ -154,7 +225,14 @@ export function buildWorkflowSQL(nodes: GISNode[], edges: Edge[], options?: { li
           newGeom = 'geom_buffered';
         } else {
           const funcArgs = `${qi(meta.geom)}${buildExtraArgs()}`;
-          sql = `SELECT *, ${operation}(${funcArgs}) AS geom_result FROM ${source}`;
+          if (isGeometryReturning(operation)) {
+            sql = `SELECT *, ${operation}(${funcArgs}) AS geom_result FROM ${source}`;
+            newGeom = 'geom_result';
+          } else {
+            const fieldName = config?.resultField || resultFieldName(operation);
+            sql = `SELECT *, ${operation}(${funcArgs}) AS ${qi(fieldName)} FROM ${source}`;
+            newGeom = meta.geom;
+          }
         }
 
         ctes.push(`${alias} AS (\n  ${sql}\n)`);
@@ -170,12 +248,24 @@ export function buildWorkflowSQL(nodes: GISNode[], edges: Edge[], options?: { li
         const metaA = nodeMetadata.get(sourceA)!;
         const metaB = nodeMetadata.get(sourceB)!;
 
-        // Optimization: Use a spatial join (filtered cross join) for 2-input operations
-        // This avoids N*M complexity by only calculating results for intersecting geometries
-        ctes.push(
-          `${alias} AS (\n  SELECT a.*, ${operation}(a.${qi(metaA.geom)}, b.${qi(metaB.geom)}) AS geom_multi_result\n  FROM ${sourceA} a, ${sourceB} b\n  WHERE ST_Intersects(a.${qi(metaA.geom)}, b.${qi(metaB.geom)})\n)`
-        );
-        nodeMetadata.set(alias, { geom: 'geom_multi_result', crs: metaA.crs });
+        const leftGeom = `a.${qi(metaA.geom)}`;
+        const rightGeom = `b.${qi(metaB.geom)}`;
+        if (isGeometryReturning(operation)) {
+          ctes.push(
+            `${alias} AS (\n  SELECT a.*, ${operation}(${leftGeom}, ${rightGeom}) AS geom_multi_result\n  FROM ${sourceA} a, ${sourceB} b\n  WHERE ST_Intersects(${leftGeom}, ${rightGeom})\n)`
+          );
+          nodeMetadata.set(alias, { geom: 'geom_multi_result', crs: metaA.crs });
+        } else {
+          const fieldName = config?.resultField || resultFieldName(operation);
+          const predicate = `${operation}(${leftGeom}, ${rightGeom})`;
+          const whereClause = isBooleanPredicate(operation)
+            ? `\n  WHERE ${predicate}`
+            : `\n  WHERE ST_Intersects(${leftGeom}, ${rightGeom})`;
+          ctes.push(
+            `${alias} AS (\n  SELECT a.*, ${predicate} AS ${qi(fieldName)}\n  FROM ${sourceA} a, ${sourceB} b${whereClause}\n)`
+          );
+          nodeMetadata.set(alias, { geom: metaA.geom, crs: metaA.crs });
+        }
         lastAlias = alias;
       }
     } else if (type === 'aggregate') {
@@ -220,7 +310,8 @@ export function buildWorkflowSQL(nodes: GISNode[], edges: Edge[], options?: { li
     } else if (type === 'output') {
       if (parentAliases.length > 0) {
         const source = parentAliases[0];
-        lastAlias = source;
+        ctes.push(`${alias} AS (\n  SELECT * FROM ${source}\n)`);
+        lastAlias = alias;
         nodeMetadata.set(alias, nodeMetadata.get(source)!);
       }
     }
@@ -245,7 +336,7 @@ export function buildWorkflowSQL(nodes: GISNode[], edges: Edge[], options?: { li
     sql,
     withClause,
     lastAlias,
-    outputLayerName: 'workflow_result',
+    outputLayerName: `workflow_${lastAlias}`,
   };
 }
 
@@ -255,6 +346,9 @@ export function buildWorkflowSQL(nodes: GISNode[], edges: Edge[], options?: { li
  */
 export function buildUpToSQL(nodes: GISNode[], edges: Edge[], targetNodeId: string, options?: { limit?: number }): WorkflowResult {
   if (!nodes.length) throw new Error('No nodes in the workflow.');
+  if (!nodes.some((node) => node.id === targetNodeId)) {
+    throw new Error(`Target node "${targetNodeId}" does not exist.`);
+  }
 
   // Find all nodes that are ancestors of the target (including the target itself)
   const parentMap = new Map<string, string[]>();

@@ -26,7 +26,7 @@ export const NodeActions = ({ id, helperContent }: NodeActionsProps) => {
     const { nodes, edges } = useStore.getState();
     setNodeExecutionState(id, { status: 'running' });
     try {
-      const { sql, lastAlias } = buildUpToSQL(nodes, edges, id);
+      const { sql } = buildUpToSQL(nodes, edges, id);
       addChatMessage('system', `▶️ Executing up to node: ${nodes.find((n) => n.id === id)?.data.label || id}`);
       const geojson = await duckdbService.getGeoJSON(sql);
       if (!geojson || geojson.features.length === 0) {
@@ -39,6 +39,7 @@ export const NodeActions = ({ id, helperContent }: NodeActionsProps) => {
         name: `Step: ${nodes.find((n) => n.id === id)?.data.label || id}`,
         geojson,
         sourceNodeId: id,
+        sourceKind: 'step',
       });
       setNodeExecutionState(id, { status: 'done', featureCount: geojson.features.length });
       addChatMessage('system', `✅ Step executed: ${geojson.features.length.toLocaleString()} features`);
