@@ -22,7 +22,7 @@ import { AttributeNode } from './components/Flow/AttributeNode';
 import { AggregateNode } from './components/Flow/AggregateNode';
 import { FilterNode } from './components/Flow/FilterNode';
 import { OutputNode } from './components/Flow/OutputNode';
-import { DataTable } from './components/DataTable';
+import { DataTable, type ColumnProfile } from './components/DataTable';
 import { ToastContainer } from './components/Toast';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { useWorkflowSync } from './hooks/useWorkflowSync';
@@ -37,6 +37,25 @@ const nodeTypes = {
   filter: FilterNode,
   output: OutputNode,
 };
+
+const qi = (name: string) => `"${name.replace(/"/g, '""')}"`;
+const escapeSql = (value: string) => value.replace(/'/g, "''");
+
+const searchableColumnNames = (schema: any[] | undefined) =>
+  (schema || [])
+    .map((col: any) => col.name || col.column_name)
+    .filter((name: unknown): name is string =>
+      typeof name === 'string' && !['geojson', 'geometry', 'geom'].includes(name.toLowerCase())
+    );
+
+const columnType = (schema: any[] | undefined, column: string) => {
+  const found = (schema || []).find((col: any) => (col.name || col.column_name) === column);
+  return String(found?.type || found?.column_type || '').toLowerCase();
+};
+
+const isNumericType = (type: string) =>
+  ['tinyint', 'smallint', 'integer', 'bigint', 'hugeint', 'utinyint', 'usmallint', 'uinteger', 'ubigint', 'float', 'double', 'decimal', 'real']
+    .some((item) => type.includes(item));
 
 export default function App() {
   const {
@@ -55,6 +74,7 @@ export default function App() {
     setIsManualSQL,
     selectedNodeId,
     selectedLayerId,
+    nodeSchemas,
     setSelectedNodeId,
     setSelectedLayerId,
     addNode,
@@ -67,6 +87,14 @@ export default function App() {
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [workspaceTab, setWorkspaceTab] = useState<'diagram' | 'attributes'>('diagram');
   const [lastManualSql, setLastManualSql] = useState<string | null>(null);
+  const [attributePageIndex, setAttributePageIndex] = useState(0);
+  const [attributePageSize, setAttributePageSize] = useState(50);
+  const [attributeTotalRows, setAttributeTotalRows] = useState<number | undefined>(undefined);
+  const [attributeSearch, setAttributeSearch] = useState('');
+  const [attributeSortBy, setAttributeSortBy] = useState<string | null>(null);
+  const [attributeSortDirection, setAttributeSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [columnProfile, setColumnProfile] = useState<ColumnProfile | null>(null);
+  const [isProfileLoading, setIsProfileLoading] = useState(false);
 
   useWorkflowSync();
   useSchemaFetcher();
@@ -79,17 +107,178 @@ export default function App() {
     () => nodes.find((node) => node.id === selectedNodeId) || null,
     [nodes, selectedNodeId]
   );
-  const layerAttributeRows = useMemo(
-    () => (selectedLayer?.geojson.features || []).map((feature, index) => ({
-      _feature: index + 1,
-      ...(feature.properties || {}),
-    })),
-    [selectedLayer]
+  const layerAttributeResult = useMemo(
+    () => {
+      const features = selectedLayer?.geojson.features || [];
+      const normalizedSearch = attributeSearch.trim().toLowerCase();
+      let rows: Record<string, any>[] = features.map((feature, index) => ({
+        _feature: index + 1,
+        ...(feature.properties || {}),
+      }));
+
+      if (normalizedSearch) {
+        rows = rows.filter((row) =>
+          Object.values(row).some((value) =>
+            String(value ?? '').toLowerCase().includes(normalizedSearch)
+          )
+        );
+      }
+
+      if (attributeSortBy) {
+        rows = [...rows].sort((a, b) => {
+          const av = a[attributeSortBy];
+          const bv = b[attributeSortBy];
+          const an = typeof av === 'number' ? av : Number(av);
+          const bn = typeof bv === 'number' ? bv : Number(bv);
+          const result = !Number.isNaN(an) && !Number.isNaN(bn)
+            ? an - bn
+            : String(av ?? '').localeCompare(String(bv ?? ''));
+          return attributeSortDirection === 'asc' ? result : -result;
+        });
+      }
+
+      const total = rows.length;
+      const start = attributePageIndex * attributePageSize;
+      const pageRows = rows.slice(start, start + attributePageSize).map((row, index) => ({
+        ...row,
+        _feature: start + index + 1,
+      }));
+
+      return { rows: pageRows, total };
+    },
+    [selectedLayer, attributePageIndex, attributePageSize, attributeSearch, attributeSortBy, attributeSortDirection]
   );
-  const attributeData = selectedLayer ? layerAttributeRows : previewData;
+  const attributeData = selectedLayer ? layerAttributeResult.rows : previewData;
+  const resolvedAttributeTotalRows = selectedLayer ? layerAttributeResult.total : attributeTotalRows;
   const attributeSourceLabel = selectedLayer
     ? selectedLayer.name
     : selectedNode?.data.label || 'No node or layer selected';
+
+  useEffect(() => {
+    setAttributePageIndex(0);
+    setAttributeSearch('');
+    setAttributeSortBy(null);
+    setAttributeSortDirection('asc');
+    setColumnProfile(null);
+  }, [selectedLayerId, selectedNodeId]);
+
+  const handleAttributeSortChange = (column: string) => {
+    setAttributePageIndex(0);
+    setAttributeSortBy((current) => {
+      if (current !== column) {
+        setAttributeSortDirection('asc');
+        return column;
+      }
+      setAttributeSortDirection((direction) => direction === 'asc' ? 'desc' : 'asc');
+      return column;
+    });
+  };
+
+  const profileLayerColumn = (column: string) => {
+    const features = selectedLayer?.geojson.features || [];
+    const values = features.map((feature) => ({ value: (feature.properties as any)?.[column] }));
+    const nonNull = values.map((item) => item.value).filter((value) => value !== null && value !== undefined && value !== '');
+    const numericValues = nonNull.map(Number).filter((value) => !Number.isNaN(value));
+    const nullCount = values.length - nonNull.length;
+
+    if (numericValues.length && numericValues.length >= nonNull.length * 0.8) {
+      const min = Math.min(...numericValues);
+      const max = Math.max(...numericValues);
+      const binCount = 12;
+      const width = max === min ? 1 : (max - min) / binCount;
+      const bins = Array.from({ length: binCount }, (_, index) => ({
+        label: `${(min + width * index).toPrecision(3)}-${(min + width * (index + 1)).toPrecision(3)}`,
+        count: 0,
+      }));
+      numericValues.forEach((value) => {
+        const idx = max === min ? 0 : Math.min(binCount - 1, Math.floor((value - min) / width));
+        bins[idx].count += 1;
+      });
+      setColumnProfile({ column, kind: 'numeric', total: values.length, nullCount, min, max, bins });
+      return;
+    }
+
+    const counts = new Map<string, number>();
+    nonNull.forEach((value) => {
+      const label = String(value);
+      counts.set(label, (counts.get(label) || 0) + 1);
+    });
+    const bins = [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 12)
+      .map(([label, count]) => ({ label, count }));
+    setColumnProfile({ column, kind: 'categorical', total: values.length, nullCount, bins });
+  };
+
+  const handleProfileColumn = async (column: string) => {
+    setColumnProfile(null);
+    if (selectedLayer) {
+      profileLayerColumn(column);
+      return;
+    }
+    if (!selectedNodeId) return;
+
+    try {
+      setIsProfileLoading(true);
+      const { withClause } = buildWorkflowSQL(nodes, edges);
+      const targetAlias = cteAlias(selectedNodeId);
+      const schema = nodeSchemas[selectedNodeId];
+      const type = columnType(schema, column);
+      const normalizedSearch = attributeSearch.trim();
+      const columns = searchableColumnNames(schema);
+      const whereClause = normalizedSearch && columns.length
+        ? ` WHERE ${columns.map((name) => `CAST(${qi(name)} AS VARCHAR) ILIKE '%${escapeSql(normalizedSearch)}%'`).join(' OR ')}`
+        : '';
+      const totalSql = `${withClause} SELECT COUNT(*) AS total, SUM(CASE WHEN ${qi(column)} IS NULL THEN 1 ELSE 0 END) AS null_count FROM ${targetAlias}${whereClause};`;
+      const totalResult = await duckdbService.query(totalSql);
+      const totalRow = totalResult.toArray()[0];
+      const totalRaw = typeof totalRow?.toJSON === 'function' ? totalRow.toJSON() : totalRow;
+      const total = Number(totalRaw?.total ?? 0);
+      const nullCount = Number(totalRaw?.null_count ?? 0);
+
+      if (isNumericType(type)) {
+        const statsSql = `${withClause} SELECT MIN(${qi(column)}) AS min_value, MAX(${qi(column)}) AS max_value FROM ${targetAlias}${whereClause};`;
+        const statsResult = await duckdbService.query(statsSql);
+        const statsRow = statsResult.toArray()[0];
+        const statsRaw = typeof statsRow?.toJSON === 'function' ? statsRow.toJSON() : statsRow;
+        const min = Number(statsRaw?.min_value);
+        const max = Number(statsRaw?.max_value);
+        if (!Number.isFinite(min) || !Number.isFinite(max)) {
+          setColumnProfile({ column, kind: 'numeric', total, nullCount, bins: [] });
+          return;
+        }
+        const binCount = 12;
+        const bucketExpr = max === min
+          ? '0'
+          : `LEAST(${binCount - 1}, CAST(FLOOR((CAST(${qi(column)} AS DOUBLE) - ${min}) / ${((max - min) / binCount) || 1}) AS INTEGER))`;
+        const binsSql = `${withClause} SELECT ${bucketExpr} AS bucket, COUNT(*) AS count FROM ${targetAlias}${whereClause}${whereClause ? ' AND' : ' WHERE'} ${qi(column)} IS NOT NULL GROUP BY bucket ORDER BY bucket;`;
+        const binsResult = await duckdbService.query(binsSql);
+        const binMap = new Map<number, number>();
+        binsResult.toArray().forEach((row: any) => {
+          const raw = typeof row?.toJSON === 'function' ? row.toJSON() : row;
+          binMap.set(Number(raw.bucket), Number(raw.count));
+        });
+        const width = max === min ? 1 : (max - min) / binCount;
+        const bins = Array.from({ length: binCount }, (_, index) => ({
+          label: `${(min + width * index).toPrecision(3)}-${(min + width * (index + 1)).toPrecision(3)}`,
+          count: binMap.get(index) || 0,
+        }));
+        setColumnProfile({ column, kind: 'numeric', total, nullCount, min, max, bins });
+      } else {
+        const binsSql = `${withClause} SELECT CAST(${qi(column)} AS VARCHAR) AS label, COUNT(*) AS count FROM ${targetAlias}${whereClause}${whereClause ? ' AND' : ' WHERE'} ${qi(column)} IS NOT NULL GROUP BY label ORDER BY count DESC LIMIT 12;`;
+        const binsResult = await duckdbService.query(binsSql);
+        const bins = binsResult.toArray().map((row: any) => {
+          const raw = typeof row?.toJSON === 'function' ? row.toJSON() : row;
+          return { label: String(raw.label), count: Number(raw.count) };
+        });
+        setColumnProfile({ column, kind: 'categorical', total, nullCount, bins });
+      }
+    } catch (err: any) {
+      addToast({ type: 'error', message: `Histogram failed: ${err.message}` });
+    } finally {
+      setIsProfileLoading(false);
+    }
+  };
 
   const handleRunSQL = async () => {
     if (!manualSQL) return;
@@ -158,21 +347,38 @@ export default function App() {
     const fetchNodePreview = async () => {
       if (!selectedNodeId) {
         setPreviewData([]);
+        setAttributeTotalRows(undefined);
         return;
       }
 
       try {
         setIsPreviewLoading(true);
         const { withClause } = buildWorkflowSQL(nodes, edges);
-        // We need to modify the SQL to select from the specific CTE alias of the selected node
         const targetAlias = cteAlias(selectedNodeId);
-        const previewSql = `${withClause} SELECT * FROM ${targetAlias} LIMIT 100;`;
+        const columns = searchableColumnNames(nodeSchemas[selectedNodeId]);
+        const normalizedSearch = attributeSearch.trim();
+        const whereClause = normalizedSearch && columns.length
+          ? ` WHERE ${columns.map((column) => `CAST(${qi(column)} AS VARCHAR) ILIKE '%${escapeSql(normalizedSearch)}%'`).join(' OR ')}`
+          : '';
+        const sortClause = attributeSortBy
+          ? ` ORDER BY ${qi(attributeSortBy)} ${attributeSortDirection.toUpperCase()} NULLS LAST`
+          : '';
+        const offset = attributePageIndex * attributePageSize;
+        const countSql = `${withClause} SELECT COUNT(*) AS row_count FROM ${targetAlias}${whereClause};`;
+        const previewSql = `${withClause} SELECT * FROM ${targetAlias}${whereClause}${sortClause} LIMIT ${attributePageSize} OFFSET ${offset};`;
         
-        const result = await duckdbService.query(previewSql);
+        const [countResult, result] = await Promise.all([
+          duckdbService.query(countSql),
+          duckdbService.query(previewSql),
+        ]);
+        const countRow = countResult.toArray()[0];
+        const countRaw = typeof countRow?.toJSON === 'function' ? countRow.toJSON() : countRow;
+        setAttributeTotalRows(Number(countRaw?.row_count ?? countRaw?.count_star ?? 0));
         setPreviewData(result.toArray().map((r: any) => typeof r.toJSON === 'function' ? r.toJSON() : r));
       } catch (err) {
         console.error('Failed to fetch node preview:', err);
         setPreviewData([]);
+        setAttributeTotalRows(undefined);
       } finally {
         setIsPreviewLoading(false);
       }
@@ -181,7 +387,7 @@ export default function App() {
     if (!isManualSQL && selectedNodeId) {
       fetchNodePreview();
     }
-  }, [selectedNodeId, nodes, edges, isManualSQL]);
+  }, [selectedNodeId, nodes, edges, isManualSQL, attributePageIndex, attributePageSize, attributeSearch, attributeSortBy, attributeSortDirection, nodeSchemas]);
 
   const [topRatio, setTopRatio] = useState(0.6);
   const [isResizing, setIsResizing] = useState(false);
@@ -389,7 +595,27 @@ export default function App() {
                 </ErrorBoundary>
               ) : (
                 <ErrorBoundary name="DataTable">
-                  <DataTable data={attributeData} isLoading={!selectedLayer && isPreviewLoading} />
+                  <DataTable
+                    data={attributeData}
+                    isLoading={!selectedLayer && isPreviewLoading}
+                    pageIndex={attributePageIndex}
+                    pageSize={attributePageSize}
+                    totalRows={resolvedAttributeTotalRows}
+                    search={attributeSearch}
+                    sortBy={attributeSortBy}
+                    sortDirection={attributeSortDirection}
+                    columnProfile={columnProfile}
+                    isProfileLoading={isProfileLoading}
+                    onSearchChange={setAttributeSearch}
+                    onSortChange={handleAttributeSortChange}
+                    onProfileColumn={handleProfileColumn}
+                    onClearProfile={() => setColumnProfile(null)}
+                    onPageChange={setAttributePageIndex}
+                    onPageSizeChange={(size) => {
+                      setAttributePageSize(size);
+                      setAttributePageIndex(0);
+                    }}
+                  />
                 </ErrorBoundary>
               )}
             </div>

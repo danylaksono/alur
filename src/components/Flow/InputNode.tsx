@@ -86,10 +86,8 @@ export const InputNode = ({ data, id }: any) => {
     addChatMessage('system', 'Loading sample dataset: need_london.parquet ...');
     try {
       const fileName = 'need_london.parquet';
-      const filePath = `sample_${Date.now()}_need_london.parquet`;
       const url = new URL('/need_london.parquet', window.location.origin).href;
-      await duckdbService.registerFileUrl(filePath, url);
-      await loadAndRegister(new Uint8Array(), fileName, filePath, true);
+      await loadAndRegister(new Uint8Array(), fileName, url, true);
     } catch (err: any) {
       addChatMessage('system', `Error loading sample data: ${err.message}`);
     } finally {

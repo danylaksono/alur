@@ -224,13 +224,13 @@ export const MapView = () => {
   useEffect(() => {
     const m = map.current;
     if (!m || !layerFocusRequest) return;
-    const layer = mapLayers.find((item) => item.id === layerFocusRequest.layerId);
+    const layer = useStore.getState().mapLayers.find((item) => item.id === layerFocusRequest.layerId);
     if (!layer) return;
     const bounds = getLayerBounds(layer.geojson);
     if (bounds) {
       m.fitBounds(bounds, { padding: 50, duration: 600, maxZoom: 16 });
     }
-  }, [layerFocusRequest, mapLayers]);
+  }, [layerFocusRequest]);
 
   return (
     <div className="w-full h-full relative">
