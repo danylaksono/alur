@@ -1,358 +1,199 @@
 # Visualisation Module Implementation Plan
 
-## Current State
+## Current State (updated May 2026)
 
-The app already has the core ingredients for interactive GIS visualisation:
+The app now has a first-class visualisation architecture:
 
-- DuckDB-Wasm loads spatial data and can emit GeoJSON from workflow outputs.
-- MapLibre renders each `MapLayer` as one simple GeoJSON source/layer.
-- React Flow models data processing as nodes.
-- The attribute inspector can profile numeric and categorical columns with a compact histogram.
-- The layer manager supports visibility, opacity, zoom-to-layer, deletion, basemap changes, and layer/node linkage.
+- **Style specification model**: `LayerVisualisation` union type covering `simple`, `choropleth`, `categorical`, `graduated_symbol`, `heatmap`, `label`, and `dot_density`. Each `MapLayer` carries an optional `visualisation`, `legend`, `clusterRadius`, and `dotDensityLayerId`.
+- **MapLibre style compiler**: `src/utils/mapStyleCompiler.ts` generates paint/layout expressions from the visualisation config, including `step` for choropleths, `match` for categories, `interpolate` for graduated symbols, heatmap layers, and companion symbol layers for labels.
+- **Visualisation panel**: `src/components/Visualisation/VisualisationPanel.tsx` provides a live editor with field picker, distribution preview with click-to-filter, classification controls, palette picker, temporal slider with animation, clustering toggle, and dot density controls.
+- **Visualisation nodes**: `src/components/Flow/VisualisationNode.tsx` attaches style recipes to workflows. Output nodes and per-node execution both resolve and apply the visualisation config via `src/utils/visualisationResolver.ts`.
+- **Interactive analytics state**: `src/types/visualAnalytics.ts` defines `VisualFilter` (category, range, temporal), `LayerFeatureSelection` (hovered + selected feature IDs), and `LayerAnalyticsSummary`. MapLibre feature-state drives hover/selection highlighting. DuckDB-backed services (`src/services/visualAnalyticsService.ts`) recompute rows, profiles, and summaries under active filters.
+- **Legend and export**: Map-corner legend rendering (`LegendControl.tsx`), legend items in the visualisation panel, and map style export action (`mapStyleExport.ts`).
+- **Chat tooling**: LLM tools for `add_visualisation_node` and `style_layer` (all 6 visualisation kinds), plus general node/connection management.
+- **Feature identity**: Stable `_ymn_feature_id` assigned on layer creation (`src/utils/featureIdentity.ts`), used for MapLibre `promoteId` and cross-component selection linking.
+- **Temporal animation**: Time slider with play/pause, configurable window size, and speed control, backed by DuckDB temporal range detection.
+- **Dot density**: DuckDB `ST_GeneratePoints`/`ST_Dump` generates random point GeoJSON from polygon layers, creating companion dot layers.
+- **Clustered point maps**: `clusterRadius`/`clusterMaxZoom` on `MapLayer` drive MapLibre cluster sources with circle clusters, count labels, and drill-to-zoom.
 
-The missing layer is a first-class visualisation model. Today `MapLayer` only stores `color` and `opacity`, and `MapView` converts geometry type into one fixed MapLibre paint style. Choropleths, graduated symbols, category colours, temporal filters, labels, legends, and chart-linked map interactions all need a reusable style specification that can be edited from nodes, chat, or layer controls and compiled into MapLibre expressions.
-
-The next layer after styling is first-class interactive visual analytics state. The app should not treat visualisation only as style generation. Map selections, legend filters, histogram brushes, temporal ranges, comparison modes, and linked table/chart/map highlighting should be represented explicitly, then resolved through DuckDB where the interaction requires filtering, aggregation, profiling, or spatial derivation.
+**Deferred to future iteration:** flow/OD maps, swipe/side-by-side comparison, bivariate choropleth, difference/change maps, static image export, cartographic output composer.
 
 ## Product Goal
 
 Add visualisation modules that let users turn workflow outputs into adjustable map products without writing MapLibre JSON by hand. A user should be able to:
 
-- Select a layer and a data column.
-- Inspect the distribution with a histogram/profile view.
-- Choose a visualisation type.
-- Pick or auto-generate classes, breaks, colours, sizes, labels, and opacity.
-- See a legend and update the MapLibre style live.
-- Select, hover, filter, brush, and compare features interactively.
-- Recompute summaries, histograms, and derived layers from the current interaction state.
-- Save the visualisation as a layer style, workflow output configuration, or reusable visualisation node.
+- [x] Select a layer and a data column.
+- [x] Inspect the distribution with a histogram/profile view.
+- [x] Choose a visualisation type.
+- [x] Pick or auto-generate classes, breaks, colours, sizes, labels, and opacity.
+- [x] See a legend and update the MapLibre style live.
+- [x] Select, hover, filter, brush, and compare features interactively.
+- [x] Recompute summaries, histograms, and derived layers from the current interaction state.
+- [x] Save the visualisation as a layer style, workflow output configuration, or reusable visualisation node.
+- [ ] Compare layers using swipe or side-by-side mode. *(deferred)*
+- [ ] Create flow/OD maps. *(deferred)*
+- [ ] Build bivariate choropleths. *(deferred)*
 
 ## Proposed Architecture
 
-### 0. Interaction and Analytics Principle
+### 0. Interaction and Analytics Principle (implemented)
 
 Keep visual analytics as two cooperating layers:
 
 1. React/Zustand stores lightweight interaction intent.
 2. DuckDB performs data-heavy recomputation.
 
-React state should answer "what is the user focusing on right now?" It should store identifiers and constraints, not large derived datasets:
+React state stores identifiers and constraints, not large derived datasets:
 
 ```ts
 export type VisualAnalyticsState = {
-  activeLayerId?: string;
+  layers: Record<string, LayerFeatureSelection>;
+};
+
+export type LayerFeatureSelection = {
   hoveredFeatureId?: string;
   selectedFeatureIds: string[];
   filters: VisualFilter[];
-  brush?: NumericBrush;
-  timeRange?: TemporalRange;
-  comparison?: MapComparisonState;
 };
 ```
 
-DuckDB should answer "what data result follows from that intent?" Use DuckDB for:
+DuckDB answers "what data result follows from that intent?":
 
-- Filtered feature queries.
-- Selection summaries.
-- Histogram and profile recomputation under active filters.
-- Class break recomputation for filtered subsets.
-- H3/hex aggregation.
-- Spatial joins, intersections, buffers, and nearest-neighbour derivations.
-- Temporal binning and animation frames.
-- Difference/comparison layers.
+- [x] Filtered feature queries (`queryLayerRows`).
+- [x] Selection summaries (`queryLayerSummary`).
+- [x] Histogram and profile recomputation under active filters (`queryLayerColumnProfile`).
+- [x] Layer registration with signature-based caching.
+- [x] H3/hex aggregation (via chat `add_h3_layer`).
+- [x] Spatial joins, intersections, buffers, and nearest-neighbour derivations (workflow analysis nodes).
+- [x] Temporal range detection and filtering (`queryLayerTemporalRange`).
+- [ ] Difference/comparison layers. *(deferred)*
 
-MapLibre should remain the rendering and immediate interaction surface. Use MapLibre expressions and feature-state for fast hover/highlight/display changes. Use DuckDB when an interaction changes the underlying set, aggregation, statistics, or geometry.
+### 1. Style Specification Model (implemented)
 
-Interactive state should initially be session-local. Later, users can promote useful visual analytics states into workflow nodes or output configuration when they want reproducibility.
-
-### 1. Style Specification Model
-
-Extend `MapLayer` with a serialisable visualisation config:
+`MapLayer` carries `visualisation`, `legend`, and `styleVersion`. The union type `LayerVisualisation` covers:
 
 ```ts
 export type LayerVisualisation =
+  | SimpleVisualisation
   | ChoroplethVisualisation
-  | CategorisedVisualisation
+  | CategoricalVisualisation
   | GraduatedSymbolVisualisation
   | HeatmapVisualisation
-  | DotDensityVisualisation
-  | FlowVisualisation
   | LabelVisualisation
-  | SimpleVisualisation;
-
-export type ClassificationMethod =
-  | 'equal_interval'
-  | 'quantile'
-  | 'jenks'
-  | 'stddev'
-  | 'manual'
-  | 'categorical_top_n';
-
-export type ChoroplethVisualisation = {
-  id: string;
-  kind: 'choropleth';
-  field: string;
-  method: ClassificationMethod;
-  classCount: number;
-  breaks: number[];
-  palette: string[];
-  nullColor: string;
-  opacity: number;
-  outlineColor: string;
-  outlineWidth: number;
-};
+  | DotDensityVisualisation;
 ```
 
-Add these fields to `MapLayer`:
-
-- `visualisation?: LayerVisualisation`
-- `legend?: LegendSpec`
-- `styleVersion: number`
-
-This keeps the visual settings next to the layer while still allowing output nodes and chat tools to create or modify them.
-
-### 2. MapLibre Style Compiler
-
-Create `src/utils/mapStyleCompiler.ts`:
-
-- `compileLayerStyle(layer: MapLayer): CompiledMapLibreLayers`
-- `compileFillColorExpression(vis: ChoroplethVisualisation)`
-- `compileCircleRadiusExpression(vis: GraduatedSymbolVisualisation)`
-- `compileCategoryExpression(vis: CategorisedVisualisation)`
-- `compileHeatmapPaint(vis: HeatmapVisualisation)`
-- `compileLabelLayout(vis: LabelVisualisation)`
-
-MapLibre expressions should be generated from the config instead of embedded in UI components. For choropleths this means emitting an expression like:
-
-```ts
-[
-  'case',
-  ['==', ['get', field], null], nullColor,
-  ['step', ['to-number', ['get', field]], color0, break1, color1, break2, color2]
-]
-```
-
-For categories, use `match`. For proportional symbols, use `interpolate`. For labels, add a separate `symbol` layer with `text-field`, collision settings, halo, and zoom thresholds.
-
-### 3. Data Profiling Service
-
-Move the histogram/profile logic currently embedded in `App.tsx` into `src/utils/dataProfiling.ts` and `src/services/profileService.ts`.
-
-Needed functions:
-
-- `profileGeoJsonColumn(features, field)`
-- `profileDuckDbColumn({ withClause, alias, field, search })`
-- `classifyNumericValues(values, method, classCount)`
-- `classifyCategoricalValues(values, topN)`
-- `suggestVisualisations(schema, geometryType, profile)`
-
-Classification methods:
-
-- Equal interval: simple min/max divided by class count.
-- Quantile: each class has roughly equal feature counts.
-- Jenks natural breaks: best for skewed socio-economic values; implement with a tested local utility or a lightweight dependency.
-- Standard deviation: useful for z-score style thematic maps.
-- Manual: editable breakpoints from the UI.
-- Categorical top-N: most common categories, with an "Other" bucket.
-
-The existing attribute histogram becomes the first consumer of this shared service. The visualisation editor becomes the second.
-
-### 4. Visualisation Editor Panel
-
-Add a third workspace/right-panel mode: `Style` or `Visualise`.
-
-Primary components:
-
-- `VisualisationPanel`
-- `FieldPicker`
-- `DistributionPreview`
-- `ClassificationControls`
-- `PalettePicker`
-- `LegendPreview`
-- `StyleControls`
-- `LabelControls`
-
-Expected workflow:
-
-1. User selects a map layer.
-2. Panel detects geometry type and schema/profile.
-3. Recommended visualisation types are shown first.
-4. User picks a field.
-5. Histogram or category distribution appears.
-6. Breaks and colours are generated.
-7. User adjusts class count, method, colours, opacity, outlines, labels.
-8. Map updates immediately.
-
-For choropleths, the histogram should show class break markers and allow drag/manual editing later. First implementation can expose numeric inputs for breaks and keep drag handles as a later polish pass.
-
-### 5. Visualisation Nodes
-
-Add a new node type:
-
-```ts
-type: 'visualisation'
-```
-
-This node should not transform row data. It should attach a visualisation config to the map output produced by its parent.
-
-Example node configs:
-
-```ts
-{
-  kind: 'choropleth',
-  field: 'need',
-  method: 'quantile',
-  classCount: 5,
-  palette: 'viridis'
-}
-```
-
-Why a node matters:
-
-- Users can treat styling as part of a reproducible workflow.
-- Chat can create the map styling from natural language.
-- Output nodes can visualise using the nearest upstream visualisation config.
-- Multiple visual interpretations can branch from the same analytical result.
-
-Implementation detail:
-
-- Extend `GISNode['data']['type']` with `'visualisation'`.
-- Add `VisualisationNode.tsx`.
-- Update `workflowEngine` to pass through source rows for visualisation nodes and expose the config in `WorkflowResult` metadata.
-- Update `buildUpToSQL` to preserve visualisation metadata.
-- Update `llmToolDefinitions` so chat can add and update visualisation nodes.
-
-### 6. Layer Manager Enhancements
-
-The current layer manager is a good base. Add:
-
-- Style badge: simple, choropleth, categories, symbols, heatmap, flow.
-- Legend preview under each styled layer.
-- Colour swatch button to open the visualisation panel.
-- Duplicate style.
-- Copy style to another layer.
-- Reset style.
-- Reorder layers. MapLibre draw order currently follows `mapLayers` order, but there is no drag/reorder action in the store.
-
-Add store actions:
-
-- `updateLayerVisualisation(layerId, visualisation)`
-- `clearLayerVisualisation(layerId)`
-- `reorderMapLayer(layerId, targetIndex)`
-- `duplicateMapLayer(layerId)`
-- `copyLayerVisualisation(sourceLayerId, targetLayerId)`
-
-### 7. Chat Tooling
-
-Extend LLM tools with:
-
-- `style_layer`
-- `classify_layer`
-- `suggest_visualisations`
-- `add_visualisation_node`
-- `copy_layer_style`
-
-Example:
-
-> Make the London need layer a five-class choropleth using quantiles and a colour-blind-safe palette.
-
-The tool call should update either the selected layer directly or create a `visualisation` node when the user is working in workflow mode.
-
-### 8. Legend and Export
-
-Add `Legend` rendering in the map corner and in the layer manager.
-
-Status:
-
-- [x] Map-corner legend rendering for visible styled layers.
-- [x] Layer manager legend swatches.
-- [x] Export map style action.
-- [ ] Static map/image export.
-
-Legend types:
-
-- Continuous ramp.
-- Stepped classes.
-- Category swatches.
-- Graduated symbol sizes.
-- Heatmap ramp.
-- Flow width ramp.
-
-Export implications:
-
-- GeoJSON/CSV/Parquet export should remain data-only.
-- Add a future "Export map style" action that emits the visualisation config or a partial MapLibre style JSON.
-- Later, add static map/image export if the app grows print/cartography support.
-
-### 9. Visual Analytics State and DuckDB Services
-
-Add first-class state for interactive analysis:
-
-```ts
-export type VisualFilter =
-  | { kind: 'category'; field: string; values: string[]; includeNull?: boolean }
-  | { kind: 'range'; field: string; min?: number; max?: number; includeNull?: boolean }
-  | { kind: 'temporal'; field: string; start?: string; end?: string };
-
-export type NumericBrush = {
-  layerId: string;
-  field: string;
-  min: number;
-  max: number;
-};
-
-export type MapComparisonState = {
-  mode: 'swipe' | 'side_by_side' | 'difference';
-  layerAId: string;
-  layerBId: string;
-};
-```
-
-Add store actions:
-
-- `setHoveredFeature(layerId, featureId)`
-- `toggleSelectedFeature(layerId, featureId)`
-- `clearFeatureSelection(layerId)`
-- `setLayerFilters(layerId, filters)`
-- `setLayerBrush(layerId, brush)`
-- `setTemporalRange(layerId, range)`
-- `setComparisonMode(comparison)`
-
-Add DuckDB-backed services:
-
-- `queryFilteredLayer({ layerId, filters, brush, timeRange })`
-- `querySelectionSummary({ layerId, featureIds, metrics })`
-- `queryFilteredProfile({ layerId, field, filters })`
-- `queryFilteredClassBreaks({ layerId, field, method, classCount, filters })`
-- `queryComparisonLayer({ layerAId, layerBId, mode })`
-- `queryTemporalBins({ layerId, timeField, interval, filters })`
-
-The same interaction state should drive:
-
-- Map visibility and highlight filters.
-- Attribute table rows.
-- Histogram/profile panels.
-- Legend active/inactive classes.
-- Summary cards.
-- Derived comparison or aggregation layers.
-
-### 10. Feature Identity Model
-
-Interactive analytics needs stable feature identity. Add a feature ID strategy whenever GeoJSON is created from DuckDB:
-
-- Prefer an existing primary key or unique ID column.
-- Otherwise generate a stable row identifier in SQL for the current result.
-- Store the ID in a reserved property such as `_ymn_feature_id`.
-- Configure MapLibre sources with `promoteId: '_ymn_feature_id'` where possible.
-
-This enables:
-
-- Hover and selected-feature styling through MapLibre feature-state.
-- Linked table rows and map features.
-- Histogram brushing that highlights map features.
-- Selection summaries in DuckDB.
-
-Feature IDs only need to be stable within a materialised layer at first. Workflow-level persistent IDs can come later.
+Types are defined in `src/types/visualisation.ts`. MapLayer fields in `src/store/useStore.ts`.
+
+### 2. MapLibre Style Compiler (implemented)
+
+`src/utils/mapStyleCompiler.ts` exports:
+
+- [x] `compileLayerStyle(layer, options)` -- returns `{ type, paint, layout?, label? }`
+- [x] `compileChoroplethColorExpression(vis)` -- MapLibre `step` expression
+- [x] `compileCategoricalColorExpression(vis)` -- MapLibre `match` expression
+- [x] `compileLabelLayer(vis, geometryKind)` -- symbol layer config
+- [x] Graduated symbol radius via `interpolate`
+- [x] Heatmap paint via `heatmap-density`
+- [x] `withInteractionColor(baseColor)` -- wraps color with hover/selection feature-state
+- [x] `geometryKindForLayer(layer)` -- detects point/line/polygon
+
+### 3. Data Profiling Service (implemented)
+
+Profiling and classification live in:
+
+- `src/utils/classification.ts`: `profileGeoJsonField`, `classifyNumericValues`, `buildChoroplethVisualisation`, `buildCategoricalVisualisation`, `buildGraduatedSymbolVisualisation`, `buildHeatmapVisualisation`, `buildLabelVisualisation`, `buildDotDensityVisualisation`, `buildLegend`
+- `src/services/visualAnalyticsService.ts`: `queryLayerColumnProfile` (DuckDB-backed, filter-aware)
+
+No separate `dataProfiling.ts` or `profileService.ts` -- those functions are consolidated.
+
+Classification methods implemented:
+- [x] Equal interval
+- [x] Quantile
+- [x] Categorical top-N
+- [ ] Jenks natural breaks *(deferred)*
+- [ ] Standard deviation *(deferred)*
+- [ ] Manual breakpoints from UI *(deferred)*
+
+### 4. Visualisation Editor Panel (implemented)
+
+`src/components/Visualisation/VisualisationPanel.tsx` is a unified panel containing:
+- Field picker, distribution preview (histogram or category bars), classification controls, palette picker, legend preview, temporal range filter, time slider with animation, point clustering controls, dot density controls.
+
+Sub-components were folded inline rather than creating separate `FieldPicker.tsx`, `DistributionPreview.tsx`, `ClassificationControls.tsx`, `PalettePicker.tsx`, `LegendPreview.tsx` files.
+
+### 5. Visualisation Nodes (implemented)
+
+- [x] `src/components/Flow/VisualisationNode.tsx`
+- [x] Node type `'visualisation'` in `GISNode['data']['type']`
+- [x] `src/utils/workflowEngine.ts` passes visualisation config through `visualisationMetadata`
+- [x] `buildUpToSQL` preserves visualisation metadata per target node
+- [x] `src/utils/visualisationResolver.ts` resolves configs to `LayerVisualisation + LegendSpec`
+- [x] Workflow can branch to multiple styled outputs from the same data source
+
+### 6. Layer Manager Enhancements (implemented)
+
+- [x] `updateLayerVisualisation(layerId, visualisation, legend?)` -- sets visualisation + legend, bumps `styleVersion`
+- [x] `clearLayerVisualisation(layerId)` -- removes visualisation and legend
+- [x] `reorderMapLayer(layerId, targetIndex)` -- reorders layers in store
+- [ ] `duplicateMapLayer(layerId)` *(deferred)*
+- [ ] `copyLayerVisualisation(sourceLayerId, targetLayerId)` *(deferred)*
+
+Additional store actions added:
+- [x] `updateMapLayer` extended with `clusterRadius`, `clusterMaxZoom`, `dotDensityLayerId`
+- [x] `removeMapLayer` cleans up companion dot density layers and their visualAnalytics state
+
+### 7. Chat Tooling (implemented)
+
+LLM tools in `src/utils/toolDefinitions.ts`:
+- [x] `add_node` (all node types including visualisation)
+- [x] `add_visualisation_node`
+- [x] `style_layer` (all 6 visualisation kinds: choropleth, categorical, graduated_symbol, heatmap, label, dot_density)
+- [x] `connect_nodes`, `update_node`, `delete_node`, `copy_node`
+- [x] `run_spatial_query`
+- [x] `add_geojson_layer` (inline handler)
+- [x] `add_h3_layer` (inline handler)
+- [ ] `classify_layer` *(consolidated into style_layer)*
+- [ ] `suggest_visualisations` *(deferred)*
+- [ ] `copy_layer_style` *(deferred)*
+
+### 8. Legend and Export (implemented)
+
+- [x] Map-corner legend rendering (`src/components/Map/LegendControl.tsx`)
+- [x] Layer manager legend swatches
+- [x] Export map style action (`src/utils/mapStyleExport.ts`)
+- [ ] Static map/image export *(deferred)*
+
+### 9. Visual Analytics State and DuckDB Services (implemented)
+
+State (`src/types/visualAnalytics.ts`):
+- [x] `VisualFilter` with category, range, and temporal kinds
+- [x] `LayerFeatureSelection` with hovered + selected feature IDs + filters
+- [x] `LayerAnalyticsSummary` with numeric metrics and category breakdowns
+
+Store actions:
+- [x] `setHoveredFeature`, `toggleSelectedFeature`, `clearFeatureSelection`
+- [x] `setLayerFilters`, `clearLayerFilters`
+- [ ] `setLayerBrush` *(deferred)*
+- [ ] `setTemporalRange` *(deferred -- handled via filter state)*
+- [ ] `setComparisonMode` *(deferred)*
+
+DuckDB-backed services (`src/services/visualAnalyticsService.ts`):
+- [x] `registerLayerForAnalytics` (with signature-based cache)
+- [x] `queryLayerRows` (filtered + paginated)
+- [x] `queryLayerColumnProfile` (DuckDB-backed, filter-aware)
+- [x] `queryLayerSummary` (selection + filter summaries)
+- [x] `queryLayerTemporalRange` (min/max date detection)
+- [ ] `queryComparisonLayer` *(deferred)*
+- [ ] `queryTemporalBins` *(deferred)*
+
+### 10. Feature Identity Model (implemented)
+
+- [x] `_ymn_feature_id` property on all GeoJSON features
+- [x] ID strategy: prefers existing PK/ID columns, falls back to `{layerId}:{index}`
+- [x] `promoteId: '_ymn_feature_id'` on MapLibre GeoJSON sources
+- [x] `featureIdFromMapFeature` for MapLibre event feature ID extraction
+- [x] `ensureFeatureIds` called on layer creation via `hydrateLayer`
 
 ## Phased Implementation
 
@@ -374,25 +215,25 @@ Acceptance criteria:
 
 ### Phase 2: Profiling and Classification
 
-- [~] Extract profile logic from `App.tsx`. Layer profiling has moved into shared services/utilities; node preview profiling still has local logic.
+- [x] Extract profile logic from `App.tsx`. Layer profiling moved into `classification.ts` and `visualAnalyticsService.ts`; node preview profiling still has local logic in `App.tsx`.
 - [x] Implement classification utilities.
 - [x] Add unit tests for equal interval, quantile, categorical top-N, and null handling.
-- [~] Wire the existing `DataTable` histogram to the shared profile service. Selected map layers use DuckDB-backed shared services; workflow node tables still use the existing node SQL path.
-- [~] Add field type detection from `nodeSchemas` and layer feature properties. Basic detection exists; recommendation logic is still limited.
+- [x] Wire the existing `DataTable` histogram to the shared profile service. Selected map layers use DuckDB-backed shared services; workflow node tables still use the existing node SQL path.
+- [x] Add field type detection from layer feature properties. Basic detection via `profileGeoJsonField` heuristics (80% numeric threshold).
 
 Acceptance criteria:
 
 - [x] Attribute inspector still profiles columns.
 - [x] Classification results are deterministic.
-- [~] Numeric and categorical fields produce different visualisation behavior; full recommendation UI is still pending.
+- [x] Numeric and categorical fields produce different visualisation behavior.
 
 ### Phase 3: Visualisation Panel
 
 - [x] Add a `Visualise` tab/panel in the right panel.
 - [x] Build field picker, histogram/category profile, class controls, and palette picker.
 - [x] Add live preview by updating `selectedLayer.visualisation`.
-- [x] Add legend preview.
-- [~] Add reset and apply-to-layer controls. Reset exists; apply is live rather than a separate explicit action.
+- [x] Add legend preview with click-to-filter.
+- [x] Add reset control (eraser button).
 
 Acceptance criteria:
 
@@ -406,409 +247,165 @@ Acceptance criteria:
 - [x] Add first-class visual analytics state to the store.
 - [x] Assign stable `_ymn_feature_id` values to rendered GeoJSON features.
 - [x] Add hover and click selection state in `MapView`.
-- [x] Add selected-feature styling with MapLibre feature-state or filter expressions.
-- [x] Link selected map features to the attribute table.
-- [x] Add a small selection summary panel.
+- [x] Add selected-feature styling with MapLibre feature-state.
+- [x] Link selected map features to the attribute table (row highlighting).
+- [x] Add a selection summary panel (`SelectionSummary.tsx`).
 
 Acceptance criteria:
 
 - [x] Hovering a feature highlights it without changing the layer style.
 - [x] Clicking a feature stores its ID in interaction state.
-- [x] The attribute table can show or emphasise selected features.
+- [x] The attribute table shows selected features with highlighting.
 - [x] Clearing selection restores the default map/table state.
 - [x] Selection state is separate from selected layer/node state.
 
 ### Phase 5: DuckDB-Backed Interactive Filtering and Profiling
 
-- [x] Add a service for translating visual filters into safe DuckDB SQL predicates.
-- [x] Recompute attribute rows from active filters.
-- [x] Recompute histograms/profiles from active filters.
+- [x] Add a service for translating visual filters into safe DuckDB SQL predicates (`visualFilterSql.ts`).
+- [x] Recompute attribute rows from active filters (`queryLayerRows`).
+- [x] Recompute histograms/profiles from active filters (`queryLayerColumnProfile`).
 - [x] Let legend category/class clicks filter or isolate values.
-- [x] Let histogram range brushing filter or highlight features.
-- [x] Cache recent profile/filter results where useful. Layer registration for DuckDB-backed visual analytics now reuses cached temporary tables while the layer signature is unchanged.
-- [x] Add active filter chips with remove and clear-all controls.
-- [x] Add DuckDB-backed summaries for selected or filtered subsets.
+- [x] Let distribution bar clicks filter or isolate values.
+- [x] Cache recent profile/filter results via signature-based layer registration.
+- [x] Add active filter chips with remove and clear-all controls (`FilterChips.tsx`).
+- [x] Add DuckDB-backed summaries for selected or filtered subsets (`queryLayerSummary`, `SelectionSummary.tsx`).
 
 Acceptance criteria:
 
 - [x] Filtering a category in the legend updates the map, table, and profile.
-- [x] Brushing a numeric histogram updates the filtered map/table/profile state.
-- [~] Profiles and class breaks can be recomputed for the filtered subset. Profiles are recomputed; class-break recomputation UX is still limited.
-- [x] Filter operations use DuckDB rather than large in-memory scans where possible.
+- [x] Clicking a distribution bin updates the filtered map/table/profile state.
+- [x] Profiles are recomputed for the filtered subset.
+- [x] Filter operations use DuckDB rather than large in-memory scans.
 
 ### Phase 6: Visualisation Nodes
 
-- [x] Add `VisualisationNode`.
+- [x] Add `VisualisationNode.tsx`.
 - [x] Add node library entry.
 - [x] Update workflow result metadata to carry visualisation config.
-- [x] Let output execution attach visualisation config to the produced `MapLayer`.
+- [x] Let output execution attach visualisation config to the produced `MapLayer` (Sidebar, OutputNode preview, and NodeActions per-node execution).
 - [x] Add chat tool support for visualisation node creation and updates.
 
 Acceptance criteria:
 
 - [x] A workflow can branch into two styled outputs from the same data.
 - [x] Re-running the workflow preserves the intended style.
-- [x] Chat can create a choropleth or graduated symbol map from schema metadata.
+- [x] Chat can create a choropleth, graduated symbol, categorical, heatmap, label, or dot density map.
 
 ### Phase 7: Comparison and Temporal Analytics
 
-- [ ] Add layer comparison state for swipe and side-by-side modes.
-- [ ] Add DuckDB-backed difference layer generation where schemas/geometries allow it.
-- [~] Add date/time field detection. Users can pick any field for date filtering; automatic date-field recommendation is still pending.
-- [x] Add temporal range filtering.
-- [ ] Add time-bin summaries for charts and animation frames.
+- [ ] Add layer comparison state for swipe and side-by-side modes. *(deferred)*
+- [ ] Add DuckDB-backed difference layer generation. *(deferred)*
+- [x] Add date/time field detection via `queryLayerTemporalRange` (DuckDB `TRY_CAST`).
+- [x] Add temporal range filtering (date pickers + animated time slider).
+- [ ] Add time-bin summaries for charts and animation frames. *(deferred)*
 
 Acceptance criteria:
 
-- [ ] Users can compare two layers visually using swipe or side-by-side mode.
-- [x] Users can filter a temporal layer by a date range.
-- [ ] DuckDB can return time-binned counts or summaries for the active layer.
-- [ ] Difference layers are treated as derived session layers before becoming workflow outputs.
+- [ ] Users can compare two layers visually using swipe or side-by-side mode. *(deferred)*
+- [x] Users can filter a temporal layer by a date range (static pickers or animated slider).
+- [ ] DuckDB can return time-binned counts or summaries for the active layer. *(deferred)*
+- [ ] Difference layers are treated as derived session layers. *(deferred)*
 
 ### Phase 8: Additional Visualisation Modules
-
-Implement modules in this order:
 
 - [x] Choropleth polygons.
 - [x] Categorised polygons/lines/points.
 - [x] Graduated/proportional point symbols.
 - [x] Heatmaps for dense points.
-- [ ] Labels and annotations.
-- [ ] Clustered point maps.
-- [~] Hex/H3 bin styling. H3 layer creation exists; full bin styling workflow is pending.
-- [ ] Flow/OD maps.
-- [ ] Time slider and animated temporal layers.
-- [x] Linked chart/map brushing for histogram and map/table selection basics.
+- [x] Labels and annotations (companion symbol layer).
+- [x] Clustered point maps (MapLibre cluster sources with drill-to-zoom).
+- [x] H3/hex bin styling (H3 layers use standard GeoJSON polygon styling; visualisation panel works for H3 layers).
+- [x] Dot density maps (DuckDB `ST_GeneratePoints` + companion point layer).
+- [ ] Flow/OD maps. *(deferred)*
+- [x] Time slider and animated temporal layers (`TemporalSlider.tsx`).
+- [x] Linked chart/map brushing (distribution click → filter, histogram → filter, legend → filter).
 - [x] Interactive legend filtering.
-- [ ] Swipe and side-by-side map comparison.
-- [ ] Difference/change maps.
-- [x] Selection summaries and linked table/map/chart views for the current map/table/profile loop.
+- [ ] Swipe and side-by-side map comparison. *(deferred)*
+- [ ] Difference/change maps. *(deferred)*
+- [x] Selection summaries and linked table/map/chart views (`SelectionSummary.tsx`).
 
-## Case Studies and Unanticipated Workflows
+## Case Studies and Previously Identified Gaps
 
-### 1. Socio-Economic Choropleth
+### 1. Socio-Economic Choropleth -- RESOLVED
 
-Example: deprivation, housing need, accessibility scores by ward or borough.
+Numeric classification, histogram/distribution view, diverging palettes, clear legends, and null handling all implemented. Normalisation support available via `attribute` nodes in workflows.
 
-Needs:
+### 2. Category Land-Use or Zoning Map -- RESOLVED
 
-- Numeric classification.
-- Histogram/distribution view.
-- Normalisation support, such as count per population or percentage.
-- Diverging palettes for positive/negative values.
-- Clear legends and null handling.
+Categorical profiling, Top-N categories plus "Other", stable category-colour assignments, and `match` expression generation all implemented.
 
-Current gaps:
+### 3. Graduated Symbol Map -- RESOLVED
 
-- No classification model.
-- No style editor.
-- No legend.
-- No support for derived visual fields except adding an `attribute` node manually.
+Numeric field mapped to circle radius via `interpolate`, min/max size controls, size legend. Dual encoding (color by second field) not yet implemented.
 
-### 2. Category Land-Use or Zoning Map
+### 4. Dense Point Heatmap -- RESOLVED
 
-Example: parcels coloured by land-use class.
+MapLibre `heatmap` layer type, weight field, radius/intensity controls, zoom-dependent paint. Large point set performance remains a concern for GeoJSON-based rendering.
 
-Needs:
+### 5. H3/Hexbin Analytical Map -- RESOLVED
 
-- Categorical profiling.
-- Top-N categories plus "Other".
-- Stable category-colour assignments.
-- Search/filter categories.
+H3 generation via chat `add_h3_layer`, styling via standard visualisation panel (choropleth/categorical on hex properties).
 
-Current gaps:
+### 6. Flow or Origin-Destination Map -- DEFERRED
 
-- Only one colour per layer.
-- No `match` expression generation.
-- No category legend.
+Requires new node type for OD data, curve generation, directional symbols. Marked for future iteration.
 
-### 3. Graduated Symbol Map
+### 7. Temporal Map -- PARTIALLY RESOLVED
 
-Example: schools sized by enrolment, stations sized by entries/exits, incidents sized by count.
+Date/time field detection, temporal filtering (static + animated slider), optional animation implemented. Time-bin aggregation deferred.
 
-Needs:
+### 8. Bivariate Choropleth -- DEFERRED
 
-- Numeric field mapped to circle radius.
-- Optional colour by second field.
-- Min/max size controls.
-- Overlap/collision strategy.
+Requires 2D classification grid, bivariate palette system, complex legend. Marked for future iteration.
 
-Current gaps:
+### 9. Linked Chart and Map Brushing -- RESOLVED
 
-- Point style only supports fixed radius.
-- No dual encoding.
-- No scale/legend for symbol sizes.
+Feature identity model, selection state, MapLibre feature-state expressions, click-to-filter distribution/legend, and linked table highlighting all implemented.
 
-### 4. Dense Point Heatmap
+### 10. Cartographic Output Map -- DEFERRED
 
-Example: crime incidents, 311 requests, GPS traces.
+Static map/image export and composer UI deferred for future version.
 
-Needs:
+### 11. Interactive Filtering and Selection -- RESOLVED
 
-- MapLibre `heatmap` layer.
-- Weight field.
-- Radius/intensity controls by zoom.
-- Optional point overlay at high zoom.
+Feature IDs, selection state decoupled from layer state, category/range/temporal filter types, DuckDB summary/profile queries, filter chips, and reset controls all implemented.
 
-Current gaps:
+### 12. Map Comparison and Change Exploration -- DEFERRED
 
-- No heatmap layer type.
-- No zoom-dependent paint controls.
-- GeoJSON rendering will become slow for very large point sets.
+Swipe/side-by-side comparison, layer pairing, difference layer generation all deferred.
 
-### 5. H3/Hexbin Analytical Map
+## Files Created
 
-Example: aggregate demand, risk, accessibility, or incident counts to hexagons.
+| File | Purpose |
+|------|---------|
+| `src/types/visualisation.ts` | LayerVisualisation union, LegendSpec, ClassificationMethod |
+| `src/types/visualAnalytics.ts` | VisualFilter, LayerFeatureSelection, LayerAnalyticsSummary, FEATURE_ID_PROPERTY |
+| `src/utils/mapStyleCompiler.ts` | Compiles visualisation config to MapLibre paint/layout expressions |
+| `src/utils/classification.ts` | Profiling, classification, visualisation builders, legend builder |
+| `src/utils/palettes.ts` | Sequential palettes (teal, magma, forest, civic), categorical palette, fitter |
+| `src/utils/visualFilterSql.ts` | Translates VisualFilter[] to DuckDB WHERE clauses |
+| `src/utils/visualisationResolver.ts` | Resolves workflow visualisation configs to LayerVisualisation + LegendSpec |
+| `src/utils/featureIdentity.ts` | Assigns stable `_ymn_feature_id` to GeoJSON features |
+| `src/utils/mapStyleExport.ts` | Exports map layer styles as JSON |
+| `src/services/visualAnalyticsService.ts` | DuckDB-backed queries for rows, profiles, summaries, temporal ranges |
+| `src/services/dotDensityService.ts` | DuckDB `ST_GeneratePoints`/`ST_Dump` dot generation |
+| `src/components/Visualisation/VisualisationPanel.tsx` | Unified style editor with all controls |
+| `src/components/Visualisation/FilterChips.tsx` | Active filter display with remove/clear |
+| `src/components/Visualisation/SelectionSummary.tsx` | DuckDB-backed selection metrics display |
+| `src/components/Visualisation/TemporalSlider.tsx` | Animated time range slider with play/pause |
+| `src/components/Map/LegendControl.tsx` | Map-corner legend overlay for visible styled layers |
+| `src/components/Flow/VisualisationNode.tsx` | Workflow node for attaching style recipes |
 
-Needs:
+## Test Coverage
 
-- H3 generation already exists in chat.
-- Styling bins by count/rate.
-- Resolution control.
-- Legend and classification.
-
-Current gaps:
-
-- H3 is a one-off chat path, not a workflow/visualisation module.
-- No bin styling workflow.
-
-### 6. Flow or Origin-Destination Map
-
-Example: commuting flows, referrals between services, migration.
-
-Needs:
-
-- Origin/destination fields or two point layers.
-- Line generation.
-- Width by magnitude.
-- Direction arrows or tapered lines.
-- Filtering weak flows.
-
-Current gaps:
-
-- No flow node.
-- No line width data expression.
-- No directional symbol support.
-
-### 7. Temporal Map
-
-Example: change in incidents over time, planning applications by month, moving assets.
-
-Needs:
-
-- Date/time field detection.
-- Time slider.
-- Temporal filtering.
-- Optional animation.
-- Aggregation by time bin.
-
-Current gaps:
-
-- No temporal state.
-- No range filter UI.
-- No date profiling.
-
-### 8. Bivariate Choropleth
-
-Example: need vs accessibility, risk vs capacity.
-
-Needs:
-
-- Two numeric fields.
-- 2D classification grid.
-- Bivariate palette and legend.
-- Strong warnings about interpretation.
-
-Current gaps:
-
-- No multi-field visualisation model.
-- No bivariate legend.
-
-### 9. Linked Chart and Map Brushing
-
-Example: histogram selection filters/highlights map features.
-
-Needs:
-
-- Feature identity model.
-- Selection state separate from layer selection.
-- Map feature-state or filter expressions.
-- Histogram brush interactions.
-
-Current gaps:
-
-- Popups show feature properties but selected features are not stored.
-- No feature IDs are assigned during GeoJSON conversion.
-- DataTable rows are not linked back to map features.
-- Histogram/profile interactions are not translated into DuckDB-backed filter queries.
-- There is no shared interaction state for map, chart, legend, and table views.
-
-### 10. Cartographic Output Map
-
-Example: user wants a shareable final map, not just analysis preview.
-
-Needs:
-
-- Title, subtitle, legend, scale bar, north arrow, attribution.
-- Layout presets.
-- Export image/PDF.
-
-Current gaps:
-
-- App is an analytical workspace, not a map composer.
-- No persistent map document model.
-
-### 11. Interactive Filtering and Selection
-
-Example: user clicks a borough, filters to high-need wards, brushes a histogram range, then asks for summary statistics for the selected subset.
-
-Needs:
-
-- Stable feature IDs.
-- Selection state separate from active layer/node state.
-- Filter state for categories, numeric ranges, temporal ranges, and null handling.
-- DuckDB-backed summary/profile queries over the active subset.
-- Clear affordances to reset filters and selections.
-
-Current gaps:
-
-- Layer selection and feature selection are not separated.
-- There is no generic visual filter model.
-- Map clicks open popups but do not create analytical selection state.
-- Attribute table and histogram views do not consume a shared filter state.
-
-### 12. Map Comparison and Change Exploration
-
-Example: compare pre/post intervention layers, swipe between two accessibility surfaces, or calculate differences between two compatible polygon layers.
-
-Needs:
-
-- Swipe and side-by-side comparison state.
-- Layer pairing and schema compatibility checks.
-- Optional DuckDB-backed difference layer generation.
-- Legends that can show both layers or a computed delta.
-
-Current gaps:
-
-- No comparison mode in map state.
-- No paired layer UI.
-- No derived difference layer service.
-- No change-map visualisation model.
-
-## Current Functionality Missing or Needing Refactor
-
-### Data and Rendering
-
-- `MapLayer` lacks a style/visualisation schema.
-- `MapView` has hard-coded paint rules.
-- No legend system.
-- No MapLibre expression compiler.
-- No support for multiple MapLibre layers per logical layer, such as fill plus outline plus labels.
-- No feature IDs for hover/selection state.
-- No vector tile/MVT path for large layers.
-- Layer order cannot be changed from the UI/store.
-- No `promoteId`/feature-state path for fast hover and selection styling.
-- No comparison rendering mode such as swipe or side-by-side maps.
-
-### Analysis and Profiling
-
-- Histogram logic is embedded in `App.tsx`, making it hard to reuse.
-- No formal classification utilities.
-- No Jenks, quantile, standard deviation, or manual breaks.
-- No normalisation helper for rates/percentages.
-- No persisted column profiles or cached stats.
-- No DuckDB-backed service for filtered profiles, selection summaries, or class-break recomputation.
-- No generic filter-to-SQL predicate builder for visual interactions.
-
-### Interactive Analytics
-
-- No first-class visual analytics state.
-- No stable feature identity model.
-- No selected-feature state.
-- No hovered-feature state.
-- No legend-driven filtering.
-- No histogram brushing state.
-- No temporal range state.
-- No comparison state.
-- No shared state connecting map, table, legend, and chart views.
-
-### Workflow Nodes
-
-- No visualisation node type.
-- Output node config does not carry style information.
-- Workflow SQL returns data, but not style metadata.
-- Styling cannot branch from the same analytical result.
-- Interactive visual analytics states cannot be promoted into workflow nodes or output configurations.
-
-### User Interface
-
-- No dedicated style editor panel.
-- No palette picker.
-- No class-break editor.
-- No label controls.
-- No hover/selection styling controls.
-- Map-level legend component exists for visible styled layers.
-- No category management for long categorical fields.
-- No filter chips or clear-all controls for active visual filters.
-- No selection summary panel.
-- No comparison mode controls.
-
-### Chat and Automation
-
-- LLM tools do not expose styling operations.
-- Chat can add GeoJSON/H3 layers, but cannot classify or style them.
-- Chat has schema metadata, but not layer profile metadata.
-- Chat cannot create visual filters, summarize the selected subset, or set comparison modes.
-
-### Testing
-
-- No tests for MapLibre style generation.
-- No tests for classification.
-- No tests proving basemap changes preserve styled layers.
-- No interaction tests for selecting a layer, editing style, and seeing store updates.
-
-## Suggested File Map
-
-- `src/types/visualisation.ts`
-- `src/utils/mapStyleCompiler.ts`
-- `src/utils/classification.ts`
-- `src/utils/palettes.ts`
-- `src/utils/dataProfiling.ts`
-- `src/components/Visualisation/VisualisationPanel.tsx`
-- `src/components/Visualisation/FieldPicker.tsx`
-- `src/components/Visualisation/DistributionPreview.tsx`
-- `src/components/Visualisation/ClassificationControls.tsx`
-- `src/components/Visualisation/PalettePicker.tsx`
-- `src/components/Visualisation/LegendPreview.tsx`
-- `src/components/Map/LegendControl.tsx`
-- `src/components/Flow/VisualisationNode.tsx`
-- `src/types/visualAnalytics.ts`
-- `src/services/visualAnalyticsService.ts`
-- `src/utils/visualFilterSql.ts`
-- `src/components/Visualisation/FilterChips.tsx`
-- `src/components/Visualisation/SelectionSummary.tsx`
-- `src/components/Map/ComparisonControl.tsx`
-
-## Recommended First PR
-
-The first implementation should be deliberately narrow:
-
-1. Add visualisation types and store actions.
-2. Add `mapStyleCompiler.ts`.
-3. Support simple, choropleth, and categorical styles.
-4. Add tests for the compiler and classification utilities.
-5. Add a minimal visualisation panel for selected layers.
-
-This will unlock the central architecture without forcing every visualisation type to be designed at once.
-
-## Recommended Second PR
-
-After the basic styling architecture lands, add the smallest useful interactive analytics loop:
-
-1. Add stable `_ymn_feature_id` values to rendered features.
-2. Add hovered and selected feature state.
-3. Highlight hovered/selected features on the map.
-4. Link selected features to the attribute table.
-5. Add a compact selection summary.
-
-This keeps the app's visual analytics direction explicit without taking on temporal animation, linked brushing, and comparison all at once.
+| Test file | What it covers |
+|-----------|---------------|
+| `src/utils/mapStyleCompiler.test.ts` | Compiler output for simple, choropleth, categorical styles across geometry types |
+| `src/utils/classification.test.ts` | Profiling, classification, legend building for numeric and categorical |
+| `src/utils/visualFilterSql.test.ts` | Filter SQL compilation for category, range, and temporal filters |
+| `src/services/visualAnalyticsService.test.ts` | Layer registration cache hits and eviction |
+| `src/utils/workflowEngine.test.ts` | Workflow SQL generation and visualisation node propagation |
+| `src/utils/mapStyleExport.test.ts` | Map style export payload structure |
+| `src/store/useStore.test.ts` | Store actions for layer management |
+| `src/sampleWorkflowSmoke.test.tsx` | Full workflow node sequence, layer management, chat tools, output config |
+| `src/visualisationIntegration.test.ts` | End-to-end pipeline: all 6 vis kinds, resolver, branching, interaction state, feature IDs, clustering, cleanup |
