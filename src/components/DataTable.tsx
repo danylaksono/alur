@@ -5,10 +5,15 @@ import {
   createColumnHelper,
 } from '@tanstack/react-table';
 import { useMemo } from 'react';
+import type { VisualFilter } from '../types/visualAnalytics';
+import { FilterChips } from './Visualisation/FilterChips';
 
 export type HistogramBin = {
   label: string;
   count: number;
+  value?: string;
+  min?: number;
+  max?: number;
 };
 
 export type ColumnProfile = {
@@ -32,6 +37,13 @@ interface DataTableProps {
   sortDirection: 'asc' | 'desc';
   columnProfile: ColumnProfile | null;
   isProfileLoading?: boolean;
+  selectedFeatureIds?: string[];
+  onClearSelection?: () => void;
+  filters?: VisualFilter[];
+  activeFilterKeys?: string[];
+  onRemoveFilter?: (index: number) => void;
+  onClearFilters?: () => void;
+  onApplyProfileFilter?: (profile: ColumnProfile, bin: HistogramBin) => void;
   onSearchChange: (search: string) => void;
   onSortChange: (column: string) => void;
   onProfileColumn: (column: string) => void;
@@ -51,6 +63,13 @@ export const DataTable = ({
   sortDirection,
   columnProfile,
   isProfileLoading,
+  selectedFeatureIds = [],
+  onClearSelection,
+  filters = [],
+  activeFilterKeys = [],
+  onRemoveFilter,
+  onClearFilters,
+  onApplyProfileFilter,
   onSearchChange,
   onSortChange,
   onProfileColumn,
@@ -61,13 +80,15 @@ export const DataTable = ({
   const columnHelper = createColumnHelper<any>();
   const rowCount = totalRows ?? data.length;
   const pageCount = Math.max(1, Math.ceil(rowCount / pageSize));
+  const selectedFeatureSet = useMemo(() => new Set(selectedFeatureIds), [selectedFeatureIds]);
+  const activeFilterSet = useMemo(() => new Set(activeFilterKeys), [activeFilterKeys]);
 
   const columns = useMemo(() => {
     if (!data || data.length === 0) return [];
     
     // Get keys from the first row, excluding internal/heavy columns
     const keys = Object.keys(data[0]).filter(key => 
-      key !== 'geojson' && key !== 'geometry' && key !== 'geom'
+      key !== 'geojson' && key !== 'geometry' && key !== 'geom' && key !== '_ymn_feature_id'
     );
 
     return keys.map(key => 
@@ -156,7 +177,23 @@ export const DataTable = ({
             {sortBy} · {sortDirection}
           </button>
         )}
+        {selectedFeatureIds.length > 0 && (
+          <button
+            type="button"
+            onClick={onClearSelection}
+            className="h-7 rounded-md border border-orange-200 bg-orange-50 px-2 text-[9px] font-bold uppercase tracking-wider text-orange-700"
+            title="Clear selected map features"
+          >
+            {selectedFeatureIds.length.toLocaleString()} selected
+          </button>
+        )}
       </div>
+
+      <FilterChips
+        filters={filters}
+        onRemove={(index) => onRemoveFilter?.(index)}
+        onClear={() => onClearFilters?.()}
+      />
 
       {(columnProfile || isProfileLoading) && (
         <div className="shrink-0 border-b bg-slate-50 px-3 py-2">
@@ -189,12 +226,18 @@ export const DataTable = ({
               <div className="flex h-16 items-end gap-1">
                 {columnProfile.bins.map((bin) => {
                   const maxCount = Math.max(...columnProfile.bins.map((item) => item.count), 1);
+                  const key = columnProfile.kind === 'numeric'
+                    ? `${columnProfile.column}:range:${bin.min ?? ''}:${bin.max ?? ''}`
+                    : `${columnProfile.column}:category:${bin.value ?? bin.label}`;
+                  const isActiveFilter = activeFilterSet.has(key);
                   return (
                     <div key={bin.label} className="flex min-w-0 flex-1 flex-col items-center gap-1">
-                      <div
-                        className="w-full rounded-t bg-slate-800"
+                      <button
+                        type="button"
+                        onClick={() => onApplyProfileFilter?.(columnProfile, bin)}
+                        className={isActiveFilter ? 'w-full rounded-t bg-orange-500 ring-2 ring-orange-200' : 'w-full rounded-t bg-slate-800 hover:bg-slate-600'}
                         style={{ height: `${Math.max(4, (bin.count / maxCount) * 52)}px` }}
-                        title={`${bin.label}: ${bin.count.toLocaleString()}`}
+                        title={`Filter ${columnProfile.column} by ${bin.label}: ${bin.count.toLocaleString()}`}
                       />
                       <div className="w-full truncate text-center text-[8px] text-slate-400" title={bin.label}>
                         {bin.label}
@@ -227,15 +270,19 @@ export const DataTable = ({
             ))}
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {table.getRowModel().rows.map(row => (
-              <tr key={row.id} className="hover:bg-slate-50 transition-colors">
+            {table.getRowModel().rows.map(row => {
+              const featureId = String(row.original?._ymn_feature_id ?? '');
+              const isSelected = featureId && selectedFeatureSet.has(featureId);
+              return (
+              <tr key={row.id} className={isSelected ? 'bg-orange-50 hover:bg-orange-100 transition-colors' : 'hover:bg-slate-50 transition-colors'}>
                 {row.getVisibleCells().map(cell => (
                   <td key={cell.id} className="px-3 py-1.5 border-r border-slate-100 text-slate-700 whitespace-nowrap max-w-[200px] truncate">
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </td>
                 ))}
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>

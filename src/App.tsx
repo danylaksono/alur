@@ -3,6 +3,7 @@ import { ReactFlow, Controls, Background } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useStore } from './store/useStore';
 import { duckdbService } from './services/duckdb';
+import { queryLayerColumnProfile, queryLayerRows } from './services/visualAnalyticsService';
 import { buildWorkflowSQL, cteAlias } from './utils/workflowEngine';
 import {
   Workflow,
@@ -16,13 +17,16 @@ import { Sidebar } from './components/Sidebar';
 import { Chat } from './components/Chat';
 import { MapView } from './components/Map/MapView';
 import { LayerManager } from './components/LayerManager';
+import { VisualisationPanel } from './components/Visualisation/VisualisationPanel';
+import { SelectionSummary } from './components/Visualisation/SelectionSummary';
 import { InputNode } from './components/Flow/InputNode';
 import { AnalysisNode } from './components/Flow/AnalysisNode';
 import { AttributeNode } from './components/Flow/AttributeNode';
 import { AggregateNode } from './components/Flow/AggregateNode';
 import { FilterNode } from './components/Flow/FilterNode';
 import { OutputNode } from './components/Flow/OutputNode';
-import { DataTable, type ColumnProfile } from './components/DataTable';
+import { VisualisationNode } from './components/Flow/VisualisationNode';
+import { DataTable, type ColumnProfile, type HistogramBin } from './components/DataTable';
 import { ToastContainer } from './components/Toast';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { useWorkflowSync } from './hooks/useWorkflowSync';
@@ -35,6 +39,7 @@ const nodeTypes = {
   attribute: AttributeNode,
   aggregate: AggregateNode,
   filter: FilterNode,
+  visualisation: VisualisationNode,
   output: OutputNode,
 };
 
@@ -75,11 +80,15 @@ export default function App() {
     selectedNodeId,
     selectedLayerId,
     nodeSchemas,
+    visualAnalytics,
     setSelectedNodeId,
     setSelectedLayerId,
     addNode,
     removeNode,
     duplicateNode,
+    clearFeatureSelection,
+    setLayerFilters,
+    clearLayerFilters,
     addToast,
   } = useStore();
 
@@ -95,6 +104,8 @@ export default function App() {
   const [attributeSortDirection, setAttributeSortDirection] = useState<'asc' | 'desc'>('asc');
   const [columnProfile, setColumnProfile] = useState<ColumnProfile | null>(null);
   const [isProfileLoading, setIsProfileLoading] = useState(false);
+  const [filteredLayerRows, setFilteredLayerRows] = useState<Record<string, any>[]>([]);
+  const [filteredLayerTotal, setFilteredLayerTotal] = useState<number | undefined>(undefined);
 
   useWorkflowSync();
   useSchemaFetcher();
@@ -107,6 +118,9 @@ export default function App() {
     () => nodes.find((node) => node.id === selectedNodeId) || null,
     [nodes, selectedNodeId]
   );
+  const selectedLayerFilters = selectedLayer
+    ? visualAnalytics.layers[selectedLayer.id]?.filters || []
+    : [];
   const layerAttributeResult = useMemo(
     () => {
       const features = selectedLayer?.geojson.features || [];
@@ -148,11 +162,19 @@ export default function App() {
     },
     [selectedLayer, attributePageIndex, attributePageSize, attributeSearch, attributeSortBy, attributeSortDirection]
   );
-  const attributeData = selectedLayer ? layerAttributeResult.rows : previewData;
-  const resolvedAttributeTotalRows = selectedLayer ? layerAttributeResult.total : attributeTotalRows;
+  const attributeData = selectedLayer ? filteredLayerRows : previewData;
+  const resolvedAttributeTotalRows = selectedLayer ? filteredLayerTotal : attributeTotalRows;
   const attributeSourceLabel = selectedLayer
     ? selectedLayer.name
     : selectedNode?.data.label || 'No node or layer selected';
+  const selectedFeatureIds = selectedLayer
+    ? visualAnalytics.layers[selectedLayer.id]?.selectedFeatureIds || []
+    : [];
+  const activeFilterKeys = selectedLayerFilters.map((filter) => {
+    if (filter.kind === 'category') return `${filter.field}:category:${filter.values.join('|')}`;
+    if (filter.kind === 'temporal') return `${filter.field}:temporal:${filter.start ?? ''}:${filter.end ?? ''}`;
+    return `${filter.field}:range:${filter.min ?? ''}:${filter.max ?? ''}`;
+  });
 
   useEffect(() => {
     setAttributePageIndex(0);
@@ -174,46 +196,96 @@ export default function App() {
     });
   };
 
-  const profileLayerColumn = (column: string) => {
-    const features = selectedLayer?.geojson.features || [];
-    const values = features.map((feature) => ({ value: (feature.properties as any)?.[column] }));
-    const nonNull = values.map((item) => item.value).filter((value) => value !== null && value !== undefined && value !== '');
-    const numericValues = nonNull.map(Number).filter((value) => !Number.isNaN(value));
-    const nullCount = values.length - nonNull.length;
-
-    if (numericValues.length && numericValues.length >= nonNull.length * 0.8) {
-      const min = Math.min(...numericValues);
-      const max = Math.max(...numericValues);
-      const binCount = 12;
-      const width = max === min ? 1 : (max - min) / binCount;
-      const bins = Array.from({ length: binCount }, (_, index) => ({
-        label: `${(min + width * index).toPrecision(3)}-${(min + width * (index + 1)).toPrecision(3)}`,
-        count: 0,
-      }));
-      numericValues.forEach((value) => {
-        const idx = max === min ? 0 : Math.min(binCount - 1, Math.floor((value - min) / width));
-        bins[idx].count += 1;
-      });
-      setColumnProfile({ column, kind: 'numeric', total: values.length, nullCount, min, max, bins });
-      return;
-    }
-
-    const counts = new Map<string, number>();
-    nonNull.forEach((value) => {
-      const label = String(value);
-      counts.set(label, (counts.get(label) || 0) + 1);
+  const toggleProfileFilter = (profile: ColumnProfile, bin: HistogramBin) => {
+    if (!selectedLayer) return;
+    const nextFilter = profile.kind === 'numeric'
+      ? { kind: 'range' as const, field: profile.column, min: bin.min, max: bin.max }
+      : { kind: 'category' as const, field: profile.column, values: [bin.value ?? bin.label] };
+    const nextKey = nextFilter.kind === 'category'
+      ? `${nextFilter.field}:category:${nextFilter.values.join('|')}`
+      : `${nextFilter.field}:range:${nextFilter.min ?? ''}:${nextFilter.max ?? ''}`;
+    const nextFilters = selectedLayerFilters.filter((filter) => {
+      const key = filter.kind === 'category'
+        ? `${filter.field}:category:${filter.values.join('|')}`
+        : filter.kind === 'temporal'
+          ? `${filter.field}:temporal:${filter.start ?? ''}:${filter.end ?? ''}`
+        : `${filter.field}:range:${filter.min ?? ''}:${filter.max ?? ''}`;
+      return key !== nextKey;
     });
-    const bins = [...counts.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 12)
-      .map(([label, count]) => ({ label, count }));
-    setColumnProfile({ column, kind: 'categorical', total: values.length, nullCount, bins });
+    setLayerFilters(
+      selectedLayer.id,
+      nextFilters.length === selectedLayerFilters.length ? [...selectedLayerFilters, nextFilter] : nextFilters,
+    );
+    setAttributePageIndex(0);
   };
+
+  const removeSelectedLayerFilter = (index: number) => {
+    if (!selectedLayer) return;
+    setLayerFilters(selectedLayer.id, selectedLayerFilters.filter((_, filterIndex) => filterIndex !== index));
+    setAttributePageIndex(0);
+  };
+
+  const clearSelectedLayerFilters = () => {
+    if (!selectedLayer) return;
+    clearLayerFilters(selectedLayer.id);
+    setAttributePageIndex(0);
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchLayerRows = async () => {
+      if (!selectedLayer) {
+        setFilteredLayerRows([]);
+        setFilteredLayerTotal(undefined);
+        return;
+      }
+
+      try {
+        setIsPreviewLoading(true);
+        const result = await queryLayerRows({
+          layer: selectedLayer,
+          filters: selectedLayerFilters,
+          search: attributeSearch,
+          sortBy: attributeSortBy,
+          sortDirection: attributeSortDirection,
+          pageIndex: attributePageIndex,
+          pageSize: attributePageSize,
+        });
+        if (cancelled) return;
+        setFilteredLayerRows(result.rows);
+        setFilteredLayerTotal(result.total);
+      } catch (err: any) {
+        if (!cancelled) {
+          addToast({ type: 'error', message: `Layer filter failed: ${err.message}` });
+          setFilteredLayerRows(layerAttributeResult.rows);
+          setFilteredLayerTotal(layerAttributeResult.total);
+        }
+      } finally {
+        if (!cancelled) setIsPreviewLoading(false);
+      }
+    };
+
+    fetchLayerRows();
+    return () => { cancelled = true; };
+  }, [selectedLayer, selectedLayerFilters, attributeSearch, attributeSortBy, attributeSortDirection, attributePageIndex, attributePageSize, layerAttributeResult.rows, layerAttributeResult.total, addToast]);
 
   const handleProfileColumn = async (column: string) => {
     setColumnProfile(null);
     if (selectedLayer) {
-      profileLayerColumn(column);
+      try {
+        setIsProfileLoading(true);
+        const profile = await queryLayerColumnProfile({
+          layer: selectedLayer,
+          filters: selectedLayerFilters,
+          column,
+        });
+        setColumnProfile(profile);
+      } catch (err: any) {
+        addToast({ type: 'error', message: `Histogram failed: ${err.message}` });
+      } finally {
+        setIsProfileLoading(false);
+      }
       return;
     }
     if (!selectedNodeId) return;
@@ -261,6 +333,8 @@ export default function App() {
         const width = max === min ? 1 : (max - min) / binCount;
         const bins = Array.from({ length: binCount }, (_, index) => ({
           label: `${(min + width * index).toPrecision(3)}-${(min + width * (index + 1)).toPrecision(3)}`,
+          min: min + width * index,
+          max: min + width * (index + 1),
           count: binMap.get(index) || 0,
         }));
         setColumnProfile({ column, kind: 'numeric', total, nullCount, min, max, bins });
@@ -269,7 +343,7 @@ export default function App() {
         const binsResult = await duckdbService.query(binsSql);
         const bins = binsResult.toArray().map((row: any) => {
           const raw = typeof row?.toJSON === 'function' ? row.toJSON() : row;
-          return { label: String(raw.label), count: Number(raw.count) };
+          return { label: String(raw.label), value: String(raw.label), count: Number(raw.count) };
         });
         setColumnProfile({ column, kind: 'categorical', total, nullCount, bins });
       }
@@ -606,6 +680,13 @@ export default function App() {
                     sortDirection={attributeSortDirection}
                     columnProfile={columnProfile}
                     isProfileLoading={isProfileLoading}
+                    selectedFeatureIds={selectedFeatureIds}
+                    onClearSelection={selectedLayer ? () => clearFeatureSelection(selectedLayer.id) : undefined}
+                    filters={selectedLayerFilters}
+                    activeFilterKeys={activeFilterKeys}
+                    onRemoveFilter={selectedLayer ? removeSelectedLayerFilter : undefined}
+                    onClearFilters={selectedLayer ? clearSelectedLayerFilters : undefined}
+                    onApplyProfileFilter={selectedLayer ? toggleProfileFilter : undefined}
                     onSearchChange={setAttributeSearch}
                     onSortChange={handleAttributeSortChange}
                     onProfileColumn={handleProfileColumn}
@@ -623,9 +704,25 @@ export default function App() {
         </main>
 
         <aside className="w-96 shrink-0 border-l bg-white shadow-sm z-40 flex min-h-0 flex-col">
-          <div className="min-h-0 border-b" style={{ flexBasis: '42%' }}>
+          <div className="min-h-0 border-b" style={{ flexBasis: '34%' }}>
             <ErrorBoundary name="Layer Manager">
               <LayerManager />
+            </ErrorBoundary>
+          </div>
+
+          <div className="min-h-0 border-b" style={{ flexBasis: '32%' }}>
+            <ErrorBoundary name="Visualisation Panel">
+              <VisualisationPanel />
+            </ErrorBoundary>
+          </div>
+
+          <div className="max-h-64 shrink-0 overflow-y-auto border-b">
+            <ErrorBoundary name="Selection Summary">
+              <SelectionSummary
+                layer={selectedLayer}
+                filters={selectedLayerFilters}
+                selectedFeatureIds={selectedFeatureIds}
+              />
             </ErrorBoundary>
           </div>
 

@@ -77,6 +77,17 @@ class DuckDBService {
         return name;
     }
 
+    async registerJsonRows(tableName: string, rows: Record<string, unknown>[]) {
+        if (!this.db || !this.conn) throw new Error('DuckDB not initialized');
+        const fileName = `${tableName}.json`;
+        await this.db.registerFileText(fileName, JSON.stringify(rows));
+        await this.conn.query(`DROP TABLE IF EXISTS "${tableName}";`);
+        await this.conn.insertJSONFromPath(fileName, {
+            schema: 'main',
+            name: tableName,
+        });
+    }
+
     async optimizeTable(tableName: string) {
         if (!this.conn || !this.spatialLoaded) return;
         try {

@@ -178,6 +178,28 @@ describe('buildWorkflowSQL', () => {
     expect(result.outputLayerName).toBe('workflow_out');
   });
 
+  it('passes visualisation nodes through SQL and exposes style metadata', () => {
+    const nodes: GISNode[] = [
+      makeNode({ id: 'src', data: { label: 'Src', type: 'input', config: { tableName: 'data' } } }),
+      makeNode({
+        id: 'style',
+        position: { x: 200, y: 0 },
+        data: { label: 'Style', type: 'visualisation', config: { kind: 'choropleth', field: 'need', method: 'quantile', classCount: 5 } },
+      }),
+      makeNode({ id: 'out', position: { x: 400, y: 0 }, data: { label: 'Out', type: 'output', config: {} } }),
+    ];
+    const edges: Edge[] = [
+      { id: 'e1', source: 'src', target: 'style', type: 'smoothstep' },
+      { id: 'e2', source: 'style', target: 'out', type: 'smoothstep' },
+    ];
+
+    const result = buildWorkflowSQL(nodes, edges);
+
+    expect(result.withClause).toContain('style AS');
+    expect(result.withClause).toContain('SELECT * FROM src');
+    expect(result.visualisationConfig).toMatchObject({ kind: 'choropleth', field: 'need' });
+  });
+
   it('topologically sorts nodes correctly', () => {
     const nodes: GISNode[] = [
       makeNode({ id: 'z', position: { x: 400, y: 0 }, data: { label: 'Output', type: 'output', config: {} } }),

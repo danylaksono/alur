@@ -8,7 +8,7 @@ export const llmToolDefinitions = [
         id: { type: 'string', description: 'Unique identifier for the node (optional).' },
         type: { 
           type: 'string', 
-          enum: ['input', 'analysis', 'attribute', 'aggregate', 'filter', 'output'],
+          enum: ['input', 'analysis', 'attribute', 'aggregate', 'filter', 'visualisation', 'output'],
           description: 'The type of node to create.' 
         },
         label: { type: 'string', description: 'Human-readable label for the node.' },
@@ -31,6 +31,11 @@ export const llmToolDefinitions = [
             resultField: { type: 'string', description: 'For attribute nodes: the name of the new field.' },
             groupBy: { type: 'string', description: 'For aggregate nodes: the column name to group by.' },
             condition: { type: 'string', description: 'For filter nodes: the SQL WHERE condition (e.g. need > 10).' },
+            kind: { type: 'string', enum: ['choropleth', 'categorical', 'graduated_symbol', 'heatmap', 'label', 'dot_density'], description: 'For visualisation nodes: style type.' },
+            field: { type: 'string', description: 'For visualisation nodes: field to style by.' },
+            method: { type: 'string', enum: ['quantile', 'equal_interval'], description: 'For choropleth visualisation nodes: classification method.' },
+            classCount: { type: 'number', description: 'For choropleth visualisation nodes: number of classes.' },
+            paletteId: { type: 'string', enum: ['teal', 'magma', 'forest', 'civic'], description: 'For visualisation nodes: palette id.' },
             outputMode: { type: 'string', enum: ['visualize', 'export'], description: 'For output nodes: visualize to map or export to a file.' },
             exportFormat: { type: 'string', enum: ['geojson', 'csv', 'json', 'parquet'], description: 'For export output nodes: file format.' },
             maxFeatures: { type: 'number', description: 'For output nodes: maximum features to preview or export.' }
@@ -110,6 +115,73 @@ export const llmToolDefinitions = [
         }
       },
       required: ['sql']
+    }
+  },
+  {
+    name: 'add_visualisation_node',
+    description: 'Add a workflow visualisation node that passes data through and attaches a reusable map style recipe for downstream output nodes.',
+    parameters: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'Unique identifier for the node (optional).' },
+        label: { type: 'string', description: 'Human-readable node label.' },
+        source_id: { type: 'string', description: 'Optional source node ID to connect from.' },
+        target_id: { type: 'string', description: 'Optional target output node ID to connect to.' },
+        position: {
+          type: 'object',
+          properties: {
+            x: { type: 'number' },
+            y: { type: 'number' }
+          }
+        },
+        kind: {
+          type: 'string',
+          enum: ['choropleth', 'categorical', 'graduated_symbol', 'heatmap', 'label', 'dot_density'],
+          description: 'Visualisation type.'
+        },
+        field: { type: 'string', description: 'Attribute field used for styling.' },
+        method: {
+          type: 'string',
+          enum: ['quantile', 'equal_interval'],
+          description: 'Classification method for choropleths.'
+        },
+        classCount: { type: 'number', description: 'Class count for choropleths.' },
+        paletteId: {
+          type: 'string',
+          enum: ['teal', 'magma', 'forest', 'civic'],
+          description: 'Palette id.'
+        }
+      },
+      required: ['kind']
+    }
+  },
+  {
+    name: 'style_layer',
+    description: 'Apply a MapLibre-backed visual style to an existing map layer, such as a choropleth or category map.',
+    parameters: {
+      type: 'object',
+      properties: {
+        layerId: { type: 'string', description: 'The layer ID to style. If omitted, the selected layer is used.' },
+        kind: {
+          type: 'string',
+          enum: ['choropleth', 'categorical', 'graduated_symbol', 'heatmap', 'label', 'dot_density'],
+          description: 'The visualisation type to apply.'
+        },
+        field: { type: 'string', description: 'The attribute field used for classification or categories.' },
+        method: {
+          type: 'string',
+          enum: ['quantile', 'equal_interval'],
+          description: 'Classification method for numeric choropleths.'
+        },
+        classCount: { type: 'number', description: 'Number of classes for numeric choropleths.' },
+        palette: {
+          type: 'string',
+          enum: ['teal', 'magma', 'forest', 'civic'],
+          description: 'Sequential palette for numeric choropleths.'
+        },
+        topN: { type: 'number', description: 'Number of top categories to colour before using Other.' }
+      },
+      required: ['field']
     }
   }
 ];

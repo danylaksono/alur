@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, type ReactNode } from 'react';
 import { Copy, Trash2, Info, Play, Download, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { buildUpToSQL } from '../../utils/workflowEngine';
+import { resolveVisualisationForGeoJson } from '../../utils/visualisationResolver';
 import { duckdbService } from '../../services/duckdb';
 
 interface NodeActionsProps {
@@ -26,7 +27,7 @@ export const NodeActions = ({ id, helperContent }: NodeActionsProps) => {
     const { nodes, edges } = useStore.getState();
     setNodeExecutionState(id, { status: 'running' });
     try {
-      const { sql } = buildUpToSQL(nodes, edges, id);
+      const { sql, visualisationConfig } = buildUpToSQL(nodes, edges, id);
       addChatMessage('system', `▶️ Executing up to node: ${nodes.find((n) => n.id === id)?.data.label || id}`);
       const geojson = await duckdbService.getGeoJSON(sql);
       if (!geojson || geojson.features.length === 0) {
@@ -34,12 +35,14 @@ export const NodeActions = ({ id, helperContent }: NodeActionsProps) => {
         setNodeExecutionState(id, { status: 'done', featureCount: 0 });
         return;
       }
+      const resolvedStyle = resolveVisualisationForGeoJson(geojson, visualisationConfig);
       addMapLayer({
         id: `exec-${id}`,
         name: `Step: ${nodes.find((n) => n.id === id)?.data.label || id}`,
         geojson,
         sourceNodeId: id,
         sourceKind: 'step',
+        ...resolvedStyle,
       });
       setNodeExecutionState(id, { status: 'done', featureCount: geojson.features.length });
       addChatMessage('system', `✅ Step executed: ${geojson.features.length.toLocaleString()} features`);

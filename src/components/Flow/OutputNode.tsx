@@ -5,6 +5,7 @@ import { NodeSchema } from './NodeSchema';
 import { buildUpToSQL } from '../../utils/workflowEngine';
 import { duckdbService } from '../../services/duckdb';
 import { FlowNodeShell, inputClass, nodeHandleClass, selectClass } from './FlowNodeShell';
+import { resolveVisualisationForGeoJson } from '../../utils/visualisationResolver';
 
 type OutputMode = 'visualize' | 'export';
 type ExportFormat = 'geojson' | 'csv' | 'json' | 'parquet';
@@ -26,18 +27,20 @@ export const OutputNode = ({ data, id }: any) => {
     setSelectedNodeId(id);
     const { nodes, edges } = useStore.getState();
     try {
-      const { sql } = buildUpToSQL(nodes, edges, id, { limit: maxFeatures });
+      const { sql, visualisationConfig } = buildUpToSQL(nodes, edges, id, { limit: maxFeatures });
       const geojson = await duckdbService.getGeoJSON(sql);
       if (!geojson || geojson.features.length === 0) {
         addChatMessage('system', '⚠️ Output node produced no features.');
         return;
       }
+      const resolvedStyle = resolveVisualisationForGeoJson(geojson, visualisationConfig);
       addMapLayer({
         id: `output-${id}`,
         name: `Output: ${data.label}`,
         geojson,
         sourceNodeId: id,
         sourceKind: 'output',
+        ...resolvedStyle,
       });
       const msg = geojson.features.length >= maxFeatures
         ? `✅ Output rendered: ${geojson.features.length.toLocaleString()}+ features (limited to ${maxFeatures})`

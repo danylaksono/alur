@@ -1,5 +1,6 @@
 import type { Edge } from '@xyflow/react';
 import type { GISNode } from '../store/useStore';
+import type { LayerVisualisation } from '../types/visualisation';
 import { spatialFunctions } from './spatialFunctions';
 
 /**
@@ -20,7 +21,14 @@ export interface WorkflowResult {
   withClause: string;
   lastAlias: string;
   outputLayerName: string;
+  visualisationConfig?: WorkflowVisualisationConfig;
 }
+
+export type WorkflowVisualisationConfig = Partial<LayerVisualisation> & {
+  kind?: LayerVisualisation['kind'];
+  field?: string;
+  paletteId?: string;
+};
 
 const GEOMETRY_RETURNING_FUNCTIONS = new Set([
   'ST_Affine',
@@ -151,6 +159,7 @@ export function buildWorkflowSQL(nodes: GISNode[], edges: Edge[], options?: { li
   let lastAlias = '';
   // Track geometry column and CRS per CTE
   const nodeMetadata = new Map<string, { geom: string; crs: string }>();
+  const visualisationMetadata = new Map<string, WorkflowVisualisationConfig>();
 
   for (const node of sorted) {
     const alias = cteAlias(node.id);
@@ -307,12 +316,22 @@ export function buildWorkflowSQL(nodes: GISNode[], edges: Edge[], options?: { li
       );
       nodeMetadata.set(alias, meta);
       lastAlias = alias;
+    } else if (type === 'visualisation') {
+      const source = parentAliases[0] || lastAlias;
+      if (!source) throw new Error(`Visualisation node "${node.id}" has no source.`);
+      const meta = nodeMetadata.get(source)!;
+      ctes.push(`${alias} AS (\n  SELECT * FROM ${source}\n)`);
+      nodeMetadata.set(alias, meta);
+      visualisationMetadata.set(alias, config || {});
+      lastAlias = alias;
     } else if (type === 'output') {
       if (parentAliases.length > 0) {
         const source = parentAliases[0];
         ctes.push(`${alias} AS (\n  SELECT * FROM ${source}\n)`);
         lastAlias = alias;
         nodeMetadata.set(alias, nodeMetadata.get(source)!);
+        const sourceVisualisation = visualisationMetadata.get(source);
+        if (sourceVisualisation) visualisationMetadata.set(alias, sourceVisualisation);
       }
     }
   }
@@ -337,6 +356,7 @@ export function buildWorkflowSQL(nodes: GISNode[], edges: Edge[], options?: { li
     withClause,
     lastAlias,
     outputLayerName: `workflow_${lastAlias}`,
+    visualisationConfig: visualisationMetadata.get(lastAlias),
   };
 }
 

@@ -1,7 +1,8 @@
-import { Eye, EyeOff, Focus, Trash2, Layers, Route } from 'lucide-react';
+import { Download, Eye, EyeOff, Focus, Trash2, Layers, Route } from 'lucide-react';
 import { useStore, type MapLayer } from '../store/useStore';
 import { cn } from '../utils/cn';
 import { BASEMAPS } from '../utils/basemaps';
+import { downloadMapStyleExport } from '../utils/mapStyleExport';
 
 const KIND_LABEL: Record<NonNullable<MapLayer['sourceKind']>, string> = {
   input: 'Input',
@@ -24,12 +25,16 @@ export const LayerManager = () => {
   const nodes = useStore((s) => s.nodes);
   const selectedLayerId = useStore((s) => s.selectedLayerId);
   const selectedNodeId = useStore((s) => s.selectedNodeId);
+  const visualAnalytics = useStore((s) => s.visualAnalytics);
   const selectLayer = useStore((s) => s.selectLayer);
   const focusLayer = useStore((s) => s.focusLayer);
   const toggleMapLayerVisibility = useStore((s) => s.toggleMapLayerVisibility);
   const updateMapLayer = useStore((s) => s.updateMapLayer);
   const removeMapLayer = useStore((s) => s.removeMapLayer);
+  const clearFeatureSelection = useStore((s) => s.clearFeatureSelection);
+  const clearLayerFilters = useStore((s) => s.clearLayerFilters);
   const setSelectedBasemapId = useStore((s) => s.setSelectedBasemapId);
+  const styledLayerCount = mapLayers.filter((layer) => layer.visualisation || layer.legend || layer.color).length;
 
   const sourceName = (layer: MapLayer) => {
     if (!layer.sourceNodeId) return KIND_LABEL[layer.sourceKind || 'manual'] || 'Layer';
@@ -66,6 +71,15 @@ export const LayerManager = () => {
                 </option>
               ))}
             </select>
+            <button
+              type="button"
+              onClick={() => downloadMapStyleExport(mapLayers)}
+              disabled={styledLayerCount === 0}
+              className="rounded-md border border-slate-200 bg-white p-1.5 text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              title="Export map style JSON"
+            >
+              <Download className="h-3.5 w-3.5" />
+            </button>
           </div>
         </div>
 
@@ -79,6 +93,8 @@ export const LayerManager = () => {
               const isSelected = selectedLayerId === layer.id;
               const color = layer.color || fallbackColor(index);
               const isNodeSelected = layer.sourceNodeId && layer.sourceNodeId === selectedNodeId;
+              const selectedFeatureCount = visualAnalytics.layers[layer.id]?.selectedFeatureIds.length || 0;
+              const filterCount = visualAnalytics.layers[layer.id]?.filters.length || 0;
 
               return (
                 <div
@@ -104,9 +120,22 @@ export const LayerManager = () => {
                       </span>
                     </span>
                     <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold text-slate-500">
-                      {layer.featureCount.toLocaleString()}
+                      {layer.visualisation?.kind || layer.featureCount.toLocaleString()}
                     </span>
                   </button>
+
+                  {layer.legend && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {layer.legend.items.slice(0, 6).map((item) => (
+                        <span
+                          key={`${item.label}-${item.color}`}
+                          className="h-3 w-3 rounded-sm border border-slate-200"
+                          style={{ backgroundColor: item.color }}
+                          title={`${layer.legend?.title}: ${item.label}`}
+                        />
+                      ))}
+                    </div>
+                  )}
 
                   <div className="mt-3 flex items-center gap-1.5">
                     <button
@@ -150,6 +179,32 @@ export const LayerManager = () => {
                   {isNodeSelected && (
                     <div className="mt-2 rounded-md bg-slate-100 px-2 py-1 text-[9px] font-bold uppercase tracking-widest text-slate-500">
                       Linked node selected
+                    </div>
+                  )}
+
+                  {selectedFeatureCount > 0 && (
+                    <div className="mt-2 flex items-center justify-between gap-2 rounded-md bg-orange-50 px-2 py-1 text-[9px] font-bold uppercase tracking-widest text-orange-700">
+                      <span>{selectedFeatureCount.toLocaleString()} features selected</span>
+                      <button
+                        type="button"
+                        onClick={() => clearFeatureSelection(layer.id)}
+                        className="rounded border border-orange-200 bg-white px-1.5 py-0.5 text-[8px] hover:bg-orange-100"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  )}
+
+                  {filterCount > 0 && (
+                    <div className="mt-2 flex items-center justify-between gap-2 rounded-md bg-sky-50 px-2 py-1 text-[9px] font-bold uppercase tracking-widest text-sky-700">
+                      <span>{filterCount.toLocaleString()} visual filters</span>
+                      <button
+                        type="button"
+                        onClick={() => clearLayerFilters(layer.id)}
+                        className="rounded border border-sky-200 bg-white px-1.5 py-0.5 text-[8px] hover:bg-sky-100"
+                      >
+                        Clear
+                      </button>
                     </div>
                   )}
                 </div>

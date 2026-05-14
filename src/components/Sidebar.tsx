@@ -1,9 +1,10 @@
 import { useState, type ReactNode } from 'react';
-import { Database, Zap, Eye, Plus, Loader2, Layers, Filter, Calculator, Search, Workflow } from 'lucide-react';
+import { Database, Zap, Eye, Plus, Loader2, Layers, Filter, Calculator, Search, Workflow, Palette } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { buildWorkflowSQL } from '../utils/workflowEngine';
 import { duckdbService } from '../services/duckdb';
 import { cn } from '../utils/cn';
+import { resolveVisualisationForGeoJson } from '../utils/visualisationResolver';
 
 const colorStyles: Record<string, { hoverBg: string; hoverBorder: string; iconBg: string; iconHoverBg: string; dot: string }> = {
   blue: { hoverBg: 'hover:bg-blue-50', hoverBorder: 'hover:border-blue-200', iconBg: 'bg-blue-50', iconHoverBg: 'group-hover:bg-blue-100', dot: 'bg-blue-500' },
@@ -20,6 +21,7 @@ const nodeTypes = [
   { type: 'attribute' as const, icon: Calculator, title: 'Attribute Calc', desc: 'Add computed columns', color: 'slate' },
   { type: 'filter' as const, icon: Filter, title: 'Filter', desc: 'SQL WHERE conditions', color: 'amber' },
   { type: 'aggregate' as const, icon: Layers, title: 'Aggregate', desc: 'ST_Union_Agg, GROUP BY, dissolve', color: 'orange' },
+  { type: 'visualisation' as const, icon: Palette, title: 'Visualisation', desc: 'Attach a reusable map style', color: 'purple', config: { kind: 'choropleth', method: 'quantile', classCount: 5, paletteId: 'teal' } },
   { type: 'output' as const, icon: Eye, title: 'Layer Output', desc: 'Visualize or export the final result', color: 'emerald', config: { outputMode: 'visualize' } },
 ];
 
@@ -55,7 +57,7 @@ export const Sidebar = ({ children, className }: { children?: ReactNode; classNa
   );
 
   const handleAddNode = (
-    type: 'input' | 'analysis' | 'attribute' | 'filter' | 'aggregate' | 'output',
+    type: 'input' | 'analysis' | 'attribute' | 'filter' | 'aggregate' | 'visualisation' | 'output',
     config: Record<string, unknown> = {},
     title?: string,
   ) => {
@@ -66,6 +68,7 @@ export const Sidebar = ({ children, className }: { children?: ReactNode; classNa
       attribute: 'Attribute Op',
       filter: 'Filter',
       aggregate: 'Aggregate',
+      visualisation: 'Visualisation',
       output: title || 'Layer Output',
     };
     const newNode = {
@@ -86,7 +89,7 @@ export const Sidebar = ({ children, className }: { children?: ReactNode; classNa
     try {
       setExecuting(true);
       addChatMessage('system', '⚙️ Building workflow SQL...');
-      const { sql, outputLayerName } = buildWorkflowSQL(nodes, edges);
+      const { sql, outputLayerName, visualisationConfig } = buildWorkflowSQL(nodes, edges);
       addChatMessage('system', `📝 Generated SQL:\n\`\`\`sql\n${sql}\n\`\`\``);
       addChatMessage('system', '🚀 Executing workflow against DuckDB...');
       const geojson = await duckdbService.getGeoJSON(sql);
@@ -94,11 +97,13 @@ export const Sidebar = ({ children, className }: { children?: ReactNode; classNa
         addChatMessage('system', '⚠️ Workflow executed but produced no features.');
         return;
       }
+      const resolvedStyle = resolveVisualisationForGeoJson(geojson, visualisationConfig);
       addMapLayer({
         id: outputLayerName,
         name: `Workflow Result (${geojson.features.length} features)`,
         geojson,
         sourceKind: 'workflow',
+        ...resolvedStyle,
       });
       addChatMessage('system', `✅ Workflow complete — ${geojson.features.length.toLocaleString()} features added to the map as "${outputLayerName}".`);
     } catch (err: any) {

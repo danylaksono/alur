@@ -128,6 +128,7 @@ describe('sample GIS workflow smoke test', () => {
           opacity: 0.8,
           createdAt: 1,
           featureCount: 3,
+          styleVersion: 1,
         },
       ],
       selectedLayerId: 'need_london',
@@ -137,7 +138,7 @@ describe('sample GIS workflow smoke test', () => {
     const html = renderToString(<App />);
     const toolNames = llmToolDefinitions.map((tool) => tool.name);
 
-    expect(toolNames).toEqual(expect.arrayContaining(['add_node', 'connect_nodes', 'run_spatial_query']));
+    expect(toolNames).toEqual(expect.arrayContaining(['add_node', 'connect_nodes', 'run_spatial_query', 'add_visualisation_node']));
     expect(html).toContain('GIS Copilot Agent');
     expect(html).toContain('Node Diagram');
     expect(html).toContain('Layer Output');
@@ -156,6 +157,7 @@ describe('sample GIS workflow smoke test', () => {
     if (!configProperties) throw new Error('add_node config schema is missing');
     expect(configProperties.outputMode.enum).toEqual(['visualize', 'export']);
     expect(configProperties.exportFormat.enum).toEqual(['geojson', 'csv', 'json', 'parquet']);
+    expect(configProperties.kind.enum).toEqual(['choropleth', 'categorical', 'graduated_symbol', 'heatmap', 'label', 'dot_density']);
 
     const nodes: GISNode[] = [
       node('sample_need', 'input', { tableName: 'need_london', fileName: 'need_london.parquet' }),

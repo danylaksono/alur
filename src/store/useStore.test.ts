@@ -44,6 +44,7 @@ describe('layer state', () => {
       sourceKind: 'input',
     });
     expect(state.selectedLayerId).toBe('roads');
+    expect(state.mapLayers[0].geojson.features[0].properties?._ymn_feature_id).toBe('1');
   });
 
   it('replaces repeated execution layers while preserving layer preferences', () => {
@@ -94,6 +95,62 @@ describe('layer state', () => {
     expect(state.selectedNodeId).toBe('input-a');
     expect(state.layerFocusRequest?.layerId).toBe('a');
     expect(state.layerFocusRequest?.requestedAt).toBeGreaterThan(0);
+  });
+
+  it('stores layer visualisations and can clear them', () => {
+    const store = useStore.getState();
+    store.addMapLayer({ id: 'areas', name: 'Areas', geojson: fc(3), sourceKind: 'manual' });
+
+    store.updateLayerVisualisation('areas', {
+      kind: 'categorical',
+      field: 'id',
+      method: 'categorical_top_n',
+      categories: [{ value: '1', color: '#2563eb', count: 1 }],
+      otherColor: '#94a3b8',
+      nullColor: '#e2e8f0',
+      opacity: 0.8,
+    }, {
+      title: 'id',
+      kind: 'categorical',
+      items: [{ label: '1', color: '#2563eb' }],
+    });
+
+    expect(useStore.getState().mapLayers[0].visualisation?.kind).toBe('categorical');
+    expect(useStore.getState().mapLayers[0].legend?.title).toBe('id');
+
+    store.clearLayerVisualisation('areas');
+
+    expect(useStore.getState().mapLayers[0].visualisation).toBeUndefined();
+    expect(useStore.getState().mapLayers[0].legend).toBeUndefined();
+  });
+
+  it('stores hover and feature selection independently from layer selection', () => {
+    const store = useStore.getState();
+    store.addMapLayer({ id: 'areas', name: 'Areas', geojson: fc(3), sourceKind: 'manual' });
+
+    store.setHoveredFeature('areas', '2');
+    store.toggleSelectedFeature('areas', '1');
+    store.toggleSelectedFeature('areas', '3');
+
+    expect(useStore.getState().visualAnalytics.layers.areas.hoveredFeatureId).toBe('2');
+    expect(useStore.getState().visualAnalytics.layers.areas.selectedFeatureIds).toEqual(['1', '3']);
+    expect(useStore.getState().selectedLayerId).toBe('areas');
+
+    store.toggleSelectedFeature('areas', '1');
+    expect(useStore.getState().visualAnalytics.layers.areas.selectedFeatureIds).toEqual(['3']);
+
+    store.clearFeatureSelection('areas');
+    expect(useStore.getState().visualAnalytics.layers.areas.selectedFeatureIds).toEqual([]);
+  });
+
+  it('removes visual analytics state when a layer is removed', () => {
+    const store = useStore.getState();
+    store.addMapLayer({ id: 'areas', name: 'Areas', geojson: fc(1), sourceKind: 'manual' });
+    store.toggleSelectedFeature('areas', '1');
+
+    store.removeMapLayer('areas');
+
+    expect(useStore.getState().visualAnalytics.layers.areas).toBeUndefined();
   });
 
   it('removing a node cleans up linked layers and active layer selection', () => {

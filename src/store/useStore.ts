@@ -10,6 +10,9 @@ import {
   applyEdgeChanges
 } from '@xyflow/react';
 import { DEFAULT_BASEMAP_ID, type BasemapId } from '../utils/basemaps';
+import type { LayerVisualisation, LegendSpec } from '../types/visualisation';
+import { ensureFeatureIds } from '../utils/featureIdentity';
+import type { VisualAnalyticsState, VisualFilter } from '../types/visualAnalytics';
 
 export type NodeExecutionState = {
   status: 'idle' | 'running' | 'done' | 'error';
@@ -32,12 +35,18 @@ export type MapLayer = {
   opacity: number;
   createdAt: number;
   featureCount: number;
+  visualisation?: LayerVisualisation;
+  legend?: LegendSpec;
+  styleVersion: number;
+  clusterRadius?: number;
+  clusterMaxZoom?: number;
+  dotDensityLayerId?: string;
 };
 
 export type GISNode = Node & {
   data: {
     label: string;
-    type: 'input' | 'analysis' | 'attribute' | 'aggregate' | 'filter' | 'output';
+    type: 'input' | 'analysis' | 'attribute' | 'aggregate' | 'filter' | 'visualisation' | 'output';
     config: any;
   }
 };
@@ -73,6 +82,7 @@ interface AppState {
   layerFocusRequest: { layerId: string; requestedAt: number } | null;
   nodeSchemas: Record<string, any[]>;
   nodeExecutionStates: Record<string, NodeExecutionState>;
+  visualAnalytics: VisualAnalyticsState;
   toasts: Toast[];
 
   setDuckDBReady: (ready: boolean) => void;
@@ -97,14 +107,22 @@ interface AppState {
   addMapLayer: (layer: NewMapLayer) => void;
   removeMapLayer: (layerId: string) => void;
   toggleMapLayerVisibility: (layerId: string) => void;
-  updateMapLayer: (layerId: string, patch: Partial<Pick<MapLayer, 'visible' | 'opacity' | 'color' | 'name'>>) => void;
+  updateMapLayer: (layerId: string, patch: Partial<Pick<MapLayer, 'visible' | 'opacity' | 'color' | 'name' | 'clusterRadius' | 'clusterMaxZoom' | 'dotDensityLayerId'>>) => void;
+  updateLayerVisualisation: (layerId: string, visualisation: LayerVisualisation, legend?: LegendSpec) => void;
+  clearLayerVisualisation: (layerId: string) => void;
+  reorderMapLayer: (layerId: string, targetIndex: number) => void;
+  setHoveredFeature: (layerId: string, featureId: string | null) => void;
+  toggleSelectedFeature: (layerId: string, featureId: string) => void;
+  clearFeatureSelection: (layerId: string) => void;
+  setLayerFilters: (layerId: string, filters: VisualFilter[]) => void;
+  clearLayerFilters: (layerId: string) => void;
   addChatMessage: (role: 'user' | 'assistant' | 'system', content: string, data?: { kind?: string; toolName?: string; summary?: string; icon?: string }) => void;
   addToast: (toast: Omit<Toast, 'id'>) => void;
   removeToast: (id: string) => void;
 }
 
-export type NewMapLayer = Omit<MapLayer, 'visible' | 'opacity' | 'createdAt' | 'featureCount'> &
-  Partial<Pick<MapLayer, 'visible' | 'opacity' | 'createdAt' | 'featureCount'>>;
+export type NewMapLayer = Omit<MapLayer, 'visible' | 'opacity' | 'createdAt' | 'featureCount' | 'styleVersion'> &
+  Partial<Pick<MapLayer, 'visible' | 'opacity' | 'createdAt' | 'featureCount' | 'styleVersion'>>;
 
 if (typeof window !== 'undefined') {
   window.localStorage.removeItem('ymnngis-workflow');
@@ -120,6 +138,10 @@ const hydrateLayer = (layer: NewMapLayer, previous?: MapLayer): MapLayer => ({
   opacity: layer.opacity ?? previous?.opacity ?? 0.8,
   createdAt: layer.createdAt ?? previous?.createdAt ?? Date.now(),
   featureCount: layer.featureCount ?? layer.geojson.features.length,
+  geojson: ensureFeatureIds(layer.geojson, layer.id),
+  visualisation: layer.visualisation ?? previous?.visualisation,
+  legend: layer.legend ?? previous?.legend,
+  styleVersion: layer.styleVersion ?? previous?.styleVersion ?? 1,
 });
 
 export const useStore = create<AppState>()((set, get) => ({
@@ -136,6 +158,7 @@ export const useStore = create<AppState>()((set, get) => ({
   layerFocusRequest: null,
   nodeSchemas: {},
   nodeExecutionStates: {},
+  visualAnalytics: { layers: {} },
   toasts: [],
 
   setDuckDBReady: (ready) => set({ duckdbReady: ready }),
@@ -182,6 +205,7 @@ export const useStore = create<AppState>()((set, get) => ({
     layerFocusRequest: null,
     nodeSchemas: {},
     nodeExecutionStates: {},
+    visualAnalytics: { layers: {} },
   }),
 
   onNodesChange: (changes) => {
@@ -202,6 +226,11 @@ export const useStore = create<AppState>()((set, get) => ({
       nodes: nextNodes,
       edges: get().edges.filter((edge) => nextNodeIds.has(edge.source) && nextNodeIds.has(edge.target)),
       mapLayers: nextLayers,
+      visualAnalytics: {
+        layers: Object.fromEntries(
+          Object.entries(get().visualAnalytics.layers).filter(([layerId]) => nextLayerIds.has(layerId))
+        ),
+      },
       selectedNodeId: get().selectedNodeId && nextNodeIds.has(get().selectedNodeId!)
         ? get().selectedNodeId
         : null,
@@ -241,11 +270,17 @@ export const useStore = create<AppState>()((set, get) => ({
       layer.sourceNodeId !== id && (!tableName || layer.id !== tableName)
     ));
     const layerIds = new Set(mapLayers.map((layer) => layer.id));
+    const visualAnalyticsLayers = removeRecordKeys(state.visualAnalytics.layers, new Set(
+      state.mapLayers
+        .filter((layer) => layer.sourceNodeId === id || (tableName && layer.id === tableName))
+        .map((layer) => layer.id)
+    ));
 
     return {
       nodes: state.nodes.filter((n) => n.id !== id),
       edges: state.edges.filter((edge) => edge.source !== id && edge.target !== id),
       mapLayers,
+      visualAnalytics: { layers: visualAnalyticsLayers },
       selectedNodeId: state.selectedNodeId === id ? null : state.selectedNodeId,
       selectedLayerId: state.selectedLayerId && layerIds.has(state.selectedLayerId) ? state.selectedLayerId : null,
       nodeSchemas: removeRecordKeys(state.nodeSchemas, removedIds),
@@ -285,10 +320,22 @@ export const useStore = create<AppState>()((set, get) => ({
     };
   }),
 
-  removeMapLayer: (layerId) => set((state) => ({
-    mapLayers: state.mapLayers.filter((item) => item.id !== layerId),
-    selectedLayerId: state.selectedLayerId === layerId ? null : state.selectedLayerId,
-  })),
+  removeMapLayer: (layerId) => set((state) => {
+    const layer = state.mapLayers.find((item) => item.id === layerId);
+    const dotDensityLayerId = layer?.dotDensityLayerId;
+    const keysToRemove = new Set([layerId]);
+    if (dotDensityLayerId) keysToRemove.add(dotDensityLayerId);
+    return {
+      mapLayers: state.mapLayers
+        .filter((item) => item.id !== layerId)
+        .filter((item) => item.id !== dotDensityLayerId)
+        .map((item) => item.dotDensityLayerId === layerId
+          ? { ...item, dotDensityLayerId: undefined, visualisation: undefined, legend: undefined }
+          : item),
+      visualAnalytics: { layers: removeRecordKeys(state.visualAnalytics.layers, keysToRemove) },
+      selectedLayerId: state.selectedLayerId === layerId ? null : state.selectedLayerId,
+    };
+  }),
 
   toggleMapLayerVisibility: (layerId) => set((state) => ({
     mapLayers: state.mapLayers.map((layer) =>
@@ -298,9 +345,116 @@ export const useStore = create<AppState>()((set, get) => ({
 
   updateMapLayer: (layerId, patch) => set((state) => ({
     mapLayers: state.mapLayers.map((layer) =>
-      layer.id === layerId ? { ...layer, ...patch } : layer
+      layer.id === layerId ? { ...layer, ...patch, styleVersion: layer.styleVersion + 1 } : layer
     ),
   })),
+
+  updateLayerVisualisation: (layerId, visualisation, legend) => set((state) => ({
+    mapLayers: state.mapLayers.map((layer) =>
+      layer.id === layerId
+        ? { ...layer, visualisation, legend, styleVersion: layer.styleVersion + 1 }
+        : layer
+    ),
+  })),
+
+  clearLayerVisualisation: (layerId) => set((state) => ({
+    mapLayers: state.mapLayers.map((layer) => {
+      if (layer.id !== layerId) return layer;
+      const { visualisation, legend, ...rest } = layer;
+      return { ...rest, styleVersion: layer.styleVersion + 1 };
+    }),
+  })),
+
+  reorderMapLayer: (layerId, targetIndex) => set((state) => {
+    const sourceIndex = state.mapLayers.findIndex((layer) => layer.id === layerId);
+    if (sourceIndex < 0) return {};
+    const nextLayers = [...state.mapLayers];
+    const [layer] = nextLayers.splice(sourceIndex, 1);
+    nextLayers.splice(Math.max(0, Math.min(targetIndex, nextLayers.length)), 0, layer);
+    return { mapLayers: nextLayers };
+  }),
+
+  setHoveredFeature: (layerId, featureId) => set((state) => {
+    const current = state.visualAnalytics.layers[layerId] || { selectedFeatureIds: [], filters: [] };
+    return {
+      visualAnalytics: {
+        layers: {
+          ...state.visualAnalytics.layers,
+          [layerId]: {
+            ...current,
+            hoveredFeatureId: featureId || undefined,
+          },
+        },
+      },
+    };
+  }),
+
+  toggleSelectedFeature: (layerId, featureId) => set((state) => {
+    const current = state.visualAnalytics.layers[layerId] || { selectedFeatureIds: [], filters: [] };
+    const selected = new Set(current.selectedFeatureIds);
+    if (selected.has(featureId)) {
+      selected.delete(featureId);
+    } else {
+      selected.add(featureId);
+    }
+    return {
+      selectedLayerId: layerId,
+      visualAnalytics: {
+        layers: {
+          ...state.visualAnalytics.layers,
+          [layerId]: {
+            ...current,
+            selectedFeatureIds: [...selected],
+          },
+        },
+      },
+    };
+  }),
+
+  clearFeatureSelection: (layerId) => set((state) => {
+    const current = state.visualAnalytics.layers[layerId] || { selectedFeatureIds: [], filters: [] };
+    return {
+      visualAnalytics: {
+        layers: {
+          ...state.visualAnalytics.layers,
+          [layerId]: {
+            ...current,
+            selectedFeatureIds: [],
+          },
+        },
+      },
+    };
+  }),
+
+  setLayerFilters: (layerId, filters) => set((state) => {
+    const current = state.visualAnalytics.layers[layerId] || { selectedFeatureIds: [], filters: [] };
+    return {
+      visualAnalytics: {
+        layers: {
+          ...state.visualAnalytics.layers,
+          [layerId]: {
+            ...current,
+            filters,
+          },
+        },
+      },
+    };
+  }),
+
+  clearLayerFilters: (layerId) => set((state) => {
+    const current = state.visualAnalytics.layers[layerId] || { selectedFeatureIds: [], filters: [] };
+    return {
+      visualAnalytics: {
+        layers: {
+          ...state.visualAnalytics.layers,
+          [layerId]: {
+            ...current,
+            filters: [],
+          },
+        },
+      },
+    };
+  }),
 
   addChatMessage: (role, content, data) => set((state) => ({
     chatMessages: [...state.chatMessages, { role, content, kind: data?.kind as any, data }]

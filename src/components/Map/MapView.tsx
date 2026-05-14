@@ -3,8 +3,12 @@ import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useStore } from '../../store/useStore';
 import { getBasemap } from '../../utils/basemaps';
-
-const LAYER_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
+import { compileLayerStyle, geometryKindForLayer } from '../../utils/mapStyleCompiler';
+import { featureIdFromMapFeature } from '../../utils/featureIdentity';
+import { FEATURE_ID_PROPERTY } from '../../types/visualAnalytics';
+import type { VisualFilter } from '../../types/visualAnalytics';
+import { LegendControl } from './LegendControl';
+import { cn } from '../../utils/cn';
 
 function getLayerBounds(geojson: GeoJSON.FeatureCollection) {
   const coords: [number, number][] = [];
@@ -48,20 +52,70 @@ function formatPopupValue(value: unknown): string {
   return String(value).slice(0, 80);
 }
 
+const compileMapFilter = (filters: VisualFilter[]) => {
+  const expressions = filters.map((filter) => {
+    if (filter.kind === 'category') {
+      const categoryExpression: unknown[] = ['in', ['to-string', ['get', filter.field]], ['literal', filter.values]];
+      if (filter.includeNull) {
+        return ['any', categoryExpression, ['!', ['has', filter.field]], ['==', ['get', filter.field], null]];
+      }
+      return categoryExpression;
+    }
+
+    if (filter.kind === 'temporal') {
+      const temporalPredicates: unknown[] = [];
+      if (filter.start) temporalPredicates.push(['>=', ['to-string', ['get', filter.field]], filter.start]);
+      if (filter.end) temporalPredicates.push(['<=', ['to-string', ['get', filter.field]], filter.end]);
+      const temporalExpression = temporalPredicates.length > 1 ? ['all', ...temporalPredicates] : temporalPredicates[0];
+      if (filter.includeNull) {
+        return temporalExpression
+          ? ['any', temporalExpression, ['!', ['has', filter.field]], ['==', ['get', filter.field], null]]
+          : ['any', ['!', ['has', filter.field]], ['==', ['get', filter.field], null]];
+      }
+      return temporalExpression;
+    }
+
+    const rangePredicates: unknown[] = [];
+    if (filter.min !== undefined) rangePredicates.push(['>=', ['to-number', ['get', filter.field]], filter.min]);
+    if (filter.max !== undefined) rangePredicates.push(['<=', ['to-number', ['get', filter.field]], filter.max]);
+    const rangeExpression = rangePredicates.length > 1 ? ['all', ...rangePredicates] : rangePredicates[0];
+    if (filter.includeNull) {
+      return rangeExpression
+        ? ['any', rangeExpression, ['!', ['has', filter.field]], ['==', ['get', filter.field], null]]
+        : ['any', ['!', ['has', filter.field]], ['==', ['get', filter.field], null]];
+    }
+    return rangeExpression;
+  }).filter(Boolean);
+
+  if (!expressions.length) return undefined;
+  return expressions.length === 1 ? expressions[0] : ['all', ...expressions];
+};
+
 export const MapView = () => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const popup = useRef<maplibregl.Popup | null>(null);
   const renderedLayerIds = useRef<Set<string>>(new Set());
   const nodeLayerMap = useRef<Map<string, string>>(new Map());
+  const previousFeatureState = useRef<Map<string, { hoveredFeatureId?: string; selectedFeatureIds: Set<string> }>>(new Map());
 
   const selectedBasemapId = useStore((s) => s.selectedBasemapId);
   const mapLayers = useStore((s) => s.mapLayers);
   const selectedNodeId = useStore((s) => s.selectedNodeId);
   const selectedLayerId = useStore((s) => s.selectedLayerId);
   const layerFocusRequest = useStore((s) => s.layerFocusRequest);
+  const visualAnalytics = useStore((s) => s.visualAnalytics);
   const setSelectedNodeId = useStore((s) => s.setSelectedNodeId);
   const selectLayer = useStore((s) => s.selectLayer);
+  const setHoveredFeature = useStore((s) => s.setHoveredFeature);
+  const toggleSelectedFeature = useStore((s) => s.toggleSelectedFeature);
+  const visibleLegends = mapLayers
+    .filter((layer) => layer.visible && layer.legend)
+    .map((layer) => ({
+      layerId: layer.id,
+      layerName: layer.name,
+      legend: layer.legend!,
+    }));
 
   // Init map once
   useEffect(() => {
@@ -110,9 +164,14 @@ export const MapView = () => {
       const currentIds = new Set(mapLayers.map((l) => l.id));
       renderedLayerIds.current.forEach((rid) => {
         if (!currentIds.has(rid)) {
-          const layerId = `input-layer-${rid}`;
+          const baseLayerId = `input-layer-${rid}`;
+          const clusterLayerId = `${baseLayerId}-clusters`;
+          const clusterCountLayerId = `${baseLayerId}-cluster-count`;
+          const labelLayerId = `${baseLayerId}-labels`;
           const sourceId = `input-source-${rid}`;
-          if (m.getLayer(layerId)) m.removeLayer(layerId);
+          [baseLayerId, clusterLayerId, clusterCountLayerId, labelLayerId].forEach((id) => {
+            if (m.getLayer(id)) m.removeLayer(id);
+          });
           if (m.getSource(sourceId)) m.removeSource(sourceId);
           renderedLayerIds.current.delete(rid);
           nodeLayerMap.current.forEach((mappedLayerId, nodeId) => {
@@ -125,40 +184,49 @@ export const MapView = () => {
       mapLayers.forEach((layer, idx) => {
         const sourceId = `input-source-${layer.id}`;
         const layerId = `input-layer-${layer.id}`;
-        const color = layer.color || LAYER_COLORS[idx % LAYER_COLORS.length];
+        const layerGeoKind = geometryKindForLayer(layer);
+        const isClustered = layerGeoKind === 'point' && typeof layer.clusterRadius === 'number';
 
         const existingSource = m.getSource(sourceId) as maplibregl.GeoJSONSource | null;
         if (existingSource) {
           existingSource.setData(layer.geojson as any);
-          return;
+        } else {
+          m.addSource(sourceId, {
+            type: 'geojson',
+            data: layer.geojson,
+            promoteId: FEATURE_ID_PROPERTY,
+            ...(isClustered ? {
+              cluster: true,
+              clusterRadius: layer.clusterRadius,
+              clusterMaxZoom: layer.clusterMaxZoom ?? 16,
+            } : {}),
+          } as any);
         }
 
-        m.addSource(sourceId, { type: 'geojson', data: layer.geojson });
+        const handleFeatureClick = (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
+          if (isClustered && e.features?.[0]?.properties?.cluster) {
+            const clusterId = e.features[0].properties.cluster_id;
+            (m.getSource(sourceId) as maplibregl.GeoJSONSource)
+              .getClusterExpansionZoom(clusterId)
+              .then((zoom: number) => {
+                const coordinates = (e.features![0].geometry as GeoJSON.Point).coordinates as [number, number];
+                m.easeTo({ center: coordinates, zoom });
+              })
+              .catch(() => {
+                const coordinates = (e.features![0].geometry as GeoJSON.Point).coordinates as [number, number];
+                m.easeTo({ center: coordinates, zoom: m.getZoom() + 1 });
+              });
+            return;
+          }
 
-        const geomType = layer.geojson.features?.[0]?.geometry?.type || 'Point';
-        const isPoint = geomType.includes('Point');
-        const isLine = geomType.includes('Line');
-        const type = isPoint ? 'circle' : isLine ? 'line' : 'fill';
-
-        const paint: any = isPoint
-          ? { 'circle-radius': 4, 'circle-color': color, 'circle-opacity': layer.opacity, 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 0.5, 'circle-stroke-opacity': Math.min(1, layer.opacity + 0.15) }
-          : isLine
-          ? { 'line-color': color, 'line-width': 2, 'line-opacity': layer.opacity }
-          : { 'fill-color': color, 'fill-opacity': Math.max(0.05, layer.opacity * 0.35), 'fill-outline-color': color };
-
-        m.addLayer({ id: layerId, type: type as any, source: sourceId, paint });
-        m.setLayoutProperty(layerId, 'visibility', layer.visible ? 'visible' : 'none');
-
-        // Click handler
-        m.on('click', layerId, (e) => {
           const feature = e.features?.[0];
           if (!feature) return;
-
+          const featureId = featureIdFromMapFeature(feature);
           const srcNodeId = layer.sourceNodeId;
           if (srcNodeId) setSelectedNodeId(srcNodeId);
           selectLayer(layer.id);
+          if (featureId) toggleSelectedFeature(layer.id, featureId);
 
-          // Build popup
           const props = feature.properties || {};
           const entries = Object.entries(props).slice(0, 8);
           let html = entries.map(([k, v]) =>
@@ -169,13 +237,119 @@ export const MapView = () => {
           ).join('');
           if (Object.keys(props).length > 8) html += `<div style="font:10px monospace;color:#94a3b8;margin-top:4px">+ ${Object.keys(props).length - 8} more fields</div>`;
           html = `<div style="font:10px/1.4 sans-serif;font-weight:700;color:#6366f1;margin-bottom:4px">${layer.name}</div>${html}`;
-
           popup.current?.setLngLat(e.lngLat).setHTML(html).addTo(m);
-        });
+        };
 
-        // Cursor
-        m.on('mouseenter', layerId, () => { m.getCanvas().style.cursor = 'pointer'; });
-        m.on('mouseleave', layerId, () => { m.getCanvas().style.cursor = ''; });
+        if (isClustered) {
+          const clusterLayerId = `${layerId}-clusters`;
+          const clusterCountLayerId = `${layerId}-cluster-count`;
+
+          if (m.getLayer(clusterLayerId)) m.removeLayer(clusterLayerId);
+          m.addLayer({
+            id: clusterLayerId,
+            type: 'circle',
+            source: sourceId,
+            filter: ['has', 'point_count'],
+            paint: {
+              'circle-color': ['step', ['get', 'point_count'], '#94a3b8', 10, '#6366f1', 100, '#8b5cf6', 500, '#ec4899'],
+              'circle-radius': ['step', ['get', 'point_count'], 16, 10, 22, 100, 30, 500, 38],
+              'circle-stroke-width': 2,
+              'circle-stroke-color': '#ffffff',
+              'circle-opacity': layer.visible ? layer.opacity : 0,
+            },
+          });
+
+          if (m.getLayer(clusterCountLayerId)) m.removeLayer(clusterCountLayerId);
+          m.addLayer({
+            id: clusterCountLayerId,
+            type: 'symbol',
+            source: sourceId,
+            filter: ['has', 'point_count'],
+            layout: {
+              'text-field': ['get', 'point_count_abbreviated'],
+              'text-size': 11,
+            },
+          });
+
+          if (m.getLayer(layerId)) m.removeLayer(layerId);
+          const compiled = compileLayerStyle(layer, { index: idx });
+          m.addLayer({
+            id: layerId,
+            type: compiled.type as any,
+            source: sourceId,
+            filter: ['!', ['has', 'point_count']],
+            paint: compiled.paint as any,
+            layout: compiled.layout as any,
+          });
+
+          if (compiled.label) {
+            const labelLayerId = `${layerId}-labels`;
+            if (m.getLayer(labelLayerId)) m.removeLayer(labelLayerId);
+            m.addLayer({
+              id: labelLayerId,
+              type: compiled.label.type as any,
+              source: sourceId,
+              filter: ['!', ['has', 'point_count']],
+              layout: compiled.label.layout as any,
+              paint: compiled.label.paint as any,
+            });
+          }
+
+          m.on('click', clusterLayerId, handleFeatureClick);
+          m.on('click', layerId, handleFeatureClick);
+
+          m.on('mousemove', clusterLayerId, () => { m.getCanvas().style.cursor = 'pointer'; });
+          m.on('mouseleave', clusterLayerId, () => { m.getCanvas().style.cursor = ''; });
+          m.on('mousemove', layerId, (e) => {
+            const feature = e.features?.[0];
+            const featureId = feature ? featureIdFromMapFeature(feature) : null;
+            if (featureId) setHoveredFeature(layer.id, featureId);
+            m.getCanvas().style.cursor = 'pointer';
+          });
+          m.on('mouseleave', layerId, () => {
+            setHoveredFeature(layer.id, null);
+            m.getCanvas().style.cursor = '';
+          });
+        } else {
+          if (m.getLayer(layerId)) m.removeLayer(layerId);
+          const compiled = compileLayerStyle(layer, { index: idx });
+          m.addLayer({
+            id: layerId,
+            type: compiled.type as any,
+            source: sourceId,
+            paint: compiled.paint as any,
+            layout: compiled.layout as any,
+          });
+
+          if (compiled.label) {
+            const labelLayerId = `${layerId}-labels`;
+            if (m.getLayer(labelLayerId)) m.removeLayer(labelLayerId);
+            m.addLayer({
+              id: labelLayerId,
+              type: compiled.label.type as any,
+              source: sourceId,
+              layout: compiled.label.layout as any,
+              paint: compiled.label.paint as any,
+            });
+          }
+
+          m.on('click', layerId, handleFeatureClick);
+
+          m.on('mousemove', layerId, (e) => {
+            const feature = e.features?.[0];
+            const featureId = feature ? featureIdFromMapFeature(feature) : null;
+            if (featureId) setHoveredFeature(layer.id, featureId);
+            m.getCanvas().style.cursor = 'pointer';
+          });
+          m.on('mouseleave', layerId, () => {
+            setHoveredFeature(layer.id, null);
+            m.getCanvas().style.cursor = '';
+          });
+        }
+
+        m.setLayoutProperty(layerId, 'visibility', layer.visible ? 'visible' : 'none');
+        const layerFilters = visualAnalytics.layers[layer.id]?.filters || [];
+        m.setFilter(layerId, compileMapFilter(layerFilters) as any);
 
         if (layer.sourceNodeId) {
           nodeLayerMap.current.set(layer.sourceNodeId, layer.id);
@@ -186,7 +360,43 @@ export const MapView = () => {
     };
 
     syncLayers();
-  }, [mapLayers, selectedBasemapId, setSelectedNodeId, selectLayer]);
+  }, [mapLayers, selectedBasemapId, setSelectedNodeId, selectLayer, setHoveredFeature, toggleSelectedFeature]);
+
+  useEffect(() => {
+    const m = map.current;
+    if (!m) return;
+
+    mapLayers.forEach((layer) => {
+      const sourceId = `input-source-${layer.id}`;
+      if (!m.getSource(sourceId)) return;
+
+      const previous = previousFeatureState.current.get(layer.id) || { selectedFeatureIds: new Set<string>() };
+      const current = visualAnalytics.layers[layer.id] || { selectedFeatureIds: [] };
+      const nextSelected = new Set(current.selectedFeatureIds);
+
+      const setState = (featureId: string | undefined, state: Record<string, boolean>) => {
+        if (!featureId) return;
+        try {
+          m.setFeatureState({ source: sourceId, id: featureId }, state);
+        } catch {
+          // The source can be between style reloads; the next sync will apply the state.
+        }
+      };
+
+      setState(previous.hoveredFeatureId, { hover: false });
+      previous.selectedFeatureIds.forEach((featureId) => {
+        if (!nextSelected.has(featureId)) setState(featureId, { selected: false });
+      });
+
+      setState(current.hoveredFeatureId, { hover: true });
+      nextSelected.forEach((featureId) => setState(featureId, { selected: true }));
+
+      previousFeatureState.current.set(layer.id, {
+        hoveredFeatureId: current.hoveredFeatureId,
+        selectedFeatureIds: nextSelected,
+      });
+    });
+  }, [mapLayers, visualAnalytics]);
 
   // Layer state → visibility, opacity, and highlight
   useEffect(() => {
@@ -199,27 +409,44 @@ export const MapView = () => {
     mapLayers.forEach((layer) => {
       const layerId = `input-layer-${layer.id}`;
       if (!m.getLayer(layerId)) return;
+      const isInactive = Boolean(activeLayerId && layer.id !== activeLayerId);
+
       m.setLayoutProperty(layerId, 'visibility', layer.visible ? 'visible' : 'none');
+      m.setFilter(layerId, compileMapFilter(visualAnalytics.layers[layer.id]?.filters || []) as any);
 
       const isSelected = layer.id === activeLayerId;
+      const compiled = compileLayerStyle(layer, {
+        index: mapLayers.indexOf(layer),
+        selected: isSelected,
+        inactive: isInactive,
+      });
 
-      const geomType = layer.geojson.features?.[0]?.geometry?.type || 'Point';
-      const isPoint = geomType.includes('Point');
-      const isLine = geomType.includes('Line');
-      const baseOpacity = layer.visible ? layer.opacity : 0;
+      Object.entries(compiled.paint).forEach(([key, value]) => {
+        m.setPaintProperty(layerId, key, value as any);
+      });
 
-      if (isSelected) {
-        m.setPaintProperty(layerId, isPoint ? 'circle-opacity' : isLine ? 'line-opacity' : 'fill-opacity', isPoint || isLine ? baseOpacity : Math.max(0.05, baseOpacity * 0.5));
-        if (isPoint) m.setPaintProperty(layerId, 'circle-stroke-opacity', Math.min(1, baseOpacity + 0.15));
-        m.setPaintProperty(layerId, isPoint ? 'circle-radius' : isLine ? 'line-width' : 'fill-outline-color', isPoint ? 6 : isLine ? 3 : '#000');
-      } else {
-        const inactiveOpacity = activeLayerId ? Math.min(0.2, baseOpacity * 0.4) : baseOpacity;
-        m.setPaintProperty(layerId, isPoint ? 'circle-opacity' : isLine ? 'line-opacity' : 'fill-opacity', isPoint ? inactiveOpacity : isLine ? inactiveOpacity : Math.max(0.05, inactiveOpacity * 0.35));
-        if (isPoint) m.setPaintProperty(layerId, 'circle-stroke-opacity', Math.min(1, inactiveOpacity + 0.15));
-        m.setPaintProperty(layerId, isPoint ? 'circle-radius' : isLine ? 'line-width' : 'fill-outline-color', isPoint ? 4 : isLine ? 2 : undefined);
+      const clusterLayerId = `${layerId}-clusters`;
+      const clusterCountLayerId = `${layerId}-cluster-count`;
+      const labelLayerId = `${layerId}-labels`;
+      const clusterOpacity = isInactive ? Math.min(0.25, layer.opacity * 0.35) : layer.opacity;
+
+      if (m.getLayer(clusterLayerId)) {
+        m.setLayoutProperty(clusterLayerId, 'visibility', layer.visible ? 'visible' : 'none');
+        m.setPaintProperty(clusterLayerId, 'circle-opacity', clusterOpacity);
+      }
+
+      if (m.getLayer(clusterCountLayerId)) {
+        m.setLayoutProperty(clusterCountLayerId, 'visibility', layer.visible ? 'visible' : 'none');
+        m.setPaintProperty(clusterCountLayerId, 'text-opacity', clusterOpacity);
+      }
+
+      if (m.getLayer(labelLayerId)) {
+        m.setLayoutProperty(labelLayerId, 'visibility', layer.visible ? 'visible' : 'none');
+        m.setPaintProperty(labelLayerId, 'text-opacity', isInactive ? Math.min(0.2, layer.opacity * 0.4) : layer.opacity);
+        m.setPaintProperty(labelLayerId, 'text-halo-width', isInactive ? 1.5 : compiled.label?.paint['text-halo-width'] ?? 1.5);
       }
     });
-  }, [selectedNodeId, selectedLayerId, mapLayers]);
+  }, [selectedNodeId, selectedLayerId, mapLayers, visualAnalytics]);
 
   useEffect(() => {
     const m = map.current;
@@ -235,6 +462,7 @@ export const MapView = () => {
   return (
     <div className="w-full h-full relative">
       <div ref={mapContainer} className="w-full h-full" />
+      <LegendControl legends={visibleLegends} />
     </div>
   );
 };

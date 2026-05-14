@@ -4,6 +4,17 @@ import { useStore } from '../store/useStore';
 import { callOpenRouter } from '../utils/openrouter';
 import { duckdbService } from '../services/duckdb';
 import { cn } from '../utils/cn';
+import {
+  buildCategoricalVisualisation,
+  buildChoroplethVisualisation,
+  buildGraduatedSymbolVisualisation,
+  buildHeatmapVisualisation,
+  buildLabelVisualisation,
+  buildDotDensityVisualisation,
+  buildLegend,
+  profileGeoJsonField,
+} from '../utils/classification';
+import { getPalette } from '../utils/palettes';
 
 export const Chat = () => {
   const {
@@ -15,6 +26,9 @@ export const Chat = () => {
     removeNode,
     duplicateNode,
     addMapLayer,
+    updateLayerVisualisation,
+    mapLayers,
+    selectedLayerId,
     nodeSchemas
   } = useStore();
   const [input, setInput] = useState('');
@@ -63,6 +77,47 @@ export const Chat = () => {
         });
 
         switch (toolName) {
+          case 'add_visualisation_node': {
+            const nodeId = args.id || `visualisation-${Date.now()}`;
+            const config = {
+              kind: args.kind || 'choropleth',
+              field: args.field || '',
+              method: args.method || 'quantile',
+              classCount: args.classCount || args.class_count || 5,
+              paletteId: args.paletteId || args.palette || 'teal',
+            };
+            addNode({
+              id: nodeId,
+              type: 'visualisation',
+              position: args.position || { x: 420, y: 180 },
+              data: {
+                label: args.label || 'Visualisation',
+                type: 'visualisation',
+                config,
+              },
+            });
+            if (args.source_id) {
+              onConnect({
+                source: args.source_id,
+                target: nodeId,
+                targetHandle: 'input-0',
+                type: 'smoothstep',
+              } as any);
+            }
+            if (args.target_id) {
+              onConnect({
+                source: nodeId,
+                target: args.target_id,
+                targetHandle: 'input-0',
+                type: 'smoothstep',
+              } as any);
+            }
+            addChatMessage('assistant', `Added visualisation node (${nodeId})`, {
+              kind: 'tool_result',
+              summary: `${config.kind}${config.field ? ` · ${config.field}` : ''}`,
+            });
+            break;
+          }
           case 'add_node': {
             const nodeId = args.id || `node-${Date.now()}`;
             addNode({
@@ -70,7 +125,7 @@ export const Chat = () => {
               type: args.type,
               position: args.position || { x: 300, y: 150 },
               data: {
-                label: args.label || (args.type === 'analysis' ? 'Spatial Op' : args.type === 'attribute' ? 'Attribute Op' : args.type === 'input' ? 'Data Source' : 'Map Output'),
+                label: args.label || (args.type === 'analysis' ? 'Spatial Op' : args.type === 'attribute' ? 'Attribute Op' : args.type === 'input' ? 'Data Source' : args.type === 'visualisation' ? 'Visualisation' : 'Map Output'),
                 type: args.type,
                 config: args.config || {},
               },
@@ -182,6 +237,81 @@ export const Chat = () => {
             } catch (err: any) {
               addChatMessage('assistant', `H3 error: ${err.message}`, { kind: 'tool_result', summary: 'H3 failed' });
             }
+            break;
+          }
+          case 'style_layer': {
+            const layerId = args.layerId || args.layer_id || selectedLayerId;
+            const layer = mapLayers.find((item) => item.id === layerId);
+            if (!layer) {
+              addChatMessage('assistant', 'No target layer found for styling.', { kind: 'tool_result', summary: 'Style failed' });
+              break;
+            }
+
+            const field = args.field;
+            if (!field) {
+              addChatMessage('assistant', 'No field provided for layer styling.', { kind: 'tool_result', summary: 'Style failed' });
+              break;
+            }
+
+            const profile = profileGeoJsonField(layer.geojson.features, field);
+            const kind = args.kind || args.type || (profile.kind === 'numeric' ? 'choropleth' : 'categorical');
+
+            if (kind === 'choropleth' && profile.kind === 'numeric') {
+              const visualisation = buildChoroplethVisualisation({
+                field,
+                profile,
+                method: args.method || 'quantile',
+                classCount: args.classCount || args.class_count || 5,
+                palette: getPalette(args.palette || 'teal').colors,
+              });
+              updateLayerVisualisation(layer.id, visualisation, buildLegend(visualisation));
+              addChatMessage('assistant', `Styled "${layer.name}" as a choropleth`, { kind: 'tool_result', summary: `${field} · ${visualisation.method}` });
+              break;
+            }
+
+            if (kind === 'categorical' && profile.kind === 'categorical') {
+              const visualisation = buildCategoricalVisualisation({
+                field,
+                profile,
+                topN: args.topN || args.top_n || 8,
+              });
+              updateLayerVisualisation(layer.id, visualisation, buildLegend(visualisation));
+              addChatMessage('assistant', `Styled "${layer.name}" by category`, { kind: 'tool_result', summary: `${field} · categories` });
+              break;
+            }
+
+            if (kind === 'graduated_symbol' && profile.kind === 'numeric') {
+              const visualisation = buildGraduatedSymbolVisualisation({ field, profile });
+              updateLayerVisualisation(layer.id, visualisation, buildLegend(visualisation));
+              addChatMessage('assistant', `Styled "${layer.name}" with graduated symbols`, { kind: 'tool_result', summary: `${field} · symbols` });
+              break;
+            }
+
+            if (kind === 'heatmap') {
+              const visualisation = buildHeatmapVisualisation({
+                field: profile?.kind === 'numeric' ? field : undefined,
+                palette: getPalette(args.palette || 'teal').colors,
+              });
+              updateLayerVisualisation(layer.id, visualisation, buildLegend(visualisation));
+              addChatMessage('assistant', `Styled "${layer.name}" as a heatmap`, { kind: 'tool_result', summary: `heatmap` });
+              break;
+            }
+
+            if (kind === 'label') {
+              const visualisation = buildLabelVisualisation({ field });
+              updateLayerVisualisation(layer.id, visualisation, buildLegend(visualisation));
+              addChatMessage('assistant', `Added labels to "${layer.name}"`, { kind: 'tool_result', summary: `${field} · labels` });
+              break;
+            }
+
+            if (kind === 'dot_density' && profile.kind === 'numeric') {
+              const visualisation = buildDotDensityVisualisation({ field });
+              updateLayerVisualisation(layer.id, visualisation, buildLegend(visualisation));
+              addChatMessage('assistant', `Applied dot density to "${layer.name}"`, { kind: 'tool_result', summary: `${field} · dots` });
+              break;
+            }
+
+            addChatMessage('assistant', `Field "${field}" is not compatible with ${kind}.`, { kind: 'tool_result', summary: 'Style failed' });
             break;
           }
           default: {
