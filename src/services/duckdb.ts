@@ -70,6 +70,12 @@ class DuckDBService {
         return name;
     }
 
+    async registerFileHandle(name: string, file: File) {
+        if (!this.db) throw new Error('DuckDB not initialized');
+        await this.db.registerFileHandle(name, file, duckdb.DuckDBDataProtocol.BROWSER_FILEREADER, true);
+        return name;
+    }
+
     async registerFileUrl(name: string, url: string) {
         if (!this.db) throw new Error('DuckDB not initialized');
         // Use DuckDB Wasm's native URL registration

@@ -123,7 +123,7 @@ export const VisualisationPanel = () => {
   const fields = useMemo(() => fieldNamesForLayer(selectedLayer), [selectedLayer]);
   const geometryKind = useMemo(() => selectedLayer ? geometryKindForLayer(selectedLayer) : null, [selectedLayer]);
   const [field, setField] = useState('');
-  const [kind, setKind] = useState<'choropleth' | 'categorical' | 'graduated_symbol' | 'heatmap' | 'label' | 'dot_density'>('choropleth');
+  const [kind, setKind] = useState<'simple' | 'choropleth' | 'categorical' | 'graduated_symbol' | 'heatmap' | 'label' | 'dot_density'>('simple');
   const [method, setMethod] = useState<'equal_interval' | 'quantile'>('quantile');
   const [classCount, setClassCount] = useState(5);
   const [paletteId, setPaletteId] = useState(SEQUENTIAL_PALETTES[0].id);
@@ -153,6 +153,13 @@ export const VisualisationPanel = () => {
     }
 
     const vis = selectedLayer.visualisation;
+    if (vis?.kind === 'simple') {
+      setKind('simple');
+      setField(fields[0] || '');
+      setTemporalField(fields[0] || '');
+      return;
+    }
+
     if (vis?.kind === 'choropleth' || vis?.kind === 'categorical' || vis?.kind === 'graduated_symbol' || vis?.kind === 'heatmap' || vis?.kind === 'label' || vis?.kind === 'dot_density') {
       setKind(vis.kind);
       setField('field' in vis && vis.field ? vis.field : fields[0] || '');
@@ -163,6 +170,7 @@ export const VisualisationPanel = () => {
       return;
     }
 
+    setKind('simple');
     setField(fields[0] || '');
     setTemporalField(fields[0] || '');
   }, [selectedLayer?.id, fields]);
@@ -170,7 +178,8 @@ export const VisualisationPanel = () => {
   const profile = useMemo(() => {
     if (!selectedLayer || !field) return null;
     return profileGeoJsonField(selectedLayer.geojson.features, field);
-  }, [selectedLayer, field]);
+  }, [selectedLayer?.geojson, field]);
+  const hasActiveStyle = Boolean(selectedLayer?.visualisation || selectedLayer?.legend);
 
   const canApply = Boolean(
     selectedLayer &&
@@ -186,7 +195,16 @@ export const VisualisationPanel = () => {
   const [dotDensityGenerating, setDotDensityGenerating] = useState(false);
 
   useEffect(() => {
-    if (!selectedLayer || !canApply || !profile) return;
+    if (!selectedLayer) return;
+
+    if (kind === 'simple') {
+      if (hasActiveStyle) {
+        clearLayerVisualisation(selectedLayer.id);
+      }
+      return;
+    }
+
+    if (!canApply || !profile) return;
 
     if (kind === 'dot_density' && profile.kind === 'numeric') {
       const visualisation = buildDotDensityVisualisation({ field });
@@ -250,7 +268,7 @@ export const VisualisationPanel = () => {
       const visualisation = buildLabelVisualisation({ field });
       updateLayerVisualisation(selectedLayer.id, visualisation, buildLegend(visualisation));
     }
-  }, [selectedLayer?.id, field, kind, method, classCount, paletteId, canApply, profile, updateLayerVisualisation]);
+  }, [selectedLayer?.id, hasActiveStyle, field, kind, method, classCount, paletteId, canApply, profile, updateLayerVisualisation, clearLayerVisualisation]);
 
   const activeLegend = selectedLayer?.legend;
   const activeFilters = selectedLayer ? visualAnalytics.layers[selectedLayer.id]?.filters || [] : [];
@@ -364,6 +382,7 @@ export const VisualisationPanel = () => {
                   onChange={(event) => setKind(event.target.value as typeof kind)}
                   className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[10px] font-semibold text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
                 >
+                  <option value="simple">Raw geometry</option>
                   <option value="choropleth">Choropleth</option>
                   <option value="categorical">Categories</option>
                   {geometryKind === 'point' && <option value="graduated_symbol">Symbols</option>}
@@ -386,7 +405,7 @@ export const VisualisationPanel = () => {
               </label>
             </div>
 
-            {(kind === 'choropleth' || kind === 'heatmap') && (
+            {kind !== 'simple' && (kind === 'choropleth' || kind === 'heatmap') && (
               <div className="grid grid-cols-3 gap-2">
                 {kind === 'choropleth' && <label className="space-y-1">
                   <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Method</span>
@@ -425,7 +444,7 @@ export const VisualisationPanel = () => {
               </div>
             )}
 
-            {kind === 'dot_density' && (
+            {kind !== 'simple' && kind === 'dot_density' && (
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2">
                 <div className="grid grid-cols-2 gap-2">
                   <label className="space-y-1">
@@ -554,7 +573,7 @@ export const VisualisationPanel = () => {
               </div>
             )}
 
-            <div className={cn('rounded-lg border p-3', canApply ? 'border-slate-200 bg-slate-50' : 'border-amber-200 bg-amber-50')}>
+            {kind !== 'simple' && <div className={cn('rounded-lg border p-3', canApply ? 'border-slate-200 bg-slate-50' : 'border-amber-200 bg-amber-50')}>
               <div className="mb-2 flex items-center gap-2 text-[9px] font-bold uppercase tracking-widest text-slate-400">
                 <BarChart3 className="h-3.5 w-3.5" />
                 Distribution
@@ -579,7 +598,7 @@ export const VisualisationPanel = () => {
                           : 'Choose a categorical field.'}
                 </div>
               )}
-            </div>
+            </div>}
 
             <div className="rounded-lg border border-slate-200 bg-white p-3">
               <div className="mb-2 text-[9px] font-bold uppercase tracking-widest text-slate-400">Temporal Filter</div>

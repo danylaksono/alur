@@ -1,7 +1,6 @@
 import { Handle, Position } from '@xyflow/react';
-import { Download, Eye, FileArchive, Map as MapIcon, Settings2 } from 'lucide-react';
+import { Download, Eye, FileArchive, Settings2 } from 'lucide-react';
 import { useStore } from '../../store/useStore';
-import { NodeSchema } from './NodeSchema';
 import { buildUpToSQL } from '../../utils/workflowEngine';
 import { duckdbService } from '../../services/duckdb';
 import { FlowNodeShell, inputClass, nodeHandleClass, selectClass } from './FlowNodeShell';
@@ -170,9 +169,6 @@ export const OutputNode = ({ data, id }: any) => {
           </button>
         )}
       </div>
-
-      <NodeSchema nodeId={id} />
-
       <Handle type="target" position={Position.Left} className={nodeHandleClass('emerald')} />
     </FlowNodeShell>
   );

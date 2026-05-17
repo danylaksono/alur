@@ -215,7 +215,7 @@ export const compileLayerStyle = (
 
   paint[colorPaintKey(geometryKind)] = withInteractionColor(visualisation?.kind === 'simple' ? visualisation.color : simpleColor);
   paint[opacityPaintKey(geometryKind)] = geometryKind === 'polygon'
-    ? Math.max(0.05, inactiveOpacity * 0.35)
+    ? Math.max(0.25, inactiveOpacity * 0.65)
     : inactiveOpacity;
 
   return { type, paint };

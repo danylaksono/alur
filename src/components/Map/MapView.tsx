@@ -87,7 +87,7 @@ const compileMapFilter = (filters: VisualFilter[]) => {
     return rangeExpression;
   }).filter(Boolean);
 
-  if (!expressions.length) return undefined;
+  if (!expressions.length) return null;
   return expressions.length === 1 ? expressions[0] : ['all', ...expressions];
 };
 
@@ -451,12 +451,24 @@ export const MapView = () => {
   useEffect(() => {
     const m = map.current;
     if (!m || !layerFocusRequest) return;
-    const layer = useStore.getState().mapLayers.find((item) => item.id === layerFocusRequest.layerId);
-    if (!layer) return;
-    const bounds = getLayerBounds(layer.geojson);
-    if (bounds) {
-      m.fitBounds(bounds, { padding: 50, duration: 600, maxZoom: 16 });
+
+    const fitFocusedLayer = () => {
+      const layer = useStore.getState().mapLayers.find((item) => item.id === layerFocusRequest.layerId);
+      if (!layer) return;
+      const bounds = getLayerBounds(layer.geojson);
+      if (bounds) {
+        m.fitBounds(bounds, { padding: 50, duration: 600, maxZoom: 16 });
+      }
+    };
+
+    if (!m.isStyleLoaded()) {
+      m.once('idle', fitFocusedLayer);
+      return () => {
+        m.off('idle', fitFocusedLayer);
+      };
     }
+
+    fitFocusedLayer();
   }, [layerFocusRequest]);
 
   return (

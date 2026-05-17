@@ -1,4 +1,4 @@
-# GeoModeler Pro
+# YMNNGIS
 
 **You Might Not Need Desktop GIS.** A browser-based spatial analysis and interactive visualisation platform powered by DuckDB-Wasm and MapLibre GL.
 
@@ -98,9 +98,9 @@ All styles are compiled to native MapLibre expressions — no hand-written JSON.
 - **Stable feature IDs** — `_ymn_feature_id` assigned on layer creation, used for cross-component linking
 
 ### AI Copilot
-- Natural-language workflow creation ("add a 500m buffer around london wards")
-- One-shot map styling ("style the need layer as a five-class quantile choropleth")
-- H3 hexbin generation ("create H3 cells at resolution 7 covering camden")
+- Natural-language workflow creation (“add a 500m buffer around london wards”)
+- One-shot map styling (“style the need layer as a five-class quantile choropleth”)
+- H3 hexbin generation (“create H3 cells at resolution 7 covering camden”)
 - All 9 chat tools write directly to the Zustand store — map updates immediately
 
 ### Layer Management

@@ -3,7 +3,6 @@ import { Handle, Position } from '@xyflow/react';
 import { Zap } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { spatialFunctions, spatialFunctionsByCategory } from '../../utils/spatialFunctions';
-import { NodeSchema } from './NodeSchema';
 import { cn } from '../../utils/cn';
 import { FlowNodeShell, fieldLabelClass, inputClass, nodeHandleClass, selectClass } from './FlowNodeShell';
 
@@ -125,9 +124,6 @@ export const AnalysisNode = ({ data, id }: any) => {
             {errors.map((err, i) => <div key={i}>{err}</div>)}
           </div>
         )}
-
-      <NodeSchema nodeId={id} />
-
       <div className="absolute -left-1.5 top-1/2 -translate-y-1/2 flex flex-col gap-6">
         <div className="relative">
           <Handle type="target" id="input-0" position={Position.Left} className={nodeHandleClass('purple')} />

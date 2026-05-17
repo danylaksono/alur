@@ -3,7 +3,6 @@ import { Handle, Position } from '@xyflow/react';
 import { Layers } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { spatialFunctions } from '../../utils/spatialFunctions';
-import { NodeSchema } from './NodeSchema';
 import { cn } from '../../utils/cn';
 import { FlowNodeShell, fieldLabelClass, inputClass, nodeHandleClass, selectClass } from './FlowNodeShell';
 
@@ -91,9 +90,6 @@ export const AggregateNode = ({ data, id }: any) => {
             placeholder="e.g. city_name"
           />
         </div>
-
-      <NodeSchema nodeId={id} />
-
       <Handle type="target" position={Position.Left} className={nodeHandleClass('orange')} />
       <Handle type="source" position={Position.Right} className={nodeHandleClass('orange')} />
     </FlowNodeShell>

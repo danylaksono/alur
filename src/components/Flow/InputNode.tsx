@@ -3,13 +3,13 @@ import { Handle, Position } from '@xyflow/react';
 import { Database, Upload, FileJson, Loader2, Sparkles } from 'lucide-react';
 import { duckdbService } from '../../services/duckdb';
 import { useStore } from '../../store/useStore';
-import { NodeSchema } from './NodeSchema';
 import { FlowNodeShell, nodeHandleClass } from './FlowNodeShell';
 
 export const InputNode = ({ data, id }: any) => {
   const updateNode = useStore((s) => s.updateNode);
   const addChatMessage = useStore((s) => s.addChatMessage);
   const addMapLayer = useStore((s) => s.addMapLayer);
+  const focusLayer = useStore((s) => s.focusLayer);
   const [loading, setLoading] = useState(false);
 
   const loadAndRegister = async (
@@ -52,6 +52,7 @@ export const InputNode = ({ data, id }: any) => {
 
     if (layerGeoJSON) {
       addMapLayer({ id: tableName, name: fileName, geojson: layerGeoJSON, sourceNodeId: id, sourceKind: 'input' });
+      focusLayer(tableName);
       addChatMessage(
         'system',
         `✅ Loaded ${layerGeoJSON.features.length.toLocaleString()} features from ${fileName} onto the map.`,
@@ -70,10 +71,10 @@ export const InputNode = ({ data, id }: any) => {
 
     setLoading(true);
     try {
-      const buffer = new Uint8Array(await file.arrayBuffer());
       const normalizedFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
       const filePath = `${Date.now()}_${normalizedFileName}`;
-      await loadAndRegister(buffer, file.name, filePath);
+      await duckdbService.registerFileHandle(filePath, file);
+      await loadAndRegister(new Uint8Array(), file.name, filePath, true);
     } catch (err: any) {
       addChatMessage('system', `Error loading file: ${err.message}`);
     } finally {
@@ -87,7 +88,8 @@ export const InputNode = ({ data, id }: any) => {
     try {
       const fileName = 'need_london.parquet';
       const url = new URL('/need_london.parquet', window.location.origin).href;
-      await loadAndRegister(new Uint8Array(), fileName, url, true);
+      await duckdbService.registerFileUrl(fileName, url);
+      await loadAndRegister(new Uint8Array(), fileName, fileName, true);
     } catch (err: any) {
       addChatMessage('system', `Error loading sample data: ${err.message}`);
     } finally {
@@ -133,19 +135,16 @@ export const InputNode = ({ data, id }: any) => {
             />
           </label>
           {/* Load bundled sample */}
-          <button
+          {/* <button
             type="button"
             onClick={handleLoadSample}
             className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg border border-blue-200 bg-blue-50 text-[10px] font-semibold text-blue-600 hover:bg-blue-100 transition-colors"
           >
             <Sparkles className="w-3 h-3" />
             Load Sample (London NEED)
-          </button>
+          </button> */}
         </div>
       )}
-
-      <NodeSchema nodeId={id} />
-
       <Handle type="source" position={Position.Right} className={nodeHandleClass('blue')} />
     </FlowNodeShell>
   );

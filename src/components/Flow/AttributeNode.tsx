@@ -1,7 +1,6 @@
 import { Handle, Position } from '@xyflow/react';
 import { Calculator } from 'lucide-react';
 import { useStore } from '../../store/useStore';
-import { NodeSchema } from './NodeSchema';
 import { FlowNodeShell, fieldLabelClass, inputClass, nodeHandleClass } from './FlowNodeShell';
 import { cn } from '../../utils/cn';
 
@@ -53,9 +52,6 @@ export const AttributeNode = ({ data, id }: any) => {
             placeholder="new_value"
           />
         </div>
-
-      <NodeSchema nodeId={id} />
-
       <Handle type="target" position={Position.Left} className={nodeHandleClass('slate')} />
       <Handle type="source" position={Position.Right} className={nodeHandleClass('slate')} />
     </FlowNodeShell>

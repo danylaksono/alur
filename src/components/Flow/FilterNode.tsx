@@ -2,7 +2,6 @@ import { useMemo } from 'react';
 import { Handle, Position } from '@xyflow/react';
 import { Filter } from 'lucide-react';
 import { useStore } from '../../store/useStore';
-import { NodeSchema } from './NodeSchema';
 import { cn } from '../../utils/cn';
 import { FlowNodeShell, fieldLabelClass, inputClass, nodeHandleClass } from './FlowNodeShell';
 
@@ -77,9 +76,6 @@ export const FilterNode = ({ data, id }: any) => {
           />
           {error && <div className="text-[9px] text-red-500 mt-1 font-medium">{error}</div>}
         </div>
-
-      <NodeSchema nodeId={id} />
-
       <Handle type="target" position={Position.Left} className={nodeHandleClass('amber')} />
       <Handle type="source" position={Position.Right} className={nodeHandleClass('amber')} />
     </FlowNodeShell>

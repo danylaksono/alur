@@ -1,4 +1,4 @@
-# GeoModeler Pro: Production Roadmap
+# YMNNGIS: Production Roadmap
 
 This document outlines the architectural evolution and feature roadmap for GeoModeler Pro, transitioning from a prototype to a production-grade GIS processing modeler.
 
@@ -6,7 +6,7 @@ This document outlines the architectural evolution and feature roadmap for GeoMo
 
 ---
 
-## Phase 1: Power & Extensibility (The "Core" Engine) [DONE]
+## Phase 1: Power & Extensibility (The “Core” Engine) [DONE]
 **Goal**: Transition from linear pipelines to a true DAG (Directed Acyclic Graph) modeler capable of complex spatial operations.
 
 ### 1.1 Multi-Input Nodes [DONE]
@@ -17,7 +17,7 @@ This document outlines the architectural evolution and feature roadmap for GeoMo
     - [x] Update `llmToolDefinitions.ts` to allow the LLM to specify source/target relationships for multi-input operations.
 
 ### 1.2 Spatial Aggregations [DONE]
-- **Requirement**: Summarize spatial data (e.g., "Dissolve boundaries," "Sum area by category").
+- **Requirement**: Summarize spatial data (e.g., “Dissolve boundaries,” “Sum area by category”).
 - **Implementation**:
     - [x] Add `ST_Union_Agg` and `ST_Envelope_Agg` support.
     - [x] Introduce grouping logic in a new `AggregateNode`.
@@ -29,8 +29,8 @@ This document outlines the architectural evolution and feature roadmap for GeoMo
 
 ---
 
-## Phase 1: Power & Extensibility (The "Core" Engine) [DONE]
-...
+## Phase 1: Power & Extensibility (The “Core” Engine) [DONE]
+…
 ## Phase 2: Professional Data Handling [DONE]
 **Goal**: Provide industry-standard data inspection and portability.
 
@@ -38,7 +38,7 @@ This document outlines the architectural evolution and feature roadmap for GeoMo
 - **Requirement**: High-performance tabular view for data inspection.
 - **Implementation**:
     - [x] Integrate `@tanstack/react-table`.
-    - [x] Implement a "Preview Panel" that updates based on the selected node in the Flow.
+    - [x] Implement a “Preview Panel” that updates based on the selected node in the Flow.
     - [x] Add node selection state in Zustand store.
 
 ### 2.2 Data Export Service [DONE]
@@ -51,7 +51,7 @@ This document outlines the architectural evolution and feature roadmap for GeoMo
 ---
 
 ## Phase 3: Advanced UX & LLM Intelligence
-**Goal**: Create a seamless "AI-First" modeling experience.
+**Goal**: Create a seamless “AI-First” modeling experience.
 
 ### 3.1 Metadata-Aware Nodes [DONE]
 - **Requirement**: Nodes should show available columns/types.
@@ -62,7 +62,7 @@ This document outlines the architectural evolution and feature roadmap for GeoMo
 ### 3.2 LLM Planner & Self-Correction [DONE]
 - **Requirement**: Complex workflow generation and auto-fixing of SQL errors.
 - **Implementation**:
-    - [x] Update system prompt with "Chain of Thought" instructions.
-    - [x] Inject real-time schema metadata into the AI context for "Schema Awareness".
+    - [x] Update system prompt with “Chain of Thought” instructions.
+    - [x] Inject real-time schema metadata into the AI context for “Schema Awareness”.
     - [x] Create a feedback loop where DuckDB errors are passed back to the LLM via chat history for self-correction.
 

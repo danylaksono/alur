@@ -1,4 +1,4 @@
-# Implementation Plan: GeoModeler Pro — Browser GIS Modeler
+# Implementation Plan: YMNNGIS — Browser GIS Modeler
 
 ## Executive Summary
 
@@ -65,7 +65,7 @@ The repository has a strong foundation: DuckDB-Wasm + MapLibre GL + React Flow +
 **Target:**
 - Click a node → highlight associated map layer (dim others, zoom to bounds)
 - Click a feature on the map → highlight the corresponding node in the flow, show its attributes in the table
-- Map "Layer Stack" panel shows which node produced which layer (already partially done but no node link)
+- Map “Layer Stack” panel shows which node produced which layer (already partially done but no node link)
 **Why:** This is the single most impactful integration. GIS modelers expect to click on a result and see both the map and the model light up.
 
 ### 1.4 Map interactivity: popups, filtering, measurement
@@ -73,23 +73,23 @@ The repository has a strong foundation: DuckDB-Wasm + MapLibre GL + React Flow +
 **Target:**
 - Click feature → popup with key attribute values
 - Shift+click → select features and filter the active workflow node
-- Right-click → context menu: "Zoom to layer", "Filter selection", "Add as new Input"
+- Right-click → context menu: “Zoom to layer”, “Filter selection”, “Add as new Input”
 - Simple measurement tool (distance, area) — MapLibre has built-in helpers
 **Why:** Without click interaction, the map is a static image. A GIS modeler needs to explore data visually.
 
 ### 1.5 Step-through workflow execution
-**Current:** The only way to "run" a workflow is the "Execute Workflow" button which runs the entire DAG at once.
-**Target:** Add "Run to here" per-node execution:
+**Current:** The only way to “run” a workflow is the “Execute Workflow” button which runs the entire DAG at once.
+**Target:** Add “Run to here” per-node execution:
 - Each node shows its current status (idle/running/done/error)
 - Nodes can be executed incrementally — run upstream, inspect intermediate result on map, continue downstream
-- Cache intermediate results so re-running a downstream node doesn't recompute upstream work
-**Why:** This is how desktop GIS modelers work (e.g., QGIS Graphical Modeler's "Run selected"). Debugging a 10-node workflow is impossible if you only see the final output.
+- Cache intermediate results so re-running a downstream node doesn’t recompute upstream work
+**Why:** This is how desktop GIS modelers work (e.g., QGIS Graphical Modeler’s “Run selected”). Debugging a 10-node workflow is impossible if you only see the final output.
 
 ### 1.6 Chat can directly add layers to map
-**Current:** `add_geojson_layer` and `add_h3_layer` tool definitions exist but are stubbed with "not implemented yet" (Chat.tsx lines 123-127).
+**Current:** `add_geojson_layer` and `add_h3_layer` tool definitions exist but are stubbed with “not implemented yet” (Chat.tsx lines 123-127).
 **Target:** Implement both:
 - `add_geojson_layer` — takes raw GeoJSON, adds it as a map layer
-- `add_h3_layer` — converts point data to H3 hex bins using DuckDB's `h3` extension (install `h3` alongside `spatial`)
+- `add_h3_layer` — converts point data to H3 hex bins using DuckDB’s `h3` extension (install `h3` alongside `spatial`)
 **Why:** These are the only two LLM tools directly affecting the map. Without them, the chat cannot visualize query results.
 
 ---
@@ -102,15 +102,15 @@ The repository has a strong foundation: DuckDB-Wasm + MapLibre GL + React Flow +
 **Why:** Cleaner code, simpler per-node UI, easier to add attribute-specific features later.
 
 ### 2.2 Make `OutputNode` buttons functional
-**Current:** The "PREVIEW" and "Share" buttons in `OutputNode.tsx` have no `onClick` handlers.
+**Current:** The “PREVIEW” and “Share” buttons in `OutputNode.tsx` have no `onClick` handlers.
 **Target:**
-- PREVIEW → zoom map to this output's layer, open attribute table
+- PREVIEW → zoom map to this output’s layer, open attribute table
 - Share → copy permalink or export GeoJSON to clipboard
 **Why:** Dead buttons signal incomplete product.
 
 ### 2.3 SQL feedback loop: manual edits should update the workflow
 **Current:** When `isManualSQL` is toggled on, the SQL editor is editable. But editing the SQL has no effect on the workflow nodes/edges — it just runs independently against DuckDB.
-**Target:** After a user manually edits SQL and clicks "RUN QUERY", show a "Promote to node?" suggestion that creates a new `analysis` node with the handwritten SQL as its config, connected to the appropriate input nodes.
+**Target:** After a user manually edits SQL and clicks “RUN QUERY”, show a “Promote to node?” suggestion that creates a new `analysis` node with the handwritten SQL as its config, connected to the appropriate input nodes.
 **Why:** Bridges the gap between visual modeling and power-user SQL. Users should be able to write a custom SQL snippet and have it become part of their DAG.
 
 ### 2.4 Node config validation with inline errors
@@ -151,12 +151,12 @@ The repository has a strong foundation: DuckDB-Wasm + MapLibre GL + React Flow +
 **Why:** Performance. With large workflows (20+ nodes), unnecessary re-renders will cause React Flow jank.
 
 ### 3.3 Replace `LIMIT 5000` hardcode with pagination/virtualization
-**Current:** `workflowEngine.ts` line 212 hardcodes `LIMIT 5000`. For large datasets this misses data; for small ones it's unnecessary.
+**Current:** `workflowEngine.ts` line 212 hardcodes `LIMIT 5000`. For large datasets this misses data; for small ones it’s unnecessary.
 **Target:**
 - Configurable limit per node (in node config UI)
 - MVT (Mapbox Vector Tiles) rendering for large datasets using `ST_AsMVT` instead of `ST_AsGeoJSON`
-- Virtual scrolling in the DataTable via TanStack Table's built-in virtualization
-**Why:** Without this, the app is limited to ~5000 features. That's not "production-ready for medium GIS analysis."
+- Virtual scrolling in the DataTable via TanStack Table’s built-in virtualization
+**Why:** Without this, the app is limited to ~5000 features. That’s not “production-ready for medium GIS analysis.”
 
 ### 3.4 Add error boundaries for each panel
 **Current:** A crash in the chat, map, or flow will take down the entire app.
@@ -165,7 +165,7 @@ The repository has a strong foundation: DuckDB-Wasm + MapLibre GL + React Flow +
 
 ### 3.5 Workflow persistence (localStorage/IndexedDB)
 **Current:** Page refresh loses all work.
-**Target:** Auto-save workflow JSON to `localStorage` on every change. "Restore last session" prompt on load. Manual save/load buttons.
+**Target:** Auto-save workflow JSON to `localStorage` on every change. “Restore last session” prompt on load. Manual save/load buttons.
 **Why:** A modeler session can last hours. Losing work on refresh is unacceptable.
 
 ### 3.6 Map legend and layer controls
@@ -191,13 +191,13 @@ The repository has a strong foundation: DuckDB-Wasm + MapLibre GL + React Flow +
 
 ### 3.8 Export node-specific results (not just final)
 **Current:** `handleExport` uses `nodes[nodes.length - 1]` which is unreliable — it depends on array order, not DAG topology.
-**Target:** Right-click on any node → "Export this node's output" → choose format.
+**Target:** Right-click on any node → “Export this node’s output” → choose format.
 **Why:** Users need to export intermediate results, not just the final output.
 
 ### 3.9 Generalize `ST_Transform` handling in the workflow engine
 **Current:** `ST_Transform` is hardcoded as a special case in `workflowEngine.ts` lines 116-121. Other spatial functions that take extra parameters (e.g., `ST_ConcaveHull` with ratio) have no support.
 **Target:** Design a parameter system where node config specifies `params: Record<string, any>` and the workflow engine inserts them into the SQL template generically.
-**Why:** The current approach doesn't scale to 120+ spatial functions.
+**Why:** The current approach doesn’t scale to 120+ spatial functions.
 
 ---
 
@@ -272,16 +272,16 @@ Data Flow (Target):
 
 ---
 
-## Measurement: How we know we're done
+## Measurement: How we know we’re done
 
-The app is "production-ready for basic to medium GIS analysis with vector datasets" when:
+The app is “production-ready for basic to medium GIS analysis with vector datasets” when:
 
 1. **Load data** → A user can upload Parquet/CSV and see it on the map in <3s
 2. **Build workflow** → A user can create a 5+ node workflow without touching the chat (or with chat, either way)
 3. **Intermediate inspection** → User can click any node and see both the map result and the attribute table update
 4. **Map feedback** → Clicking a feature shows its attributes; selecting nodes zooms to the right layer
-5. **Chat integration** → "Buffer the input by 500 meters" creates the correct nodes, runs the workflow, and shows the result on the map — all in one interaction
-6. **Export** → User can export any node's output as Parquet/CSV/GeoJSON
+5. **Chat integration** → “Buffer the input by 500 meters” creates the correct nodes, runs the workflow, and shows the result on the map — all in one interaction
+6. **Export** → User can export any node’s output as Parquet/CSV/GeoJSON
 7. **Error handling** → Invalid inputs show inline errors, not alert() boxes
 8. **Persistence** → Refreshing the page restores the last workflow state
 9. **Performance** → 100K features render on map and in table without jank

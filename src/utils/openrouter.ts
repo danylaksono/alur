@@ -14,7 +14,7 @@ export const callOpenRouter = async (messages: any[]) => {
   const supportedFunctionCount = spatialFunctions.length;
 
   const systemPrompt = `
-You are an expert GIS AI Assistant for "GeoModeler Pro".
+You are an expert GIS AI Assistant for "YMNNGIS - You Might Not Need A Desktop GIS".
 Your goal is to help users build complex spatial workflows using DuckDB-Wasm Spatial SQL.
 
 ### CAPABILITIES
@@ -58,7 +58,7 @@ Use structured tool calls. Only return a tool call when a UI action is required.
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'HTTP-Referer': 'https://github.com/danylaksono/ymnngis',
-        'X-Title': 'GeoModeler Pro',
+        'X-Title': 'YMNNGIS - You Might Not Need A Desktop GIS',
         'Content-Type': 'application/json',
       },
     }
