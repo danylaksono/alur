@@ -85,8 +85,9 @@ export const InputNode = ({ data, id }: any) => {
     try {
       const normalizedFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
       const filePath = `${Date.now()}_${normalizedFileName}`;
-      await duckdbService.registerFileHandle(filePath, file);
-      await loadAndRegister(new Uint8Array(), file.name, filePath, true);
+      const fileKind = file.name.toLowerCase().endsWith('.csv') ? 'csv' : 'parquet';
+      const registeredPath = await duckdbService.registerUploadedFile(filePath, file, fileKind);
+      await loadAndRegister(new Uint8Array(), file.name, registeredPath, true);
     } catch (err: any) {
       addChatMessage('system', `Error loading file: ${err.message}`);
     } finally {

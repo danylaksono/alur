@@ -92,6 +92,9 @@ const compileMapFilter = (filters: VisualFilter[]) => {
   return expressions.length === 1 ? expressions[0] : ['all', ...expressions];
 };
 
+const optionalLayerProps = (props: Record<string, unknown>) =>
+  Object.fromEntries(Object.entries(props).filter(([, value]) => value !== undefined));
+
 export const MapView = () => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
@@ -316,8 +319,8 @@ export const MapView = () => {
             ...(sourceLayer ? { 'source-layer': sourceLayer } : {}),
             filter: ['!', ['has', 'point_count']],
             paint: compiled.paint as any,
-            layout: compiled.layout as any,
-          });
+            ...optionalLayerProps({ layout: compiled.layout as any }),
+          } as any);
 
           if (compiled.label) {
             if (m.getLayer(labelLayerId)) m.removeLayer(labelLayerId);
@@ -356,8 +359,8 @@ export const MapView = () => {
             source: sourceId,
             ...(sourceLayer ? { 'source-layer': sourceLayer } : {}),
             paint: compiled.paint as any,
-            layout: compiled.layout as any,
-          });
+            ...optionalLayerProps({ layout: compiled.layout as any }),
+          } as any);
 
           if (compiled.label) {
             if (m.getLayer(labelLayerId)) m.removeLayer(labelLayerId);
@@ -385,9 +388,11 @@ export const MapView = () => {
           });
         }
 
-        m.setLayoutProperty(layerId, 'visibility', layer.visible ? 'visible' : 'none');
-        const layerFilters = visualAnalytics.layers[layer.id]?.filters || [];
-        m.setFilter(layerId, compileMapFilter(layerFilters) as any);
+        if (m.getLayer(layerId)) {
+          m.setLayoutProperty(layerId, 'visibility', layer.visible ? 'visible' : 'none');
+          const layerFilters = visualAnalytics.layers[layer.id]?.filters || [];
+          m.setFilter(layerId, compileMapFilter(layerFilters) as any);
+        }
 
         if (layer.sourceNodeId) {
           nodeLayerMap.current.set(layer.sourceNodeId, layer.id);

@@ -32,6 +32,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { useWorkflowSync } from './hooks/useWorkflowSync';
 import { useSchemaFetcher } from './hooks/useSchemaFetcher';
 import { cn } from './utils/cn';
+import type { VisualFilter } from './types/visualAnalytics';
 
 const nodeTypes = {
   input: InputNode,
@@ -42,6 +43,9 @@ const nodeTypes = {
   visualisation: VisualisationNode,
   output: OutputNode,
 };
+
+const EMPTY_FILTERS: VisualFilter[] = [];
+const EMPTY_FEATURE_IDS: string[] = [];
 
 const qi = (name: string) => `"${name.replace(/"/g, '""')}"`;
 const escapeSql = (value: string) => value.replace(/'/g, "''");
@@ -119,8 +123,8 @@ export default function App() {
     [nodes, selectedNodeId]
   );
   const selectedLayerFilters = selectedLayer
-    ? visualAnalytics.layers[selectedLayer.id]?.filters || []
-    : [];
+    ? visualAnalytics.layers[selectedLayer.id]?.filters || EMPTY_FILTERS
+    : EMPTY_FILTERS;
   const layerAttributeResult = useMemo(
     () => {
       const features = selectedLayer?.geojson.features || [];
@@ -168,8 +172,8 @@ export default function App() {
     ? selectedLayer.name
     : selectedNode?.data.label || 'No node or layer selected';
   const selectedFeatureIds = selectedLayer
-    ? visualAnalytics.layers[selectedLayer.id]?.selectedFeatureIds || []
-    : [];
+    ? visualAnalytics.layers[selectedLayer.id]?.selectedFeatureIds || EMPTY_FEATURE_IDS
+    : EMPTY_FEATURE_IDS;
   const activeFilterKeys = selectedLayerFilters.map((filter) => {
     if (filter.kind === 'category') return `${filter.field}:category:${filter.values.join('|')}`;
     if (filter.kind === 'temporal') return `${filter.field}:temporal:${filter.start ?? ''}:${filter.end ?? ''}`;
@@ -420,6 +424,13 @@ export default function App() {
   useEffect(() => {
     const fetchNodePreview = async () => {
       if (!selectedNodeId) {
+        setPreviewData([]);
+        setAttributeTotalRows(undefined);
+        return;
+      }
+
+      const node = nodes.find((item) => item.id === selectedNodeId);
+      if (node?.data.type === 'input' && !node.data.config?.tableName) {
         setPreviewData([]);
         setAttributeTotalRows(undefined);
         return;

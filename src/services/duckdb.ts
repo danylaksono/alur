@@ -92,19 +92,71 @@ class DuckDBService {
     async registerFileBuffer(name: string, buffer: Uint8Array) {
         if (!this.db) throw new Error('DuckDB not initialized');
         await this.db.registerFileBuffer(name, buffer);
+        await this.db.flushFiles();
         return name;
     }
 
     async registerFileHandle(name: string, file: File) {
         if (!this.db) throw new Error('DuckDB not initialized');
-        await this.db.registerFileHandle(name, file, duckdb.DuckDBDataProtocol.BROWSER_FILEREADER, true);
+        await this.db.registerFileHandle(name, file, duckdb.DuckDBDataProtocol.BROWSER_FILEREADER, false);
+        await this.db.flushFiles();
         return name;
+    }
+
+    async registerUploadedFile(name: string, file: File, kind: 'parquet' | 'csv') {
+        if (!this.db) throw new Error('DuckDB not initialized');
+
+        const candidates = [name, `/${name}`];
+        const probe = async (path: string) => {
+            const escaped = escapeSqlString(path);
+            if (kind === 'parquet') {
+                await this.query(`SELECT * FROM read_parquet('${escaped}') LIMIT 0;`);
+            } else {
+                await this.query(`SELECT * FROM read_csv_auto('${escaped}') LIMIT 0;`);
+            }
+        };
+
+        const errors: string[] = [];
+
+        for (const path of candidates) {
+            try {
+                await this.db.dropFile(path).catch(() => null);
+                await this.registerFileHandle(path, file);
+                await probe(path);
+                return path;
+            } catch (err: any) {
+                errors.push(`file handle ${path}: ${err?.message || String(err)}`);
+            }
+        }
+
+        const buffer = new Uint8Array(await file.arrayBuffer());
+        for (const path of candidates) {
+            try {
+                await this.db.dropFile(path).catch(() => null);
+                await this.registerFileBuffer(path, buffer);
+                await probe(path);
+                return path;
+            } catch (err: any) {
+                errors.push(`buffer ${path}: ${err?.message || String(err)}`);
+            }
+        }
+
+        let mountedFiles = '';
+        try {
+            const files = await this.db.globFiles('*');
+            mountedFiles = ` Mounted files: ${files.map((item: any) => item.fileName || item.name || item.path || JSON.stringify(item)).join(', ') || 'none'}.`;
+        } catch {
+            mountedFiles = '';
+        }
+
+        throw new Error(`DuckDB could not read ${file.name}.${mountedFiles} ${errors.join(' | ')}`);
     }
 
     async registerFileUrl(name: string, url: string) {
         if (!this.db) throw new Error('DuckDB not initialized');
         // Use DuckDB Wasm's native URL registration
         await this.db.registerFileURL(name, url, duckdb.DuckDBDataProtocol.HTTP, false);
+        await this.db.flushFiles();
         return name;
     }
 
