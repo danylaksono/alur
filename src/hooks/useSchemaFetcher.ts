@@ -19,21 +19,19 @@ export function useSchemaFetcher() {
         for (const node of nodes) {
           try {
             const alias = cteAlias(node.id);
-            const schemaSql = `${withClause} DESCRIBE ${alias};`;
+            const schemaSql = `${withClause} SELECT * FROM ${alias} LIMIT 0;`;
             const result = await duckdbService.query(schemaSql);
-            const schema = result.toArray().map((r: any) => {
-              const raw = typeof r.toJSON === 'function' ? r.toJSON() : r;
-              return {
-                name: raw.column_name,
-                type: raw.column_type
-              };
-            });
+            const arrowSchema = result.schema;
+            const schema = arrowSchema.fields.map((field) => ({
+              name: field.name,
+              type: String(field.type),
+            }));
             setNodeSchema(node.id, schema);
-          } catch (e) {
+          } catch {
             // Node might not be ready or valid yet
           }
         }
-      } catch (e) {
+      } catch {
         // Workflow might not be ready
       }
     };

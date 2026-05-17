@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { Edge, GISNode } from './store/useStore';
+import type { Edge } from '@xyflow/react';
+import type { GISNode } from './store/useStore';
 import { useStore } from './store/useStore';
 import { buildWorkflowSQL, buildUpToSQL } from './utils/workflowEngine';
 import { resolveVisualisationForGeoJson } from './utils/visualisationResolver';
@@ -214,7 +215,7 @@ describe('integration: visualisation pipeline', () => {
 
     const resultA = buildUpToSQL(nodes, edges, 'out_a');
     expect(resultA.visualisationConfig?.kind).toBe('choropleth');
-    expect(resultA.visualisationConfig?.method).toBe('equal_interval');
+    expect((resultA.visualisationConfig as any)?.method).toBe('equal_interval');
 
     const resultB = buildUpToSQL(nodes, edges, 'out_b');
     expect(resultB.visualisationConfig?.kind).toBe('categorical');

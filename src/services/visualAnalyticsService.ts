@@ -5,6 +5,7 @@ import { compileVisualFiltersWhereClause, quoteIdentifier } from '../utils/visua
 const tableNameForLayer = (layerId: string) => `visual_layer_${layerId.replace(/[^a-zA-Z0-9_]/g, '_')}`;
 
 const registeredLayerTables = new Map<string, string>();
+const registrationLocks = new Map<string, Promise<void>>();
 
 const toRows = (layer: { id: string; geojson: GeoJSON.FeatureCollection }) =>
   layer.geojson.features.map((feature, index) => ({
@@ -28,8 +29,32 @@ export const registerLayerForAnalytics = async (layer: { id: string; geojson: Ge
   if (registeredLayerTables.get(tableName) === signature) {
     return tableName;
   }
-  await duckdbService.registerJsonRows(tableName, toRows(layer));
-  registeredLayerTables.set(tableName, signature);
+
+  const existingLock = registrationLocks.get(tableName);
+  if (existingLock) {
+    await existingLock;
+    if (registeredLayerTables.get(tableName) === signature) return tableName;
+  }
+
+  const lock = (async () => {
+    try {
+      await duckdbService.registerJsonRows(tableName, toRows(layer));
+      registeredLayerTables.set(tableName, signature);
+    } catch (err) {
+      registeredLayerTables.delete(tableName);
+      throw err;
+    } finally {
+      registrationLocks.delete(tableName);
+    }
+  })();
+
+  registrationLocks.set(tableName, lock);
+  await lock;
+
+  if (registeredLayerTables.get(tableName) !== signature) {
+    throw new Error(`Failed to register layer table ${tableName}`);
+  }
+
   return tableName;
 };
 

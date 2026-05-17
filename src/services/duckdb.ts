@@ -37,14 +37,14 @@ class DuckDBService {
         try {
             await this.conn.query(`INSTALL spatial; LOAD spatial;`);
             this.spatialLoaded = true;
-        } catch (e) {
+        } catch {
             this.spatialLoaded = false;
         }
 
         try {
             await this.conn.query(`INSTALL h3; LOAD h3;`);
             this.h3Loaded = true;
-        } catch (e) {
+        } catch {
             this.h3Loaded = false;
         }
         
@@ -82,16 +82,24 @@ class DuckDBService {
         const fileName = `${tableName}.json`;
         await this.db.registerFileText(fileName, JSON.stringify(rows));
         await this.conn.query(`DROP TABLE IF EXISTS "${tableName}";`);
-        await this.conn.insertJSONFromPath(fileName, {
-            schema: 'main',
-            name: tableName,
-        });
+        try {
+            await this.conn.insertJSONFromPath(fileName, {
+                schema: 'main',
+                name: tableName,
+            });
+        } catch (err) {
+            // Retry once after dropping again (handles race conditions)
+            await this.conn.query(`DROP TABLE IF EXISTS "${tableName}";`);
+            await this.conn.insertJSONFromPath(fileName, {
+                schema: 'main',
+                name: tableName,
+            });
+        }
     }
 
     async optimizeTable(tableName: string) {
         if (!this.conn || !this.spatialLoaded) return;
         try {
-            // Check if geometry column exists
             const info = await this.getTableSchema(tableName);
             const columns = info.toArray();
             const hasGeom = columns.some((c: any) => {
@@ -105,10 +113,14 @@ class DuckDBService {
                     return name === 'geometry' || name === 'geom';
                 }).name;
                 
-                await this.conn.query(`CREATE INDEX IF NOT EXISTS ${tableName}_spatial_idx ON "${tableName}" USING RTREE(${geomCol});`);
+                try {
+                    await this.conn.query(`CREATE INDEX IF NOT EXISTS ${tableName}_spatial_idx ON "${tableName}" USING RTREE(${geomCol});`);
+                } catch {
+                    // Index creation can fail if the table is a CTE, view, or not a base table
+                }
             }
-        } catch (e) {
-            console.warn(`Optimization failed for ${tableName}:`, e);
+        } catch {
+            // Table might not be queryable yet
         }
     }
 
