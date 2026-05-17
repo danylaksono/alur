@@ -47,15 +47,27 @@ export const InputNode = ({ data, id }: any) => {
 
     await duckdbService.optimizeTable(tableName);
 
-    addChatMessage('system', `Extracting geometry and building GeoJSON layer...`);
-    const layerGeoJSON = await duckdbService.getGeoJSONFromTable(tableName);
+    addChatMessage('system', `Preparing map preview and vector tiles...`);
+    const [layerGeoJSON, tileSource, featureCount] = await Promise.all([
+      duckdbService.getGeoJSONFromTable(tableName),
+      duckdbService.prepareMvtTileSource(tableName),
+      duckdbService.getTableFeatureCount(tableName),
+    ]);
 
     if (layerGeoJSON) {
-      addMapLayer({ id: tableName, name: fileName, geojson: layerGeoJSON, sourceNodeId: id, sourceKind: 'input' });
+      addMapLayer({
+        id: tableName,
+        name: fileName,
+        geojson: layerGeoJSON,
+        tileSource: tileSource || undefined,
+        featureCount,
+        sourceNodeId: id,
+        sourceKind: 'input',
+      });
       focusLayer(tableName);
       addChatMessage(
         'system',
-        `✅ Loaded ${layerGeoJSON.features.length.toLocaleString()} features from ${fileName} onto the map.`,
+        `✅ Loaded ${featureCount.toLocaleString()} features from ${fileName} onto the map${tileSource ? ' with vector tiles' : ''}.`,
       );
     } else {
       addChatMessage(

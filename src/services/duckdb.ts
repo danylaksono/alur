@@ -15,6 +15,31 @@ const MANUAL_BUNDLES: duckdb.DuckDBBundles = {
     },
 };
 
+export type MvtTileSource = {
+    tableName: string;
+    layerName: string;
+    geometryKind: 'point' | 'line' | 'polygon';
+    propertyColumns: string[];
+};
+
+const qi = (name: string) => `"${name.replace(/"/g, '""')}"`;
+const escapeSqlString = (value: string) => value.replace(/'/g, "''");
+const mvtTableNameFor = (tableName: string) => `__ymn_mvt_${tableName.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+const isSupportedMvtPropertyType = (type: string) => {
+    const normalized = type.toLowerCase();
+    return (
+        normalized.includes('varchar') ||
+        normalized.includes('string') ||
+        normalized.includes('char') ||
+        normalized.includes('bool') ||
+        normalized.includes('int') ||
+        normalized.includes('double') ||
+        normalized.includes('float') ||
+        normalized.includes('real') ||
+        normalized.includes('decimal')
+    );
+};
+
 class DuckDBService {
     private db: duckdb.AsyncDuckDB | null = null;
     private conn: duckdb.AsyncDuckDBConnection | null = null;
@@ -132,6 +157,73 @@ class DuckDBService {
 
     async getTableSchema(tableName: string) {
         return await this.query(`PRAGMA table_info('${tableName}');`);
+    }
+
+    private async getTableSchemaRows(tableName: string) {
+        const info = await this.query(`PRAGMA table_info('${escapeSqlString(tableName)}');`);
+        return info.toArray().map((row: any) => typeof row.toJSON === 'function' ? row.toJSON() : row);
+    }
+
+    private geometryExpression(columns: any[]) {
+        const geomColStrict = columns.find((col: any) => {
+            const type = String(col.type || '').toLowerCase();
+            return type === 'geometry';
+        });
+
+        if (geomColStrict?.name) {
+            return qi(geomColStrict.name);
+        }
+
+        const wkbCol = columns.find((col: any) => {
+            const name = String(col.name || '').toLowerCase();
+            const type = String(col.type || '').toLowerCase();
+            return (
+                (name === 'geometry' || name === 'geom' || name === 'wkb_geometry') &&
+                (type === 'blob' || type === 'binary' || type.includes('blob'))
+            );
+        });
+
+        if (wkbCol?.name) {
+            return `ST_GeomFromWKB(${qi(wkbCol.name)})`;
+        }
+
+        const latCol = columns.find((col: any) => {
+            const name = String(col.name || '').toLowerCase();
+            return name === 'latitude' || name === 'lat' || name === 'y';
+        });
+        const lonCol = columns.find((col: any) => {
+            const name = String(col.name || '').toLowerCase();
+            return name === 'longitude' || name === 'lon' || name === 'lng' || name === 'x';
+        });
+
+        if (latCol?.name && lonCol?.name) {
+            return `ST_Point(CAST(${qi(lonCol.name)} AS DOUBLE), CAST(${qi(latCol.name)} AS DOUBLE))`;
+        }
+
+        return null;
+    }
+
+    private propertyColumnsForMvt(columns: any[]) {
+        return columns
+            .filter((col: any) => {
+                const name = String(col.name || '');
+                const loweredName = name.toLowerCase();
+                const type = String(col.type || '');
+                return (
+                    name &&
+                    !['geojson', 'geometry', 'geom', 'wkb_geometry', 'geometry_bbox'].includes(loweredName) &&
+                    !loweredName.startsWith('__ymn_') &&
+                    isSupportedMvtPropertyType(type)
+                );
+            })
+            .map((col: any) => String(col.name));
+    }
+
+    private geometryKindFromType(type: string): MvtTileSource['geometryKind'] {
+        const normalized = type.toUpperCase();
+        if (normalized.includes('LINE')) return 'line';
+        if (normalized.includes('POLYGON')) return 'polygon';
+        return 'point';
     }
 
     private normalizeValue(value: any): any {
@@ -272,6 +364,92 @@ class DuckDBService {
         }
 
         return null;
+    }
+
+    async prepareMvtTileSource(tableName: string): Promise<MvtTileSource | null> {
+        if (!this.spatialLoaded) return null;
+
+        const columns = await this.getTableSchemaRows(tableName);
+        const geomExpr = this.geometryExpression(columns);
+        if (!geomExpr) return null;
+
+        const sourceTable = qi(tableName);
+        const tileTable = mvtTableNameFor(tableName);
+        const propertyColumns = this.propertyColumnsForMvt(columns);
+        const propertySelect = propertyColumns.length
+            ? `, ${propertyColumns.map((name) => qi(name)).join(', ')}`
+            : '';
+
+        await this.query(`
+            CREATE OR REPLACE VIEW ${qi(tileTable)} AS
+            SELECT
+                ROW_NUMBER() OVER ()::BIGINT AS __ymn_mvt_id,
+                ST_Transform(${geomExpr}, 'EPSG:4326', 'EPSG:3857', true) AS __ymn_tile_geom
+                ${propertySelect}
+            FROM ${sourceTable}
+            WHERE ${geomExpr} IS NOT NULL;
+        `);
+
+        const typeResult = await this.query(
+            `SELECT ST_GeometryType(__ymn_tile_geom) AS geometry_type FROM ${qi(tileTable)} WHERE __ymn_tile_geom IS NOT NULL LIMIT 1;`
+        );
+        const typeRaw = typeResult.toArray()[0];
+        const typeRow = typeof typeRaw?.toJSON === 'function' ? typeRaw.toJSON() : typeRaw;
+        if (!typeRow?.geometry_type) return null;
+
+        return {
+            tableName: tileTable,
+            layerName: 'features',
+            geometryKind: this.geometryKindFromType(String(typeRow.geometry_type)),
+            propertyColumns,
+        };
+    }
+
+    async getTableFeatureCount(tableName: string) {
+        const result = await this.query(`SELECT COUNT(*) AS feature_count FROM ${qi(tableName)};`);
+        const rawRow = result.toArray()[0];
+        const row = typeof rawRow?.toJSON === 'function' ? rawRow.toJSON() : rawRow;
+        return Number(row?.feature_count ?? row?.count_star ?? 0);
+    }
+
+    async getMvtTile(source: MvtTileSource, z: number, x: number, y: number): Promise<ArrayBuffer> {
+        const propertyEntries = source.propertyColumns
+            .map((name) => `${JSON.stringify(name)}: ${qi(name)}`)
+            .join(', ');
+        const properties = propertyEntries ? `, ${propertyEntries}` : '';
+        const result = await this.query(`
+            WITH bounds AS (
+                SELECT ST_TileEnvelope(${z}, ${x}, ${y}) AS tile_bounds
+            ),
+            tile_rows AS (
+                SELECT {
+                    "geom": ST_AsMVTGeom(__ymn_tile_geom, ST_Extent(tile_bounds), 4096, 64, true),
+                    "__ymn_mvt_id": __ymn_mvt_id,
+                    "_ymn_feature_id": CAST(__ymn_mvt_id AS VARCHAR)
+                    ${properties}
+                } AS tile_row
+                FROM ${qi(source.tableName)}, bounds
+                WHERE ST_Intersects(__ymn_tile_geom, tile_bounds)
+            )
+            SELECT ST_AsMVT(tile_row, ${`'${escapeSqlString(source.layerName)}'`}, 4096, 'geom', '__ymn_mvt_id') AS tile
+            FROM tile_rows;
+        `);
+        const rawRow = result.toArray()[0];
+        const row = typeof rawRow?.toJSON === 'function' ? rawRow.toJSON() : rawRow;
+        const tile = row?.tile;
+        if (!tile) return new ArrayBuffer(0);
+        if (tile instanceof Uint8Array) {
+            const copy = new Uint8Array(tile.byteLength);
+            copy.set(tile);
+            return copy.buffer;
+        }
+        if (tile?.buffer instanceof ArrayBuffer && tile?.byteLength !== undefined) {
+            const view = new Uint8Array(tile.buffer, tile.byteOffset ?? 0, tile.byteLength);
+            const copy = new Uint8Array(view.byteLength);
+            copy.set(view);
+            return copy.buffer;
+        }
+        return new ArrayBuffer(0);
     }
 
     async exportTable(sql: string, format: 'parquet' | 'csv' | 'json' = 'parquet'): Promise<{ buffer: Uint8Array; fileName: string }> {

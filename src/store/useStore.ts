@@ -13,6 +13,7 @@ import { DEFAULT_BASEMAP_ID, type BasemapId } from '../utils/basemaps';
 import type { LayerVisualisation, LegendSpec } from '../types/visualisation';
 import { ensureFeatureIds } from '../utils/featureIdentity';
 import type { VisualAnalyticsState, VisualFilter } from '../types/visualAnalytics';
+import type { MvtTileSource } from '../services/duckdb';
 
 export type NodeExecutionState = {
   status: 'idle' | 'running' | 'done' | 'error';
@@ -28,6 +29,7 @@ export type MapLayer = {
   id: string;
   name: string;
   geojson: GeoJSON.FeatureCollection;
+  tileSource?: MvtTileSource;
   visible: boolean;
   sourceNodeId?: string;
   sourceKind?: 'input' | 'workflow' | 'step' | 'output' | 'manual' | 'llm' | 'h3';
@@ -141,7 +143,7 @@ const hydrateLayer = (layer: NewMapLayer, previous?: MapLayer): MapLayer => ({
   geojson: ensureFeatureIds(layer.geojson, layer.id),
   visualisation: layer.visualisation ?? previous?.visualisation,
   legend: layer.legend ?? previous?.legend,
-  styleVersion: layer.styleVersion ?? previous?.styleVersion ?? 1,
+  styleVersion: layer.styleVersion ?? (previous ? previous.styleVersion + 1 : 1),
 });
 
 export const useStore = create<AppState>()((set, get) => ({

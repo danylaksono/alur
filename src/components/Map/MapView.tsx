@@ -9,6 +9,7 @@ import { FEATURE_ID_PROPERTY } from '../../types/visualAnalytics';
 import type { VisualFilter } from '../../types/visualAnalytics';
 import { LegendControl } from './LegendControl';
 import { cn } from '../../utils/cn';
+import { mvtTileUrl, registerMvtProtocol, registerMvtTileSource, unregisterMvtTileSource } from '../../services/mvtTileService';
 
 function getLayerBounds(geojson: GeoJSON.FeatureCollection) {
   const coords: [number, number][] = [];
@@ -96,6 +97,7 @@ export const MapView = () => {
   const map = useRef<maplibregl.Map | null>(null);
   const popup = useRef<maplibregl.Popup | null>(null);
   const renderedLayerIds = useRef<Set<string>>(new Set());
+  const renderedSourceVersions = useRef<Map<string, number>>(new Map());
   const nodeLayerMap = useRef<Map<string, string>>(new Map());
   const previousFeatureState = useRef<Map<string, { hoveredFeatureId?: string; selectedFeatureIds: Set<string> }>>(new Map());
 
@@ -120,6 +122,7 @@ export const MapView = () => {
   // Init map once
   useEffect(() => {
     if (!mapContainer.current || map.current) return;
+    registerMvtProtocol();
 	    const m = new maplibregl.Map({
 	      container: mapContainer.current,
 	      style: getBasemap(selectedBasemapId).styleUrl,
@@ -147,6 +150,7 @@ export const MapView = () => {
     if (!m) return;
     const nextStyleUrl = getBasemap(selectedBasemapId).styleUrl;
     renderedLayerIds.current.clear();
+    renderedSourceVersions.current.clear();
     nodeLayerMap.current.clear();
     popup.current?.remove();
     m.setStyle(nextStyleUrl);
@@ -173,7 +177,9 @@ export const MapView = () => {
             if (m.getLayer(id)) m.removeLayer(id);
           });
           if (m.getSource(sourceId)) m.removeSource(sourceId);
+          unregisterMvtTileSource(rid);
           renderedLayerIds.current.delete(rid);
+          renderedSourceVersions.current.delete(rid);
           nodeLayerMap.current.forEach((mappedLayerId, nodeId) => {
             if (mappedLayerId === rid) nodeLayerMap.current.delete(nodeId);
           });
@@ -185,12 +191,44 @@ export const MapView = () => {
         const sourceId = `input-source-${layer.id}`;
         const layerId = `input-layer-${layer.id}`;
         const layerGeoKind = geometryKindForLayer(layer);
-        const isClustered = layerGeoKind === 'point' && typeof layer.clusterRadius === 'number';
+        const isVectorTiled = Boolean(layer.tileSource);
+        const isClustered = !isVectorTiled && layerGeoKind === 'point' && typeof layer.clusterRadius === 'number';
+        const sourceLayer = layer.tileSource?.layerName;
+        const clusterLayerId = `${layerId}-clusters`;
+        const clusterCountLayerId = `${layerId}-cluster-count`;
+        const labelLayerId = `${layerId}-labels`;
+        const removeRenderedMapLayers = () => {
+          [layerId, clusterLayerId, clusterCountLayerId, labelLayerId].forEach((id) => {
+            if (m.getLayer(id)) m.removeLayer(id);
+          });
+        };
+
+        if (layer.tileSource) {
+          registerMvtTileSource(layer.id, layer.tileSource);
+        }
+
+        const existingSourceVersion = renderedSourceVersions.current.get(layer.id);
+        if (
+          isVectorTiled &&
+          m.getSource(sourceId) &&
+          existingSourceVersion !== undefined &&
+          existingSourceVersion !== layer.styleVersion
+        ) {
+          removeRenderedMapLayers();
+          m.removeSource(sourceId);
+        }
 
         const existingSource = m.getSource(sourceId) as maplibregl.GeoJSONSource | null;
-        if (existingSource) {
+        if (existingSource && !isVectorTiled) {
           existingSource.setData(layer.geojson as any);
-        } else {
+        } else if (!existingSource && isVectorTiled && layer.tileSource) {
+          m.addSource(sourceId, {
+            type: 'vector',
+            tiles: [mvtTileUrl(layer.id, layer.styleVersion)],
+            minzoom: 0,
+            maxzoom: 22,
+          });
+        } else if (!existingSource) {
           m.addSource(sourceId, {
             type: 'geojson',
             data: layer.geojson,
@@ -202,6 +240,7 @@ export const MapView = () => {
             } : {}),
           } as any);
         }
+        renderedSourceVersions.current.set(layer.id, layer.styleVersion);
 
         const handleFeatureClick = (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
           if (isClustered && e.features?.[0]?.properties?.cluster) {
@@ -241,9 +280,6 @@ export const MapView = () => {
         };
 
         if (isClustered) {
-          const clusterLayerId = `${layerId}-clusters`;
-          const clusterCountLayerId = `${layerId}-cluster-count`;
-
           if (m.getLayer(clusterLayerId)) m.removeLayer(clusterLayerId);
           m.addLayer({
             id: clusterLayerId,
@@ -277,18 +313,19 @@ export const MapView = () => {
             id: layerId,
             type: compiled.type as any,
             source: sourceId,
+            ...(sourceLayer ? { 'source-layer': sourceLayer } : {}),
             filter: ['!', ['has', 'point_count']],
             paint: compiled.paint as any,
             layout: compiled.layout as any,
           });
 
           if (compiled.label) {
-            const labelLayerId = `${layerId}-labels`;
             if (m.getLayer(labelLayerId)) m.removeLayer(labelLayerId);
             m.addLayer({
               id: labelLayerId,
               type: compiled.label.type as any,
               source: sourceId,
+              ...(sourceLayer ? { 'source-layer': sourceLayer } : {}),
               filter: ['!', ['has', 'point_count']],
               layout: compiled.label.layout as any,
               paint: compiled.label.paint as any,
@@ -317,17 +354,18 @@ export const MapView = () => {
             id: layerId,
             type: compiled.type as any,
             source: sourceId,
+            ...(sourceLayer ? { 'source-layer': sourceLayer } : {}),
             paint: compiled.paint as any,
             layout: compiled.layout as any,
           });
 
           if (compiled.label) {
-            const labelLayerId = `${layerId}-labels`;
             if (m.getLayer(labelLayerId)) m.removeLayer(labelLayerId);
             m.addLayer({
               id: labelLayerId,
               type: compiled.label.type as any,
               source: sourceId,
+              ...(sourceLayer ? { 'source-layer': sourceLayer } : {}),
               layout: compiled.label.layout as any,
               paint: compiled.label.paint as any,
             });
@@ -369,6 +407,7 @@ export const MapView = () => {
     mapLayers.forEach((layer) => {
       const sourceId = `input-source-${layer.id}`;
       if (!m.getSource(sourceId)) return;
+      if (layer.tileSource) return;
 
       const previous = previousFeatureState.current.get(layer.id) || { selectedFeatureIds: new Set<string>() };
       const current = visualAnalytics.layers[layer.id] || { selectedFeatureIds: [] };
