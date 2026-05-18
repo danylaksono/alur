@@ -1,3 +1,5 @@
+/// <reference types="vite/client" />
+
 declare module '@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm?url' {
   const src: string;
   export default src;
@@ -37,3 +39,5 @@ declare module '@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js' {
   const src: string;
   export default src;
 }
+
+declare module '@xyflow/react/dist/style.css';
