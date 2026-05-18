@@ -585,7 +585,7 @@ export default function App() {
         </Sidebar>
 
         {/* Main Workspace */}
-        <main ref={workspaceRef} className="flex-1 flex min-h-0 flex-col bg-white">
+        <main ref={workspaceRef} className="flex min-h-0 min-w-0 flex-1 flex-col bg-white">
           <ErrorBoundary name="Map" fallback={
             <div className="flex items-center justify-center h-full bg-slate-100 text-slate-400 text-[11px] italic">Map failed to load</div>
           }>

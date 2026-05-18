@@ -252,7 +252,7 @@ export const DataTable = ({
       )}
 
       <div className="min-h-0 flex-1 overflow-auto">
-        <table className="w-full border-collapse text-[11px]">
+        <table className="min-w-full border-collapse text-[11px]">
           <thead className="sticky top-0 bg-slate-100 z-10 shadow-sm">
             {table.getHeaderGroups().map(headerGroup => (
               <tr key={headerGroup.id}>
