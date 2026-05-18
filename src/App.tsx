@@ -556,7 +556,7 @@ export default function App() {
       {/* Header */}
       <header className="flex h-14 shrink-0 items-center justify-between border-b bg-white px-6 z-50">
         <div className="flex items-center gap-3">
-            <img src="/logo.png" alt="Logo" className="h-10 w-10" />
+            <img src={new URL('../logo.png', import.meta.url).href} alt="Logo" className="h-10 w-10" />
           <div>
             <h1 className="font-bold text-sm tracking-tight leading-none uppercase">YMNNGIS</h1>
             <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">You Might Not Need A Desktop GIS</p>

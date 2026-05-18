@@ -30,6 +30,12 @@ npm run preview    # Preview production build
 npm run test       # Run test suite (60 tests)
 ```
 
+## GitHub Pages Deployment
+
+The production build is configured for the `/ymnngis/` GitHub Pages subpath, so static assets and the bundled sample dataset resolve correctly after deployment.
+
+Pushes to `main` are deployed through GitHub Actions in `.github/workflows/deploy.yml`. In the repository settings, set Pages to use GitHub Actions as the source.
+
 ## Architecture
 
 The platform has four integrated workspaces:

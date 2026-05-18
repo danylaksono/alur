@@ -100,7 +100,7 @@ export const InputNode = ({ data, id }: any) => {
     addChatMessage('system', 'Loading sample dataset: need_london.parquet ...');
     try {
       const fileName = 'need_london.parquet';
-      const url = new URL('/need_london.parquet', window.location.origin).href;
+      const url = new URL('need_london.parquet', document.baseURI).href;
       await duckdbService.registerFileUrl(fileName, url);
       await loadAndRegister(new Uint8Array(), fileName, fileName, true);
     } catch (err: any) {
