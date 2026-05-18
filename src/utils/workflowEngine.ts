@@ -12,14 +12,17 @@ import { spatialFunctions } from './spatialFunctions';
  * Execution flow:
  *   Input node  → zero or more Analysis/Attribute nodes → Output node
  *
- * The final CTE always transforms geometry back to EPSG:4326 and emits
- * ST_AsGeoJSON so the result can be rendered on the map.
+ * The final CTE exposes a table-shaped result. Rendering/export callers decide
+ * whether to materialize it as a DuckDB-backed layer or serialize it.
  */
 
 export interface WorkflowResult {
   sql: string;
+  resultSql: string;
   withClause: string;
   lastAlias: string;
+  geomColumn: string;
+  geomCrs: string;
   outputLayerName: string;
   visualisationConfig?: WorkflowVisualisationConfig;
 }
@@ -341,20 +344,17 @@ export function buildWorkflowSQL(nodes: GISNode[], edges: Edge[], options?: { li
   }
 
   const finalMeta = nodeMetadata.get(lastAlias)!;
-  let finalGeomExpr: string;
-  if (finalMeta.crs !== 'EPSG:4326') {
-    finalGeomExpr = `ST_AsGeoJSON(ST_Transform(${qi(finalMeta.geom)}, '${finalMeta.crs}', 'EPSG:4326'))`;
-  } else {
-    finalGeomExpr = `ST_AsGeoJSON(${qi(finalMeta.geom)})`;
-  }
-
   const withClause = `WITH ${ctes.join(',\n')}`;
-  const sql = `${withClause}\nSELECT *, ${finalGeomExpr} AS geojson\nFROM ${lastAlias}\nLIMIT ${resultLimit};`;
+  const resultSql = `${withClause}\nSELECT *\nFROM ${lastAlias}`;
+  const sql = `${resultSql}\nLIMIT ${resultLimit};`;
 
   return {
     sql,
+    resultSql,
     withClause,
     lastAlias,
+    geomColumn: finalMeta.geom,
+    geomCrs: finalMeta.crs,
     outputLayerName: `workflow_${lastAlias}`,
     visualisationConfig: visualisationMetadata.get(lastAlias),
   };

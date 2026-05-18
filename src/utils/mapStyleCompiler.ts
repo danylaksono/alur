@@ -1,5 +1,6 @@
 import type { MapLayer } from '../store/useStore';
 import type { GeometryKind, LayerVisualisation, LabelVisualisation } from '../types/visualisation';
+import { geometryKindForSource } from './layerSource';
 
 export type CompiledMapLayerStyle = {
   type: 'circle' | 'line' | 'fill' | 'heatmap';
@@ -17,10 +18,7 @@ export type CompiledLabelLayer = {
 const FALLBACK_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
 
 export const geometryKindForLayer = (layer: MapLayer): GeometryKind => {
-  const geomType = layer.geojson.features.find((feature) => feature.geometry)?.geometry?.type || 'Point';
-  if (geomType.includes('Line')) return 'line';
-  if (geomType.includes('Polygon')) return 'polygon';
-  return 'point';
+  return geometryKindForSource(layer);
 };
 
 export const fallbackLayerColor = (index: number) => FALLBACK_COLORS[index % FALLBACK_COLORS.length];

@@ -20,6 +20,21 @@ export type MvtTileSource = {
     layerName: string;
     geometryKind: 'point' | 'line' | 'polygon';
     propertyColumns: string[];
+    filterWhereClause?: string;
+};
+
+export type DuckDbLayerSourceMetadata = {
+    kind: 'duckdb-table' | 'duckdb-query';
+    tableName: string;
+    originalTableName?: string;
+    geometryColumn: string;
+    crs: string;
+    geometryKind: 'point' | 'line' | 'polygon';
+    featureIdColumn: string;
+    bounds?: [[number, number], [number, number]];
+    fields: Array<{ name: string; type: string }>;
+    tileSource: MvtTileSource;
+    renderVersion: number;
 };
 
 const qi = (name: string) => `"${name.replace(/"/g, '""')}"`;
@@ -118,17 +133,6 @@ class DuckDBService {
 
         const errors: string[] = [];
 
-        for (const path of candidates) {
-            try {
-                await this.db.dropFile(path).catch(() => null);
-                await this.registerFileHandle(path, file);
-                await probe(path);
-                return path;
-            } catch (err: any) {
-                errors.push(`file handle ${path}: ${err?.message || String(err)}`);
-            }
-        }
-
         const buffer = new Uint8Array(await file.arrayBuffer());
         for (const path of candidates) {
             try {
@@ -138,6 +142,17 @@ class DuckDBService {
                 return path;
             } catch (err: any) {
                 errors.push(`buffer ${path}: ${err?.message || String(err)}`);
+            }
+        }
+
+        for (const path of candidates) {
+            try {
+                await this.db.dropFile(path).catch(() => null);
+                await this.registerFileHandle(path, file);
+                await probe(path);
+                return path;
+            } catch (err: any) {
+                errors.push(`file handle ${path}: ${err?.message || String(err)}`);
             }
         }
 
@@ -269,6 +284,53 @@ class DuckDBService {
                 );
             })
             .map((col: any) => String(col.name));
+    }
+
+    private fieldsForLayerSource(columns: any[]) {
+        return columns
+            .map((col: any) => ({ name: String(col.name || ''), type: String(col.type || '') }))
+            .filter((col) => {
+                const lower = col.name.toLowerCase();
+                const type = col.type.toLowerCase();
+                return (
+                    col.name &&
+                    !['geojson', 'geometry', 'geom', 'wkb_geometry', 'geometry_bbox'].includes(lower) &&
+                    !lower.startsWith('__ymn_') &&
+                    !type.includes('geometry') &&
+                    !type.includes('blob') &&
+                    !type.includes('binary')
+                );
+            });
+    }
+
+    private async layerBounds(tableName: string, geomExpr: string): Promise<[[number, number], [number, number]] | undefined> {
+        try {
+            const result = await this.query(`
+                WITH extent AS (
+                    SELECT ST_Extent_Agg(${geomExpr}) AS bbox
+                    FROM ${qi(tableName)}
+                    WHERE ${geomExpr} IS NOT NULL
+                )
+                SELECT
+                    ST_XMin(bbox) AS min_x,
+                    ST_YMin(bbox) AS min_y,
+                    ST_XMax(bbox) AS max_x,
+                    ST_YMax(bbox) AS max_y
+                FROM extent
+                WHERE bbox IS NOT NULL;
+            `);
+            const rawRow = result.toArray()[0];
+            const row = typeof rawRow?.toJSON === 'function' ? rawRow.toJSON() : rawRow;
+            const minX = Number(row?.min_x);
+            const minY = Number(row?.min_y);
+            const maxX = Number(row?.max_x);
+            const maxY = Number(row?.max_y);
+            if (![minX, minY, maxX, maxY].every(Number.isFinite)) return undefined;
+            if (minX < -180 || maxX > 180 || minY < -90 || maxY > 90) return undefined;
+            return [[minX, minY], [maxX, maxY]];
+        } catch {
+            return undefined;
+        }
     }
 
     private geometryKindFromType(type: string): MvtTileSource['geometryKind'] {
@@ -418,7 +480,7 @@ class DuckDBService {
         return null;
     }
 
-    async prepareMvtTileSource(tableName: string): Promise<MvtTileSource | null> {
+    async prepareMvtTileSource(tableName: string, options: { filterWhereClause?: string } = {}): Promise<MvtTileSource | null> {
         if (!this.spatialLoaded) return null;
 
         const columns = await this.getTableSchemaRows(tableName);
@@ -433,7 +495,7 @@ class DuckDBService {
             : '';
 
         await this.query(`
-            CREATE OR REPLACE VIEW ${qi(tileTable)} AS
+            CREATE OR REPLACE TABLE ${qi(tileTable)} AS
             SELECT
                 ROW_NUMBER() OVER ()::BIGINT AS __ymn_mvt_id,
                 ST_Transform(${geomExpr}, 'EPSG:4326', 'EPSG:3857', true) AS __ymn_tile_geom
@@ -454,7 +516,45 @@ class DuckDBService {
             layerName: 'features',
             geometryKind: this.geometryKindFromType(String(typeRow.geometry_type)),
             propertyColumns,
+            filterWhereClause: options.filterWhereClause,
         };
+    }
+
+    async prepareLayerSource(
+        tableName: string,
+        options: { kind?: 'duckdb-table' | 'duckdb-query'; originalTableName?: string; filterWhereClause?: string } = {},
+    ): Promise<DuckDbLayerSourceMetadata | null> {
+        if (!this.spatialLoaded) return null;
+
+        const columns = await this.getTableSchemaRows(tableName);
+        const geomExpr = this.geometryExpression(columns);
+        if (!geomExpr) return null;
+
+        const tileSource = await this.prepareMvtTileSource(tableName, { filterWhereClause: options.filterWhereClause });
+        if (!tileSource) return null;
+
+        const geomCol = columns.find((col: any) => String(col.type || '').toLowerCase() === 'geometry')
+            || columns.find((col: any) => ['geometry', 'geom', 'wkb_geometry'].includes(String(col.name || '').toLowerCase()))
+            || { name: 'geometry' };
+
+        return {
+            kind: options.kind ?? 'duckdb-table',
+            tableName,
+            originalTableName: options.originalTableName ?? tableName,
+            geometryColumn: String(geomCol.name || 'geometry'),
+            crs: 'EPSG:4326',
+            geometryKind: tileSource.geometryKind,
+            featureIdColumn: '__ymn_mvt_id',
+            bounds: await this.layerBounds(tableName, geomExpr),
+            fields: this.fieldsForLayerSource(columns),
+            tileSource,
+            renderVersion: Date.now(),
+        };
+    }
+
+    async materializeQueryAsTable(sql: string, tableName: string) {
+        await this.query(`CREATE OR REPLACE TABLE ${qi(tableName)} AS ${sql};`);
+        return tableName;
     }
 
     async getTableFeatureCount(tableName: string) {
@@ -469,6 +569,9 @@ class DuckDBService {
             .map((name) => `${JSON.stringify(name)}: ${qi(name)}`)
             .join(', ');
         const properties = propertyEntries ? `, ${propertyEntries}` : '';
+        const filterClause = source.filterWhereClause
+            ? `AND (${source.filterWhereClause.replace(/^WHERE\s+/i, '')})`
+            : '';
         const result = await this.query(`
             WITH bounds AS (
                 SELECT ST_TileEnvelope(${z}, ${x}, ${y}) AS tile_bounds
@@ -482,6 +585,7 @@ class DuckDBService {
                 } AS tile_row
                 FROM ${qi(source.tableName)}, bounds
                 WHERE ST_Intersects(__ymn_tile_geom, tile_bounds)
+                ${filterClause}
             )
             SELECT ST_AsMVT(tile_row, ${`'${escapeSqlString(source.layerName)}'`}, 4096, 'geom', '__ymn_mvt_id') AS tile
             FROM tile_rows;

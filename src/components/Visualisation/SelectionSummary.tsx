@@ -20,6 +20,8 @@ export const SelectionSummary = ({
 }) => {
   const [summary, setSummary] = useState<LayerAnalyticsSummary | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const filterKey = JSON.stringify(filters);
+  const selectionKey = selectedFeatureIds.join('|');
 
   useEffect(() => {
     let cancelled = false;
@@ -42,7 +44,7 @@ export const SelectionSummary = ({
 
     run();
     return () => { cancelled = true; };
-  }, [layer, filters, selectedFeatureIds]);
+  }, [layer?.id, layer?.styleVersion, filterKey, selectionKey]);
 
   return (
     <section className="border-t bg-white">
@@ -104,4 +106,3 @@ export const SelectionSummary = ({
     </section>
   );
 };
-

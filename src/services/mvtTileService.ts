@@ -43,5 +43,5 @@ export const unregisterMvtTileSource = (layerId: string) => {
   tileSources.delete(layerId);
 };
 
-export const mvtTileUrl = (layerId: string, styleVersion: number) =>
+export const mvtTileUrl = (layerId: string, styleVersion: number | string) =>
   `${PROTOCOL}://${encodeURIComponent(layerId)}/{z}/{x}/{y}.pbf?v=${styleVersion}`;

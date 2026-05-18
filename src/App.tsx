@@ -127,7 +127,7 @@ export default function App() {
     : EMPTY_FILTERS;
   const layerAttributeResult = useMemo(
     () => {
-      const features = selectedLayer?.geojson.features || [];
+      const features = selectedLayer?.geojson?.features || [];
       const normalizedSearch = attributeSearch.trim().toLowerCase();
       let rows: Record<string, any>[] = features.map((feature, index) => ({
         _feature: index + 1,
@@ -362,13 +362,21 @@ export default function App() {
     if (!manualSQL) return;
     try {
       setIsPreviewLoading(true);
-      const geojson = await duckdbService.getGeoJSON(manualSQL);
-      addMapLayer({
-        id: `manual-query-${Date.now()}`,
-        name: 'Query Result',
-        geojson,
-        sourceKind: 'manual',
-      });
+      const layerId = `manual-query-${Date.now()}`;
+      const tableName = `ymn_manual_${Date.now()}`;
+      await duckdbService.materializeQueryAsTable(manualSQL, tableName);
+      const source = await duckdbService.prepareLayerSource(tableName, { kind: 'duckdb-query' });
+      const featureCount = await duckdbService.getTableFeatureCount(tableName);
+      if (source) {
+        addMapLayer({
+          id: layerId,
+          name: 'Query Result',
+          source,
+          tileSource: source.tileSource,
+          featureCount,
+          sourceKind: 'manual',
+        });
+      }
       setLastManualSql(manualSQL);
       const result = await duckdbService.query(manualSQL);
       setPreviewData(result.toArray().map((r: any) => typeof r.toJSON === 'function' ? r.toJSON() : r));
@@ -401,13 +409,9 @@ export default function App() {
   const handleExport = async (format: 'parquet' | 'csv' | 'json' = 'parquet') => {
     try {
       if (nodes.length === 0) return;
-      const { sql } = buildWorkflowSQL(nodes, edges);
-      // We want to export the last node's CTE
-      const lastNode = nodes[nodes.length - 1];
-      const targetAlias = cteAlias(lastNode.id);
-      const exportSql = `${sql.split('SELECT')[0]} SELECT * FROM ${targetAlias}`;
+      const { resultSql } = buildWorkflowSQL(nodes, edges);
       
-      const { buffer, fileName } = await duckdbService.exportTable(exportSql, format);
+      const { buffer, fileName } = await duckdbService.exportTable(resultSql, format);
       
       const blob = new Blob([buffer as BlobPart], { type: 'application/octet-stream' });
       const url = URL.createObjectURL(blob);

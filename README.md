@@ -63,11 +63,11 @@ The platform has four integrated workspaces:
 
 ### Data flow
 
-1. **Load data** — Parquet, CSV, or GeoJSON files via input nodes (DuckDB tables)
+1. **Load data** — Parquet, CSV, or GeoJSON files via input nodes (DuckDB tables/views)
 2. **Build workflow** — Chain nodes (filter, buffer, aggregate, attribute calc, visualisation, output) as a directed acyclic graph
-3. **Execute** — DuckDB compiles the node chain into a single CTE SQL query, runs it in WebAssembly, and returns GeoJSON
-4. **Visualise** — GeoJSON becomes a `MapLayer`, styled via the visualisation compiler into MapLibre paint/layout expressions
-5. **Interact** — Hover, select, and filter features on the map; DuckDB recomputes profiles, summaries, and filtered rows in real time
+3. **Execute** — DuckDB compiles the node chain into a single CTE SQL query and materializes renderable table-backed layers in WebAssembly
+4. **Visualise** — DuckDB-backed `MapLayer` sources render through MapLibre vector tiles (`ST_AsMVT`) and use the visualisation compiler for paint/layout expressions
+5. **Interact** — Hover, inspect, and filter features on the map; DuckDB recomputes profiles, summaries, and filtered rows in real time while GeoJSON remains an export/fallback format
 
 ## Features
 
@@ -124,7 +124,7 @@ This compiles to a single DuckDB query:
 WITH step1 AS (SELECT * FROM "need_london"),
      step2 AS (SELECT * FROM step1 WHERE need >= 10),
      step3 AS (SELECT *, ST_Buffer("geometry", 500) AS geom_buffered FROM step2)
-SELECT *, ST_AsGeoJSON(geom_buffered) AS geojson FROM step3 LIMIT 5000;
+SELECT * FROM step3 LIMIT 5000;
 ```
 
 ## Project Structure

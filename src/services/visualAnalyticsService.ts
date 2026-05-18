@@ -1,6 +1,10 @@
 import { duckdbService } from './duckdb';
 import { FEATURE_ID_PROPERTY, type LayerAnalyticsSummary, type VisualFilter } from '../types/visualAnalytics';
 import { compileVisualFiltersWhereClause, quoteIdentifier } from '../utils/visualFilterSql';
+import type { MapLayer } from '../store/useStore';
+import type { FieldProfile } from '../utils/classification';
+
+type AnalyticsLayer = { id: string; source?: MapLayer['source']; geojson?: GeoJSON.FeatureCollection };
 
 const tableNameForLayer = (layerId: string) => `visual_layer_${layerId.replace(/[^a-zA-Z0-9_]/g, '_')}`;
 
@@ -15,6 +19,21 @@ const toRows = (layer: { id: string; geojson: GeoJSON.FeatureCollection }) =>
 
 const normalizeRows = (rows: any[]) =>
   rows.map((row) => (typeof row?.toJSON === 'function' ? row.toJSON() : row));
+
+const analyticsTableForLayer = async (layer: AnalyticsLayer) => {
+  if (layer.source?.kind === 'duckdb-table' || layer.source?.kind === 'duckdb-query') {
+    return layer.source.tableName;
+  }
+  return registerLayerForAnalytics({ id: layer.id, geojson: layer.geojson || { type: 'FeatureCollection', features: [] } });
+};
+
+const analyticsFieldsForLayer = (layer: Pick<AnalyticsLayer, 'source' | 'geojson'>) => {
+  if (layer.source?.kind === 'duckdb-table' || layer.source?.kind === 'duckdb-query') {
+    return layer.source.fields.map((field) => field.name);
+  }
+  return Object.keys(layer.geojson?.features[0]?.properties || {})
+    .filter((key) => key !== FEATURE_ID_PROPERTY);
+};
 
 const layerSignature = (layer: { id: string; geojson: GeoJSON.FeatureCollection }) => {
   const features = layer.geojson.features;
@@ -75,7 +94,7 @@ export const queryLayerRows = async ({
   pageIndex,
   pageSize,
 }: {
-  layer: { id: string; geojson: GeoJSON.FeatureCollection };
+  layer: AnalyticsLayer;
   filters: VisualFilter[];
   search: string;
   sortBy: string | null;
@@ -83,9 +102,8 @@ export const queryLayerRows = async ({
   pageIndex: number;
   pageSize: number;
 }) => {
-  const tableName = await registerLayerForAnalytics(layer);
-  const searchableColumns = Object.keys(layer.geojson.features[0]?.properties || {})
-    .filter((key) => key !== FEATURE_ID_PROPERTY);
+  const tableName = await analyticsTableForLayer(layer);
+  const searchableColumns = analyticsFieldsForLayer(layer).filter((key) => key !== FEATURE_ID_PROPERTY);
   const filterClause = compileVisualFiltersWhereClause(filters);
   const normalizedSearch = search.trim();
   const searchPredicate = normalizedSearch && searchableColumns.length
@@ -113,11 +131,11 @@ export const queryLayerColumnProfile = async ({
   filters,
   column,
 }: {
-  layer: { id: string; geojson: GeoJSON.FeatureCollection };
+  layer: AnalyticsLayer;
   filters: VisualFilter[];
   column: string;
 }) => {
-  const tableName = await registerLayerForAnalytics(layer);
+  const tableName = await analyticsTableForLayer(layer);
   const whereClause = compileVisualFiltersWhereClause(filters);
   const field = quoteIdentifier(column);
   const totalResult = await duckdbService.query(
@@ -194,10 +212,10 @@ export const queryLayerTemporalRange = async ({
   layer,
   column,
 }: {
-  layer: { id: string; geojson: GeoJSON.FeatureCollection };
+  layer: AnalyticsLayer;
   column: string;
 }): Promise<TemporalRange | null> => {
-  const tableName = await registerLayerForAnalytics(layer);
+  const tableName = await analyticsTableForLayer(layer);
   const field = quoteIdentifier(column);
   const result = await duckdbService.query(
     `SELECT
@@ -227,9 +245,9 @@ const selectedWhereClause = (selectedFeatureIds: string[]) => {
   return `WHERE CAST(${quoteIdentifier(FEATURE_ID_PROPERTY)} AS VARCHAR) IN (${values})`;
 };
 
-const candidateColumns = (layer: { geojson: GeoJSON.FeatureCollection }) =>
-  Object.keys(layer.geojson.features[0]?.properties || {})
-    .filter((key) => ![FEATURE_ID_PROPERTY, 'geojson', 'geometry', 'geom'].includes(key.toLowerCase()))
+const candidateColumns = (layer: Pick<AnalyticsLayer, 'source' | 'geojson'>) =>
+  analyticsFieldsForLayer(layer)
+    .filter((key) => ![FEATURE_ID_PROPERTY, 'geojson', 'geometry', 'geom', 'wkb_geometry', '__ymn_tile_geom'].includes(key.toLowerCase()))
     .slice(0, 12);
 
 export const queryLayerSummary = async ({
@@ -237,23 +255,24 @@ export const queryLayerSummary = async ({
   filters,
   selectedFeatureIds,
 }: {
-  layer: { id: string; geojson: GeoJSON.FeatureCollection };
+  layer: AnalyticsLayer;
   filters: VisualFilter[];
   selectedFeatureIds: string[];
 }): Promise<LayerAnalyticsSummary> => {
-  const tableName = await registerLayerForAnalytics(layer);
+  const tableName = await analyticsTableForLayer(layer);
   const table = `"${tableName}"`;
   const totalResult = await duckdbService.query(`SELECT COUNT(*) AS row_count FROM ${table};`);
   const totalRaw = normalizeRows(totalResult.toArray())[0] || {};
   const totalRows = Number(totalRaw.row_count ?? 0);
 
-  const baseWhere = selectedFeatureIds.length
+  const canQuerySelection = !layer.source || layer.source.kind === 'legacy-geojson';
+  const baseWhere = selectedFeatureIds.length && canQuerySelection
     ? selectedWhereClause(selectedFeatureIds)
     : compileVisualFiltersWhereClause(filters);
   const filteredResult = await duckdbService.query(`SELECT COUNT(*) AS row_count FROM ${table} ${baseWhere};`);
   const filteredRaw = normalizeRows(filteredResult.toArray())[0] || {};
   const filteredRows = Number(filteredRaw.row_count ?? 0);
-  const selectedRows = selectedFeatureIds.length ? filteredRows : 0;
+  const selectedRows = selectedFeatureIds.length && canQuerySelection ? filteredRows : 0;
 
   const columns = candidateColumns(layer);
   const statsResult = await duckdbService.query(
@@ -309,6 +328,64 @@ export const queryLayerSummary = async ({
     selectedRows,
     numericMetrics,
     categoryBreakdowns,
+  };
+};
+
+export const queryLayerFieldProfile = async ({
+  layer,
+  column,
+}: {
+  layer: AnalyticsLayer;
+  column: string;
+}): Promise<FieldProfile> => {
+  const tableName = await analyticsTableForLayer(layer);
+  const field = quoteIdentifier(column);
+  const totalResult = await duckdbService.query(
+    `SELECT COUNT(*) AS total, SUM(CASE WHEN ${field} IS NULL THEN 1 ELSE 0 END) AS null_count FROM "${tableName}";`
+  );
+  const totalRaw = normalizeRows(totalResult.toArray())[0] || {};
+  const total = Number(totalRaw.total ?? 0);
+  const nullCount = Number(totalRaw.null_count ?? 0);
+  const statsResult = await duckdbService.query(
+    `SELECT MIN(TRY_CAST(${field} AS DOUBLE)) AS min_value, MAX(TRY_CAST(${field} AS DOUBLE)) AS max_value, COUNT(TRY_CAST(${field} AS DOUBLE)) AS numeric_count, COUNT(${field}) AS non_null_count FROM "${tableName}";`
+  );
+  const stats = normalizeRows(statsResult.toArray())[0] || {};
+  const min = Number(stats.min_value);
+  const max = Number(stats.max_value);
+  const numericCount = Number(stats.numeric_count ?? 0);
+  const nonNullCount = Number(stats.non_null_count ?? 0);
+
+  if (numericCount > 0 && numericCount >= nonNullCount * 0.8 && Number.isFinite(min) && Number.isFinite(max)) {
+    const valuesResult = await duckdbService.query(
+      `SELECT TRY_CAST(${field} AS DOUBLE) AS value FROM "${tableName}" WHERE TRY_CAST(${field} AS DOUBLE) IS NOT NULL ORDER BY value;`
+    );
+    const values = normalizeRows(valuesResult.toArray()).map((row) => Number(row.value)).filter(Number.isFinite);
+    const binCount = 12;
+    const width = max === min ? 1 : (max - min) / binCount;
+    const bins = Array.from({ length: binCount }, (_, index) => ({
+      label: `${(min + width * index).toPrecision(3)}-${(min + width * (index + 1)).toPrecision(3)}`,
+      min: min + width * index,
+      max: min + width * (index + 1),
+      count: 0,
+    }));
+    values.forEach((value) => {
+      const index = max === min ? 0 : Math.min(binCount - 1, Math.floor((value - min) / (width || 1)));
+      bins[index].count += 1;
+    });
+    return { kind: 'numeric', total, nullCount, min, max, values, bins };
+  }
+
+  const categoriesResult = await duckdbService.query(
+    `SELECT CAST(${field} AS VARCHAR) AS value, COUNT(*) AS count FROM "${tableName}" WHERE ${field} IS NOT NULL GROUP BY value ORDER BY count DESC LIMIT 12;`
+  );
+  return {
+    kind: 'categorical',
+    total,
+    nullCount,
+    categories: normalizeRows(categoriesResult.toArray()).map((row) => ({
+      value: String(row.value),
+      count: Number(row.count),
+    })),
   };
 };
 

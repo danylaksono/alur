@@ -4,7 +4,7 @@ import { useStore } from '../../store/useStore';
 import { buildUpToSQL } from '../../utils/workflowEngine';
 import { duckdbService } from '../../services/duckdb';
 import { FlowNodeShell, inputClass, nodeHandleClass, selectClass } from './FlowNodeShell';
-import { resolveVisualisationForGeoJson } from '../../utils/visualisationResolver';
+import { materializeWorkflowMapLayer } from '../../services/layerMaterialization';
 
 type OutputMode = 'visualize' | 'export';
 type ExportFormat = 'geojson' | 'csv' | 'json' | 'parquet';
@@ -26,24 +26,23 @@ export const OutputNode = ({ data, id }: any) => {
     setSelectedNodeId(id);
     const { nodes, edges } = useStore.getState();
     try {
-      const { sql, visualisationConfig } = buildUpToSQL(nodes, edges, id, { limit: maxFeatures });
-      const geojson = await duckdbService.getGeoJSON(sql);
-      if (!geojson || geojson.features.length === 0) {
+      const workflow = buildUpToSQL(nodes, edges, id, { limit: maxFeatures });
+      const layer = await materializeWorkflowMapLayer({
+        workflow,
+        layerId: `output-${id}`,
+        name: `Output: ${data.label}`,
+        sourceNodeId: id,
+        sourceKind: 'output',
+        visualisationConfig: workflow.visualisationConfig,
+      });
+      if (!layer.featureCount) {
         addChatMessage('system', '⚠️ Output node produced no features.');
         return;
       }
-      const resolvedStyle = resolveVisualisationForGeoJson(geojson, visualisationConfig);
-      addMapLayer({
-        id: `output-${id}`,
-        name: `Output: ${data.label}`,
-        geojson,
-        sourceNodeId: id,
-        sourceKind: 'output',
-        ...resolvedStyle,
-      });
-      const msg = geojson.features.length >= maxFeatures
-        ? `✅ Output rendered: ${geojson.features.length.toLocaleString()}+ features (limited to ${maxFeatures})`
-        : `✅ Output rendered: ${geojson.features.length.toLocaleString()} features`;
+      addMapLayer(layer);
+      const msg = layer.featureCount >= maxFeatures
+        ? `✅ Output rendered: ${layer.featureCount.toLocaleString()}+ features`
+        : `✅ Output rendered: ${layer.featureCount.toLocaleString()} features`;
       addChatMessage('system', msg);
     } catch (err: any) {
       addChatMessage('system', `❌ Output error: ${err.message}`);
@@ -62,10 +61,12 @@ export const OutputNode = ({ data, id }: any) => {
   const handleExport = async () => {
     const { nodes, edges } = useStore.getState();
     try {
-      const { sql } = buildUpToSQL(nodes, edges, id, { limit: maxFeatures });
+      const workflow = buildUpToSQL(nodes, edges, id, { limit: maxFeatures });
 
       if (exportFormat === 'geojson') {
-        const geojson = await duckdbService.getGeoJSON(sql);
+        const tableName = `ymn_export_${id.replace(/[^a-zA-Z0-9_]/g, '_')}_${Date.now()}`;
+        await duckdbService.materializeQueryAsTable(workflow.resultSql, tableName);
+        const geojson = await duckdbService.getGeoJSONFromTable(tableName, 100000);
         if (!geojson || geojson.features.length === 0) {
           addChatMessage('system', '⚠️ Export node produced no features.');
           return;
@@ -78,7 +79,7 @@ export const OutputNode = ({ data, id }: any) => {
         return;
       }
 
-      const { buffer, fileName } = await duckdbService.exportTable(sql, exportFormat);
+      const { buffer, fileName } = await duckdbService.exportTable(workflow.resultSql, exportFormat);
       const mimeType = exportFormat === 'csv'
         ? 'text/csv'
         : exportFormat === 'json'

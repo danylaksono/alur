@@ -8,8 +8,9 @@ import { featureIdFromMapFeature } from '../../utils/featureIdentity';
 import { FEATURE_ID_PROPERTY } from '../../types/visualAnalytics';
 import type { VisualFilter } from '../../types/visualAnalytics';
 import { LegendControl } from './LegendControl';
-import { cn } from '../../utils/cn';
 import { mvtTileUrl, registerMvtProtocol, registerMvtTileSource, unregisterMvtTileSource } from '../../services/mvtTileService';
+import { boundsForLayer, mvtSourceForLayer } from '../../utils/layerSource';
+import { compileVisualFiltersWhereClause } from '../../utils/visualFilterSql';
 
 function getLayerBounds(geojson: GeoJSON.FeatureCollection) {
   const coords: [number, number][] = [];
@@ -100,7 +101,7 @@ export const MapView = () => {
   const map = useRef<maplibregl.Map | null>(null);
   const popup = useRef<maplibregl.Popup | null>(null);
   const renderedLayerIds = useRef<Set<string>>(new Set());
-  const renderedSourceVersions = useRef<Map<string, number>>(new Map());
+  const renderedSourceVersions = useRef<Map<string, string>>(new Map());
   const nodeLayerMap = useRef<Map<string, string>>(new Map());
   const previousFeatureState = useRef<Map<string, { hoveredFeatureId?: string; selectedFeatureIds: Set<string> }>>(new Map());
 
@@ -194,9 +195,17 @@ export const MapView = () => {
         const sourceId = `input-source-${layer.id}`;
         const layerId = `input-layer-${layer.id}`;
         const layerGeoKind = geometryKindForLayer(layer);
-        const isVectorTiled = Boolean(layer.tileSource);
+        const layerFilters = visualAnalytics.layers[layer.id]?.filters || [];
+        const baseMvtSource = mvtSourceForLayer(layer);
+        const tileFilterFields = new Set(baseMvtSource?.propertyColumns || []);
+        const tileFilters = layerFilters.filter((filter) => tileFilterFields.has(filter.field));
+        const tileSource = baseMvtSource
+          ? { ...baseMvtSource, filterWhereClause: compileVisualFiltersWhereClause(tileFilters) }
+          : undefined;
+        const sourceVersion = `${layer.styleVersion}:${JSON.stringify(layerFilters)}`;
+        const isVectorTiled = Boolean(tileSource);
         const isClustered = !isVectorTiled && layerGeoKind === 'point' && typeof layer.clusterRadius === 'number';
-        const sourceLayer = layer.tileSource?.layerName;
+        const sourceLayer = tileSource?.layerName;
         const clusterLayerId = `${layerId}-clusters`;
         const clusterCountLayerId = `${layerId}-cluster-count`;
         const labelLayerId = `${layerId}-labels`;
@@ -206,8 +215,8 @@ export const MapView = () => {
           });
         };
 
-        if (layer.tileSource) {
-          registerMvtTileSource(layer.id, layer.tileSource);
+        if (tileSource) {
+          registerMvtTileSource(layer.id, tileSource);
         }
 
         const existingSourceVersion = renderedSourceVersions.current.get(layer.id);
@@ -215,7 +224,7 @@ export const MapView = () => {
           isVectorTiled &&
           m.getSource(sourceId) &&
           existingSourceVersion !== undefined &&
-          existingSourceVersion !== layer.styleVersion
+          existingSourceVersion !== sourceVersion
         ) {
           removeRenderedMapLayers();
           m.removeSource(sourceId);
@@ -223,18 +232,18 @@ export const MapView = () => {
 
         const existingSource = m.getSource(sourceId) as maplibregl.GeoJSONSource | null;
         if (existingSource && !isVectorTiled) {
-          existingSource.setData(layer.geojson as any);
-        } else if (!existingSource && isVectorTiled && layer.tileSource) {
+          existingSource.setData((layer.geojson || { type: 'FeatureCollection', features: [] }) as any);
+        } else if (!existingSource && isVectorTiled && tileSource) {
           m.addSource(sourceId, {
             type: 'vector',
-            tiles: [mvtTileUrl(layer.id, layer.styleVersion)],
+            tiles: [mvtTileUrl(layer.id, sourceVersion)],
             minzoom: 0,
             maxzoom: 22,
           });
         } else if (!existingSource) {
           m.addSource(sourceId, {
             type: 'geojson',
-            data: layer.geojson,
+            data: layer.geojson || { type: 'FeatureCollection', features: [] },
             promoteId: FEATURE_ID_PROPERTY,
             ...(isClustered ? {
               cluster: true,
@@ -243,7 +252,7 @@ export const MapView = () => {
             } : {}),
           } as any);
         }
-        renderedSourceVersions.current.set(layer.id, layer.styleVersion);
+        renderedSourceVersions.current.set(layer.id, sourceVersion);
 
         const handleFeatureClick = (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
           if (isClustered && e.features?.[0]?.properties?.cluster) {
@@ -390,7 +399,6 @@ export const MapView = () => {
 
         if (m.getLayer(layerId)) {
           m.setLayoutProperty(layerId, 'visibility', layer.visible ? 'visible' : 'none');
-          const layerFilters = visualAnalytics.layers[layer.id]?.filters || [];
           m.setFilter(layerId, compileMapFilter(layerFilters) as any);
         }
 
@@ -403,7 +411,7 @@ export const MapView = () => {
     };
 
     syncLayers();
-  }, [mapLayers, selectedBasemapId, setSelectedNodeId, selectLayer, setHoveredFeature, toggleSelectedFeature]);
+  }, [mapLayers, selectedBasemapId, visualAnalytics, setSelectedNodeId, selectLayer, setHoveredFeature, toggleSelectedFeature]);
 
   useEffect(() => {
     const m = map.current;
@@ -412,7 +420,7 @@ export const MapView = () => {
     mapLayers.forEach((layer) => {
       const sourceId = `input-source-${layer.id}`;
       if (!m.getSource(sourceId)) return;
-      if (layer.tileSource) return;
+      if (mvtSourceForLayer(layer)) return;
 
       const previous = previousFeatureState.current.get(layer.id) || { selectedFeatureIds: new Set<string>() };
       const current = visualAnalytics.layers[layer.id] || { selectedFeatureIds: [] };
@@ -499,7 +507,7 @@ export const MapView = () => {
     const fitFocusedLayer = () => {
       const layer = useStore.getState().mapLayers.find((item) => item.id === layerFocusRequest.layerId);
       if (!layer) return;
-      const bounds = getLayerBounds(layer.geojson);
+      const bounds = boundsForLayer(layer) || (layer.geojson ? getLayerBounds(layer.geojson) : null);
       if (bounds) {
         m.fitBounds(bounds, { padding: 50, duration: 600, maxZoom: 16 });
       }

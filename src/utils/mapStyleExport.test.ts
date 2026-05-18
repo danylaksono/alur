@@ -6,6 +6,7 @@ const layer = (patch: Partial<MapLayer>): MapLayer => ({
   id: 'layer-a',
   name: 'Layer A',
   geojson: { type: 'FeatureCollection', features: [] },
+  source: { kind: 'legacy-geojson', geometryKind: 'point', fields: [] },
   visible: true,
   opacity: 0.8,
   createdAt: 1,
@@ -37,4 +38,3 @@ describe('map style export', () => {
     expect(JSON.stringify(payload)).not.toContain('FeatureCollection');
   });
 });
-

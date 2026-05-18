@@ -46,6 +46,15 @@ const makeLayer = (id: string, features: GeoJSON.Feature[], patch: Partial<MapLa
   id,
   name: id,
   geojson: { type: 'FeatureCollection', features },
+  source: {
+    kind: 'legacy-geojson',
+    geometryKind: features.some((feature) => feature.geometry?.type.includes('Line'))
+      ? 'line'
+      : features.some((feature) => feature.geometry?.type.includes('Polygon'))
+        ? 'polygon'
+        : 'point',
+    fields: Object.keys(features[0]?.properties || {}).map((name) => ({ name, type: 'UNKNOWN' })),
+  },
   visible: true,
   opacity: 0.8,
   createdAt: Date.now(),
@@ -381,7 +390,7 @@ describe('integration: visualisation pipeline', () => {
     };
     useStore.getState().addMapLayer({ id: 'fid-layer', name: 'FIDs', geojson });
     const layer = useStore.getState().mapLayers.find((l) => l.id === 'fid-layer')!;
-    const features = layer.geojson.features;
+    const features = layer.geojson?.features || [];
     expect(features[0].properties?._ymn_feature_id).toBe('42');
     expect(features[1].properties?._ymn_feature_id).toContain('fid-layer:2');
   });

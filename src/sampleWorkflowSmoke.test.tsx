@@ -122,6 +122,16 @@ describe('sample GIS workflow smoke test', () => {
           id: 'need_london',
           name: 'need_london.parquet',
           geojson: featureCollection('need', 3),
+          source: {
+            kind: 'legacy-geojson',
+            geometryKind: 'point',
+            fields: [
+              { name: 'id', type: 'INTEGER' },
+              { name: 'name', type: 'VARCHAR' },
+              { name: 'need', type: 'DOUBLE' },
+              { name: 'borough', type: 'VARCHAR' },
+            ],
+          },
           visible: true,
           sourceNodeId: 'sample_need',
           sourceKind: 'input',

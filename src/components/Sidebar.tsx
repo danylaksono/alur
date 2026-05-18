@@ -2,9 +2,8 @@ import { useState, type ReactNode } from 'react';
 import { Database, Zap, Eye, Plus, Loader2, Layers, Filter, Calculator, Search, Workflow, Palette } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { buildWorkflowSQL } from '../utils/workflowEngine';
-import { duckdbService } from '../services/duckdb';
 import { cn } from '../utils/cn';
-import { resolveVisualisationForGeoJson } from '../utils/visualisationResolver';
+import { materializeWorkflowMapLayer } from '../services/layerMaterialization';
 
 const colorStyles: Record<string, { hoverBg: string; hoverBorder: string; iconBg: string; iconHoverBg: string; dot: string }> = {
   blue: { hoverBg: 'hover:bg-blue-50', hoverBorder: 'hover:border-blue-200', iconBg: 'bg-blue-50', iconHoverBg: 'group-hover:bg-blue-100', dot: 'bg-blue-500' },
@@ -89,23 +88,22 @@ export const Sidebar = ({ children, className }: { children?: ReactNode; classNa
     try {
       setExecuting(true);
       addChatMessage('system', '⚙️ Building workflow SQL...');
-      const { sql, outputLayerName, visualisationConfig } = buildWorkflowSQL(nodes, edges);
-      addChatMessage('system', `📝 Generated SQL:\n\`\`\`sql\n${sql}\n\`\`\``);
+      const workflow = buildWorkflowSQL(nodes, edges);
+      addChatMessage('system', `📝 Generated SQL:\n\`\`\`sql\n${workflow.sql}\n\`\`\``);
       addChatMessage('system', '🚀 Executing workflow against DuckDB...');
-      const geojson = await duckdbService.getGeoJSON(sql);
-      if (!geojson || geojson.features.length === 0) {
+      const layer = await materializeWorkflowMapLayer({
+        workflow,
+        layerId: workflow.outputLayerName,
+        name: `Workflow Result`,
+        sourceKind: 'workflow',
+        visualisationConfig: workflow.visualisationConfig,
+      });
+      if (!layer.featureCount) {
         addChatMessage('system', '⚠️ Workflow executed but produced no features.');
         return;
       }
-      const resolvedStyle = resolveVisualisationForGeoJson(geojson, visualisationConfig);
-      addMapLayer({
-        id: outputLayerName,
-        name: `Workflow Result (${geojson.features.length} features)`,
-        geojson,
-        sourceKind: 'workflow',
-        ...resolvedStyle,
-      });
-      addChatMessage('system', `✅ Workflow complete — ${geojson.features.length.toLocaleString()} features added to the map as "${outputLayerName}".`);
+      addMapLayer({ ...layer, name: `Workflow Result (${layer.featureCount.toLocaleString()} features)` });
+      addChatMessage('system', `✅ Workflow complete — ${layer.featureCount.toLocaleString()} features added to the map as "${workflow.outputLayerName}".`);
     } catch (err: any) {
       console.error('Workflow execution error:', err);
       addChatMessage('system', `❌ Workflow error: ${err.message}`);

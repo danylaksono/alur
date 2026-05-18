@@ -44,7 +44,7 @@ describe('layer state', () => {
       sourceKind: 'input',
     });
     expect(state.selectedLayerId).toBe('roads');
-    expect(state.mapLayers[0].geojson.features[0].properties?._ymn_feature_id).toBe('1');
+    expect(state.mapLayers[0].geojson?.features[0].properties?._ymn_feature_id).toBe('1');
   });
 
   it('replaces repeated execution layers while preserving layer preferences', () => {

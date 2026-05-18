@@ -43,7 +43,9 @@ describe('buildWorkflowSQL', () => {
     expect(result.sql).toContain('WITH n1 AS');
     expect(result.sql).toContain('SELECT * FROM "my_table"');
     expect(result.sql).toContain('LIMIT 5000');
-    expect(result.sql).toContain('ST_AsGeoJSON');
+    expect(result.sql).not.toContain('ST_AsGeoJSON');
+    expect(result.resultSql).toContain('FROM n1');
+    expect(result.geomColumn).toBe('geometry');
   });
 
   it('generates a buffer analysis workflow', () => {
@@ -133,7 +135,8 @@ describe('buildWorkflowSQL', () => {
     const result = buildWorkflowSQL(nodes, edges);
 
     expect(result.sql).toContain('ST_Area("geometry") AS "area_result"');
-    expect(result.sql).toContain('ST_AsGeoJSON("geometry")');
+    expect(result.sql).not.toContain('ST_AsGeoJSON');
+    expect(result.geomColumn).toBe('geometry');
   });
 
   it('uses boolean two-input predicates as filters while preserving source geometry', () => {
@@ -151,7 +154,8 @@ describe('buildWorkflowSQL', () => {
 
     expect(result.sql).toContain('ST_Contains(a."geometry", b."geometry") AS "contains_result"');
     expect(result.sql).toContain('WHERE ST_Contains(a."geometry", b."geometry")');
-    expect(result.sql).toContain('ST_AsGeoJSON("geometry")');
+    expect(result.sql).not.toContain('ST_AsGeoJSON');
+    expect(result.geomColumn).toBe('geometry');
   });
 
   it('rejects table functions as normal analysis nodes', () => {

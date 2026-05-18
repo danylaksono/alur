@@ -9,13 +9,12 @@ import {
   buildLabelVisualisation,
   buildDotDensityVisualisation,
   buildLegend,
-  profileGeoJsonField,
   type FieldProfile,
 } from '../../utils/classification';
 import { geometryKindForLayer } from '../../utils/mapStyleCompiler';
 import { getPalette, SEQUENTIAL_PALETTES } from '../../utils/palettes';
 import { cn } from '../../utils/cn';
-import { queryLayerTemporalRange, type TemporalRange } from '../../services/visualAnalyticsService';
+import { queryLayerFieldProfile, queryLayerTemporalRange, type TemporalRange } from '../../services/visualAnalyticsService';
 import { generateDotDensityGeoJSON } from '../../services/dotDensityService';
 import { TemporalSlider } from './TemporalSlider';
 
@@ -25,13 +24,13 @@ const formatCount = (count: number) => count.toLocaleString();
 
 const fieldNamesForLayer = (layer: MapLayer | null) => {
   if (!layer) return [];
-  const names = new Set<string>();
-  layer.geojson.features.slice(0, 200).forEach((feature) => {
-    Object.keys(feature.properties || {}).forEach((key) => {
-      if (!excludedFields.has(key.toLowerCase())) names.add(key);
-    });
-  });
-  return [...names].sort((a, b) => a.localeCompare(b));
+  return layer.source.fields
+    .map((field) => field.name)
+    .filter((name) => {
+      const lower = name.toLowerCase();
+      return !excludedFields.has(lower) && !lower.startsWith('__ymn_');
+    })
+    .sort((a, b) => a.localeCompare(b));
 };
 
 const DistributionPreview = ({
@@ -131,6 +130,7 @@ export const VisualisationPanel = () => {
   const [temporalStart, setTemporalStart] = useState('');
   const [temporalEnd, setTemporalEnd] = useState('');
   const [temporalRange, setTemporalRange] = useState<TemporalRange | null>(null);
+  const [profile, setProfile] = useState<FieldProfile | null>(null);
 
   useEffect(() => {
     if (!selectedLayer || !temporalField) {
@@ -175,10 +175,21 @@ export const VisualisationPanel = () => {
     setTemporalField(fields[0] || '');
   }, [selectedLayer?.id, fields]);
 
-  const profile = useMemo(() => {
-    if (!selectedLayer || !field) return null;
-    return profileGeoJsonField(selectedLayer.geojson.features, field);
-  }, [selectedLayer?.geojson, field]);
+  useEffect(() => {
+    if (!selectedLayer || !field) {
+      setProfile(null);
+      return;
+    }
+    let cancelled = false;
+    queryLayerFieldProfile({ layer: selectedLayer, column: field })
+      .then((result) => {
+        if (!cancelled) setProfile(result);
+      })
+      .catch(() => {
+        if (!cancelled) setProfile(null);
+      });
+    return () => { cancelled = true; };
+  }, [selectedLayer?.id, selectedLayer?.styleVersion, field]);
   const hasActiveStyle = Boolean(selectedLayer?.visualisation || selectedLayer?.legend);
 
   const canApply = Boolean(
@@ -189,7 +200,7 @@ export const VisualisationPanel = () => {
       (kind === 'graduated_symbol' && geometryKind === 'point' && profile?.kind === 'numeric') ||
       (kind === 'heatmap' && geometryKind === 'point') ||
       (kind === 'label' && field) ||
-      (kind === 'dot_density' && geometryKind === 'polygon' && profile?.kind === 'numeric')),
+      (kind === 'dot_density' && geometryKind === 'polygon' && Boolean(selectedLayer.geojson) && profile?.kind === 'numeric')),
   );
 
   const [dotDensityGenerating, setDotDensityGenerating] = useState(false);
@@ -213,9 +224,10 @@ export const VisualisationPanel = () => {
       const dotLayerId = `${selectedLayer.id}-dots`;
       const existingDotsLayer = mapLayers.find((l) => l.id === dotLayerId);
       if (existingDotsLayer) return;
+      if (!selectedLayer.geojson) return;
 
       setDotDensityGenerating(true);
-      generateDotDensityGeoJSON(selectedLayer, { field, dotValue: visualisation.dotValue, color: visualisation.color, radius: visualisation.radius, opacity: visualisation.opacity })
+      generateDotDensityGeoJSON({ id: selectedLayer.id, geojson: selectedLayer.geojson }, { field, dotValue: visualisation.dotValue, color: visualisation.color, radius: visualisation.radius, opacity: visualisation.opacity })
         .then((dotsGeojson) => {
           addMapLayer({
             id: dotLayerId,
@@ -387,7 +399,7 @@ export const VisualisationPanel = () => {
                   <option value="categorical">Categories</option>
                   {geometryKind === 'point' && <option value="graduated_symbol">Symbols</option>}
                   {geometryKind === 'point' && <option value="heatmap">Heatmap</option>}
-                  {geometryKind === 'polygon' && <option value="dot_density">Dot density</option>}
+                  {geometryKind === 'polygon' && selectedLayer.geojson && <option value="dot_density">Dot density</option>}
                   <option value="label">Labels</option>
                 </select>
               </label>
@@ -486,8 +498,9 @@ export const VisualisationPanel = () => {
                     const dotLayerId = `${selectedLayer.id}-dots`;
                     const existingDots = mapLayers.find((l) => l.id === dotLayerId);
                     if (existingDots) removeMapLayer(dotLayerId);
+                    if (!selectedLayer.geojson) return;
                     setDotDensityGenerating(true);
-                    generateDotDensityGeoJSON(selectedLayer, {
+                    generateDotDensityGeoJSON({ id: selectedLayer.id, geojson: selectedLayer.geojson }, {
                       field: selectedLayer.visualisation.field,
                       dotValue: selectedLayer.visualisation.dotValue,
                       color: selectedLayer.visualisation.color,

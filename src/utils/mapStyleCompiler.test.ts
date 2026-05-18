@@ -19,6 +19,11 @@ const layer = (geometryType: GeoJSON.Geometry['type'], patch: Partial<MapLayer> 
       },
     ],
   },
+  source: {
+    kind: 'legacy-geojson',
+    geometryKind: geometryType === 'LineString' ? 'line' : geometryType === 'Polygon' ? 'polygon' : 'point',
+    fields: [{ name: 'need', type: 'DOUBLE' }, { name: 'borough', type: 'VARCHAR' }],
+  },
   visible: true,
   opacity: 0.8,
   createdAt: 1,

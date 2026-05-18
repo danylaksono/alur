@@ -2,8 +2,8 @@ import { useState, useRef, useEffect, type ReactNode } from 'react';
 import { Copy, Trash2, Info, Play, Download, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { buildUpToSQL } from '../../utils/workflowEngine';
-import { resolveVisualisationForGeoJson } from '../../utils/visualisationResolver';
 import { duckdbService } from '../../services/duckdb';
+import { materializeWorkflowMapLayer } from '../../services/layerMaterialization';
 
 interface NodeActionsProps {
   id: string;
@@ -27,25 +27,24 @@ export const NodeActions = ({ id, helperContent }: NodeActionsProps) => {
     const { nodes, edges } = useStore.getState();
     setNodeExecutionState(id, { status: 'running' });
     try {
-      const { sql, visualisationConfig } = buildUpToSQL(nodes, edges, id);
+      const workflow = buildUpToSQL(nodes, edges, id);
       addChatMessage('system', `▶️ Executing up to node: ${nodes.find((n) => n.id === id)?.data.label || id}`);
-      const geojson = await duckdbService.getGeoJSON(sql);
-      if (!geojson || geojson.features.length === 0) {
+      const layer = await materializeWorkflowMapLayer({
+        workflow,
+        layerId: `exec-${id}`,
+        name: `Step: ${nodes.find((n) => n.id === id)?.data.label || id}`,
+        sourceNodeId: id,
+        sourceKind: 'step',
+        visualisationConfig: workflow.visualisationConfig,
+      });
+      if (!layer.featureCount) {
         addChatMessage('system', '⚠️ Execution produced no features.');
         setNodeExecutionState(id, { status: 'done', featureCount: 0 });
         return;
       }
-      const resolvedStyle = resolveVisualisationForGeoJson(geojson, visualisationConfig);
-      addMapLayer({
-        id: `exec-${id}`,
-        name: `Step: ${nodes.find((n) => n.id === id)?.data.label || id}`,
-        geojson,
-        sourceNodeId: id,
-        sourceKind: 'step',
-        ...resolvedStyle,
-      });
-      setNodeExecutionState(id, { status: 'done', featureCount: geojson.features.length });
-      addChatMessage('system', `✅ Step executed: ${geojson.features.length.toLocaleString()} features`);
+      addMapLayer(layer);
+      setNodeExecutionState(id, { status: 'done', featureCount: layer.featureCount });
+      addChatMessage('system', `✅ Step executed: ${layer.featureCount.toLocaleString()} features`);
     } catch (err: any) {
       setNodeExecutionState(id, { status: 'error', error: err.message });
       addChatMessage('system', `❌ Step error: ${err.message}`);
@@ -56,9 +55,11 @@ export const NodeActions = ({ id, helperContent }: NodeActionsProps) => {
     const { nodes, edges } = useStore.getState();
     setExporting(true);
     try {
-      const { sql } = buildUpToSQL(nodes, edges, id);
+      const workflow = buildUpToSQL(nodes, edges, id);
       if (format === 'geojson') {
-        const geojson = await duckdbService.getGeoJSON(sql);
+        const tableName = `ymn_export_${id.replace(/[^a-zA-Z0-9_]/g, '_')}_${Date.now()}`;
+        await duckdbService.materializeQueryAsTable(workflow.resultSql, tableName);
+        const geojson = await duckdbService.getGeoJSONFromTable(tableName, 100000);
         if (!geojson || geojson.features.length === 0) {
           addChatMessage('system', '⚠️ Nothing to export.');
           return;
@@ -73,7 +74,7 @@ export const NodeActions = ({ id, helperContent }: NodeActionsProps) => {
         URL.revokeObjectURL(url);
         addChatMessage('system', `📦 Exported ${geojson.features.length} features as GeoJSON`);
       } else {
-        const { buffer, fileName } = await duckdbService.exportTable(sql, 'csv');
+        const { buffer, fileName } = await duckdbService.exportTable(workflow.resultSql, 'csv');
         const blob = new Blob([buffer as BlobPart], { type: 'text/csv' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');

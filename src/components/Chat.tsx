@@ -15,6 +15,7 @@ import {
   profileGeoJsonField,
 } from '../utils/classification';
 import { getPalette } from '../utils/palettes';
+import { queryLayerFieldProfile } from '../services/visualAnalyticsService';
 
 export const Chat = () => {
   const {
@@ -253,7 +254,9 @@ export const Chat = () => {
               break;
             }
 
-            const profile = profileGeoJsonField(layer.geojson.features, field);
+            const profile = layer.geojson
+              ? profileGeoJsonField(layer.geojson.features, field)
+              : await queryLayerFieldProfile({ layer, column: field });
             const kind = args.kind || args.type || (profile.kind === 'numeric' ? 'choropleth' : 'categorical');
 
             if (kind === 'choropleth' && profile.kind === 'numeric') {

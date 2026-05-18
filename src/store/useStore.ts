@@ -14,6 +14,7 @@ import type { LayerVisualisation, LegendSpec } from '../types/visualisation';
 import { ensureFeatureIds } from '../utils/featureIdentity';
 import type { VisualAnalyticsState, VisualFilter } from '../types/visualAnalytics';
 import type { MvtTileSource } from '../services/duckdb';
+import type { LayerSource } from '../types/layers';
 
 export type NodeExecutionState = {
   status: 'idle' | 'running' | 'done' | 'error';
@@ -28,7 +29,8 @@ const initialChatMessages: ChatMessage[] = [
 export type MapLayer = {
   id: string;
   name: string;
-  geojson: GeoJSON.FeatureCollection;
+  source: LayerSource;
+  geojson?: GeoJSON.FeatureCollection;
   tileSource?: MvtTileSource;
   visible: boolean;
   sourceNodeId?: string;
@@ -123,8 +125,8 @@ interface AppState {
   removeToast: (id: string) => void;
 }
 
-export type NewMapLayer = Omit<MapLayer, 'visible' | 'opacity' | 'createdAt' | 'featureCount' | 'styleVersion'> &
-  Partial<Pick<MapLayer, 'visible' | 'opacity' | 'createdAt' | 'featureCount' | 'styleVersion'>>;
+export type NewMapLayer = Omit<MapLayer, 'visible' | 'opacity' | 'createdAt' | 'featureCount' | 'styleVersion' | 'source'> &
+  Partial<Pick<MapLayer, 'visible' | 'opacity' | 'createdAt' | 'featureCount' | 'styleVersion' | 'source'>>;
 
 if (typeof window !== 'undefined') {
   window.localStorage.removeItem('ymnngis-workflow');
@@ -133,18 +135,47 @@ if (typeof window !== 'undefined') {
 const removeRecordKeys = <T>(record: Record<string, T>, ids: Set<string>) =>
   Object.fromEntries(Object.entries(record).filter(([id]) => !ids.has(id)));
 
-const hydrateLayer = (layer: NewMapLayer, previous?: MapLayer): MapLayer => ({
-  ...previous,
-  ...layer,
-  visible: layer.visible ?? previous?.visible ?? true,
-  opacity: layer.opacity ?? previous?.opacity ?? 0.8,
-  createdAt: layer.createdAt ?? previous?.createdAt ?? Date.now(),
-  featureCount: layer.featureCount ?? layer.geojson.features.length,
-  geojson: ensureFeatureIds(layer.geojson, layer.id),
-  visualisation: layer.visualisation ?? previous?.visualisation,
-  legend: layer.legend ?? previous?.legend,
-  styleVersion: layer.styleVersion ?? (previous ? previous.styleVersion + 1 : 1),
-});
+const emptyFeatureCollection: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
+
+const inferLegacyGeometryKind = (geojson?: GeoJSON.FeatureCollection) => {
+  const geomType = geojson?.features.find((feature) => feature.geometry)?.geometry?.type || 'Point';
+  if (geomType.includes('Line')) return 'line' as const;
+  if (geomType.includes('Polygon')) return 'polygon' as const;
+  return 'point' as const;
+};
+
+const legacyFields = (geojson?: GeoJSON.FeatureCollection) => {
+  const names = new Set<string>();
+  geojson?.features.slice(0, 200).forEach((feature) => {
+    Object.keys(feature.properties || {}).forEach((name) => names.add(name));
+  });
+  return [...names].sort((a, b) => a.localeCompare(b)).map((name) => ({ name, type: 'UNKNOWN' }));
+};
+
+const hydrateLayer = (layer: NewMapLayer, previous?: MapLayer): MapLayer => {
+  const legacyGeojson = layer.geojson
+    ? ensureFeatureIds(layer.geojson, layer.id)
+    : previous?.geojson;
+  const source = layer.source ?? previous?.source ?? {
+    kind: 'legacy-geojson' as const,
+    geometryKind: inferLegacyGeometryKind(legacyGeojson),
+    fields: legacyFields(legacyGeojson),
+  };
+
+  return {
+    ...previous,
+    ...layer,
+    source,
+    visible: layer.visible ?? previous?.visible ?? true,
+    opacity: layer.opacity ?? previous?.opacity ?? 0.8,
+    createdAt: layer.createdAt ?? previous?.createdAt ?? Date.now(),
+    featureCount: layer.featureCount ?? legacyGeojson?.features.length ?? previous?.featureCount ?? 0,
+    geojson: legacyGeojson,
+    visualisation: layer.visualisation ?? previous?.visualisation,
+    legend: layer.legend ?? previous?.legend,
+    styleVersion: layer.styleVersion ?? (previous ? previous.styleVersion + 1 : 1),
+  };
+};
 
 export const useStore = create<AppState>()((set, get) => ({
   nodes: [],

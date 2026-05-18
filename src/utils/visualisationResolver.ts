@@ -11,6 +11,8 @@ import {
   profileGeoJsonField,
 } from './classification';
 import { getPalette } from './palettes';
+import type { MapLayer } from '../store/useStore';
+import { queryLayerFieldProfile } from '../services/visualAnalyticsService';
 
 export const resolveVisualisationForGeoJson = (
   geojson: GeoJSON.FeatureCollection,
@@ -64,3 +66,54 @@ export const resolveVisualisationForGeoJson = (
   return {};
 };
 
+export const resolveVisualisationForLayer = async (
+  layer: Pick<MapLayer, 'id' | 'source' | 'geojson'>,
+  config?: WorkflowVisualisationConfig,
+): Promise<{ visualisation?: LayerVisualisation; legend?: LegendSpec }> => {
+  if (!config?.kind) return {};
+
+  const field = typeof config.field === 'string' ? config.field : '';
+  const palette = getPalette(config.paletteId || 'teal').colors;
+  const profile = field ? await queryLayerFieldProfile({ layer, column: field }).catch(() => null) : null;
+
+  if (config.kind === 'choropleth' && field && profile?.kind === 'numeric') {
+    const visualisation = buildChoroplethVisualisation({
+      field,
+      profile,
+      method: config.method === 'equal_interval' || config.method === 'manual' ? config.method : 'quantile',
+      classCount: typeof config.classCount === 'number' ? config.classCount : 5,
+      palette,
+    });
+    return { visualisation, legend: buildLegend(visualisation) };
+  }
+
+  if (config.kind === 'categorical' && field && profile?.kind === 'categorical') {
+    const visualisation = buildCategoricalVisualisation({ field, profile });
+    return { visualisation, legend: buildLegend(visualisation) };
+  }
+
+  if (config.kind === 'graduated_symbol' && field && profile?.kind === 'numeric') {
+    const visualisation = buildGraduatedSymbolVisualisation({ field, profile });
+    return { visualisation, legend: buildLegend(visualisation) };
+  }
+
+  if (config.kind === 'heatmap') {
+    const visualisation = buildHeatmapVisualisation({
+      field: profile?.kind === 'numeric' ? field : undefined,
+      palette,
+    });
+    return { visualisation, legend: buildLegend(visualisation) };
+  }
+
+  if (config.kind === 'label' && field) {
+    const visualisation = buildLabelVisualisation({ field });
+    return { visualisation, legend: buildLegend(visualisation) };
+  }
+
+  if (config.kind === 'dot_density' && field && profile?.kind === 'numeric') {
+    const visualisation = buildDotDensityVisualisation({ field });
+    return { visualisation, legend: buildLegend(visualisation) };
+  }
+
+  return {};
+};
