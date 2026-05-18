@@ -106,14 +106,14 @@ class DuckDBService {
 
     async registerFileBuffer(name: string, buffer: Uint8Array) {
         if (!this.db) throw new Error('DuckDB not initialized');
-        await this.db.registerFileBuffer(name, buffer);
+        await this.db.registerFileBuffer(name, new Uint8Array(buffer));
         await this.db.flushFiles();
         return name;
     }
 
     async registerFileHandle(name: string, file: File) {
         if (!this.db) throw new Error('DuckDB not initialized');
-        await this.db.registerFileHandle(name, file, duckdb.DuckDBDataProtocol.BROWSER_FILEREADER, false);
+        await this.db.registerFileHandle(name, file, duckdb.DuckDBDataProtocol.BROWSER_FILEREADER, true);
         await this.db.flushFiles();
         return name;
     }
@@ -121,25 +121,36 @@ class DuckDBService {
     async registerUploadedFile(name: string, file: File, kind: 'parquet' | 'csv') {
         if (!this.db) throw new Error('DuckDB not initialized');
 
-        const candidates = [name, `/${name}`];
-        const probe = async (path: string) => {
+        const candidates = [name];
+        const scanExpressions = (path: string) => {
             const escaped = escapeSqlString(path);
             if (kind === 'parquet') {
-                await this.query(`SELECT * FROM read_parquet('${escaped}') LIMIT 0;`);
-            } else {
-                await this.query(`SELECT * FROM read_csv_auto('${escaped}') LIMIT 0;`);
+                return [`read_parquet('${escaped}')`, `'${escaped}'`];
             }
+            return [`read_csv_auto('${escaped}')`];
+        };
+        const probe = async (path: string) => {
+            const errors: string[] = [];
+            for (const scanSql of scanExpressions(path)) {
+                try {
+                    await this.query(`SELECT * FROM ${scanSql} LIMIT 0;`);
+                    return scanSql;
+                } catch (err: any) {
+                    errors.push(`${scanSql}: ${err?.message || String(err)}`);
+                }
+            }
+            throw new Error(errors.join(' | '));
         };
 
         const errors: string[] = [];
 
-        const buffer = new Uint8Array(await file.arrayBuffer());
+        const fileBuffer = await file.arrayBuffer();
         for (const path of candidates) {
             try {
                 await this.db.dropFile(path).catch(() => null);
-                await this.registerFileBuffer(path, buffer);
-                await probe(path);
-                return path;
+                await this.registerFileBuffer(path, new Uint8Array(fileBuffer.slice(0)));
+                const scanSql = await probe(path);
+                return { path, scanSql };
             } catch (err: any) {
                 errors.push(`buffer ${path}: ${err?.message || String(err)}`);
             }
@@ -149,8 +160,8 @@ class DuckDBService {
             try {
                 await this.db.dropFile(path).catch(() => null);
                 await this.registerFileHandle(path, file);
-                await probe(path);
-                return path;
+                const scanSql = await probe(path);
+                return { path, scanSql };
             } catch (err: any) {
                 errors.push(`file handle ${path}: ${err?.message || String(err)}`);
             }

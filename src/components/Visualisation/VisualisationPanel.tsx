@@ -119,7 +119,8 @@ export const VisualisationPanel = () => {
     () => mapLayers.find((layer) => layer.id === selectedLayerId) || null,
     [mapLayers, selectedLayerId],
   );
-  const fields = useMemo(() => fieldNamesForLayer(selectedLayer), [selectedLayer]);
+  const fields = useMemo(() => fieldNamesForLayer(selectedLayer), [selectedLayer?.id, selectedLayer?.source]);
+  const fieldsKey = fields.join('|');
   const geometryKind = useMemo(() => selectedLayer ? geometryKindForLayer(selectedLayer) : null, [selectedLayer]);
   const [field, setField] = useState('');
   const [kind, setKind] = useState<'simple' | 'choropleth' | 'categorical' | 'graduated_symbol' | 'heatmap' | 'label' | 'dot_density'>('simple');
@@ -173,7 +174,7 @@ export const VisualisationPanel = () => {
     setKind('simple');
     setField(fields[0] || '');
     setTemporalField(fields[0] || '');
-  }, [selectedLayer?.id, fields]);
+  }, [selectedLayer?.id, fieldsKey]);
 
   useEffect(() => {
     if (!selectedLayer || !field) {
@@ -189,7 +190,7 @@ export const VisualisationPanel = () => {
         if (!cancelled) setProfile(null);
       });
     return () => { cancelled = true; };
-  }, [selectedLayer?.id, selectedLayer?.styleVersion, field]);
+  }, [selectedLayer?.id, selectedLayer?.source, field]);
   const hasActiveStyle = Boolean(selectedLayer?.visualisation || selectedLayer?.legend);
 
   const canApply = Boolean(

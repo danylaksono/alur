@@ -177,6 +177,8 @@ const hydrateLayer = (layer: NewMapLayer, previous?: MapLayer): MapLayer => {
   };
 };
 
+const sameJson = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+
 export const useStore = create<AppState>()((set, get) => ({
   nodes: [],
   edges: [],
@@ -383,16 +385,17 @@ export const useStore = create<AppState>()((set, get) => ({
   })),
 
   updateLayerVisualisation: (layerId, visualisation, legend) => set((state) => ({
-    mapLayers: state.mapLayers.map((layer) =>
-      layer.id === layerId
-        ? { ...layer, visualisation, legend, styleVersion: layer.styleVersion + 1 }
-        : layer
-    ),
+    mapLayers: state.mapLayers.map((layer) => {
+      if (layer.id !== layerId) return layer;
+      if (sameJson(layer.visualisation, visualisation) && sameJson(layer.legend, legend)) return layer;
+      return { ...layer, visualisation, legend, styleVersion: layer.styleVersion + 1 };
+    }),
   })),
 
   clearLayerVisualisation: (layerId) => set((state) => ({
     mapLayers: state.mapLayers.map((layer) => {
       if (layer.id !== layerId) return layer;
+      if (!layer.visualisation && !layer.legend) return layer;
       const { visualisation, legend, ...rest } = layer;
       return { ...rest, styleVersion: layer.styleVersion + 1 };
     }),

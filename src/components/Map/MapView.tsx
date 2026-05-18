@@ -122,6 +122,9 @@ export const MapView = () => {
       layerName: layer.name,
       legend: layer.legend!,
     }));
+  const layerFilterKey = JSON.stringify(
+    Object.fromEntries(mapLayers.map((layer) => [layer.id, visualAnalytics.layers[layer.id]?.filters || []])),
+  );
 
   // Init map once
   useEffect(() => {
@@ -202,7 +205,10 @@ export const MapView = () => {
         const tileSource = baseMvtSource
           ? { ...baseMvtSource, filterWhereClause: compileVisualFiltersWhereClause(tileFilters) }
           : undefined;
-        const sourceVersion = `${layer.styleVersion}:${JSON.stringify(layerFilters)}`;
+        const renderVersion = layer.source.kind === 'duckdb-table' || layer.source.kind === 'duckdb-query'
+          ? layer.source.renderVersion
+          : layer.styleVersion;
+        const sourceVersion = `${renderVersion}:${JSON.stringify(tileFilters)}`;
         const isVectorTiled = Boolean(tileSource);
         const isClustered = !isVectorTiled && layerGeoKind === 'point' && typeof layer.clusterRadius === 'number';
         const sourceLayer = tileSource?.layerName;
@@ -411,7 +417,7 @@ export const MapView = () => {
     };
 
     syncLayers();
-  }, [mapLayers, selectedBasemapId, visualAnalytics, setSelectedNodeId, selectLayer, setHoveredFeature, toggleSelectedFeature]);
+  }, [mapLayers, selectedBasemapId, layerFilterKey, setSelectedNodeId, selectLayer, setHoveredFeature, toggleSelectedFeature]);
 
   useEffect(() => {
     const m = map.current;

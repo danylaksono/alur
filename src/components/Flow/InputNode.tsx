@@ -17,6 +17,7 @@ export const InputNode = ({ data, id }: any) => {
     fileName: string,
     filePath: string,
     alreadyRegistered = false,
+    scanSql?: string,
   ) => {
     const baseName = fileName.replace(/\.[^/.]+$/, '');
     let tableName = baseName.replace(/[^a-zA-Z0-9]/g, '_');
@@ -31,9 +32,9 @@ export const InputNode = ({ data, id }: any) => {
 
     let query = '';
     if (fileNameLower.endsWith('.parquet')) {
-      query = `CREATE OR REPLACE VIEW ${quotedTableName} AS SELECT * FROM read_parquet('${escapeSqlString(filePath)}');`;
+      query = `CREATE OR REPLACE VIEW ${quotedTableName} AS SELECT * FROM ${scanSql || `read_parquet('${escapeSqlString(filePath)}')`};`;
     } else if (fileNameLower.endsWith('.csv')) {
-      query = `CREATE OR REPLACE VIEW ${quotedTableName} AS SELECT * FROM read_csv_auto('${escapeSqlString(filePath)}');`;
+      query = `CREATE OR REPLACE VIEW ${quotedTableName} AS SELECT * FROM ${scanSql || `read_csv_auto('${escapeSqlString(filePath)}')`};`;
     }
 
     if (!query) {
@@ -85,8 +86,8 @@ export const InputNode = ({ data, id }: any) => {
       const normalizedFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
       const filePath = `${Date.now()}_${normalizedFileName}`;
       const fileKind = file.name.toLowerCase().endsWith('.csv') ? 'csv' : 'parquet';
-      const registeredPath = await duckdbService.registerUploadedFile(filePath, file, fileKind);
-      await loadAndRegister(new Uint8Array(), file.name, registeredPath, true);
+      const registered = await duckdbService.registerUploadedFile(filePath, file, fileKind);
+      await loadAndRegister(new Uint8Array(), file.name, registered.path, true, registered.scanSql);
     } catch (err: any) {
       addChatMessage('system', `Error loading file: ${err.message}`);
     } finally {
