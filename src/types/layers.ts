@@ -14,6 +14,9 @@ export type DuckDbLayerSource = {
   originalTableName?: string;
   geometryColumn: string;
   crs: string;
+  crsName?: string;
+  crsConfidence?: 'high' | 'medium' | 'low';
+  crsReason?: string;
   geometryKind: GeometryKind;
   featureIdColumn: string;
   bounds?: LayerBounds;
@@ -30,4 +33,3 @@ export type LegacyGeoJsonLayerSource = {
 };
 
 export type LayerSource = DuckDbLayerSource | LegacyGeoJsonLayerSource;
-

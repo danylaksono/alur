@@ -1,16 +1,21 @@
 import { type ChangeEvent, useState } from 'react';
 import { Handle, Position } from '@xyflow/react';
-import { Database, Upload, FileJson, Loader2, Sparkles } from 'lucide-react';
+import { Database, Upload, FileJson, Loader2, MapPinned, Table2 } from 'lucide-react';
 import { duckdbService } from '../../services/duckdb';
 import { useStore } from '../../store/useStore';
 import { FlowNodeShell, nodeHandleClass } from './FlowNodeShell';
 
 export const InputNode = ({ data, id }: any) => {
+  const config = data.config || {};
   const updateNode = useStore((s) => s.updateNode);
   const addChatMessage = useStore((s) => s.addChatMessage);
   const addMapLayer = useStore((s) => s.addMapLayer);
   const focusLayer = useStore((s) => s.focusLayer);
   const [loading, setLoading] = useState(false);
+  const fileLabel = config.fileName || config.tableName || 'Load data';
+  const datasetLabel = fileLabel.replace(/\.[^/.]+$/, '');
+  const crsLabel = config.crs || 'CRS pending';
+  const crsTitle = [config.crsName, config.crsReason].filter(Boolean).join(' - ');
 
   const loadAndRegister = async (
     buffer: Uint8Array,
@@ -55,6 +60,16 @@ export const InputNode = ({ data, id }: any) => {
     ]);
 
     if (source) {
+      updateNode(id, {
+        ...data.config,
+        tableName,
+        fileName,
+        featureCount,
+        crs: source.crs,
+        crsName: source.crsName,
+        crsConfidence: source.crsConfidence,
+        crsReason: source.crsReason,
+      });
       addMapLayer({
         id: tableName,
         name: fileName,
@@ -116,20 +131,31 @@ export const InputNode = ({ data, id }: any) => {
       tone="blue"
       icon={Database}
       label="Data Source"
-      title={data.config.tableName || 'Load data'}
+      title={config.tableName ? datasetLabel : 'Load data'}
     >
       {loading ? (
         <div className="flex flex-col items-center justify-center py-4 gap-2">
           <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />
           <span className="text-[10px] text-muted-foreground">Loading data...</span>
         </div>
-      ) : data.config.tableName ? (
-        <div>
-          <div className="text-sm font-bold text-slate-700 truncate max-w-[180px]">
-            {data.config.tableName}
-          </div>
-          <div className="text-[10px] text-muted-foreground flex items-center gap-1 mt-1">
-            <FileJson className="w-2.5 h-2.5" /> {data.config.fileName}
+      ) : config.tableName ? (
+        <div className="space-y-2">
+          <div className="grid grid-cols-[auto_1fr] gap-x-1.5 gap-y-1 text-[10px] text-muted-foreground">
+            <FileJson className="mt-0.5 h-2.5 w-2.5" />
+            <span className="truncate" title={config.fileName}>
+              {config.fileName}
+            </span>
+            <MapPinned className="mt-0.5 h-2.5 w-2.5" />
+            <span className="truncate" title={crsTitle || crsLabel}>
+              {crsLabel}
+              {config.crsConfidence ? ` · ${config.crsConfidence}` : ''}
+            </span>
+            <Table2 className="mt-0.5 h-2.5 w-2.5" />
+            <span className="truncate" title={config.tableName}>
+              {config.featureCount !== undefined
+                ? `${Number(config.featureCount).toLocaleString()} features`
+                : config.tableName}
+            </span>
           </div>
         </div>
       ) : (

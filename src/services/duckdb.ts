@@ -29,12 +29,30 @@ export type DuckDbLayerSourceMetadata = {
     originalTableName?: string;
     geometryColumn: string;
     crs: string;
+    crsName?: string;
+    crsConfidence?: 'high' | 'medium' | 'low';
+    crsReason?: string;
     geometryKind: 'point' | 'line' | 'polygon';
     featureIdColumn: string;
     bounds?: [[number, number], [number, number]];
     fields: Array<{ name: string; type: string }>;
     tileSource: MvtTileSource;
     renderVersion: number;
+};
+
+type LayerExtent = {
+    minX: number;
+    minY: number;
+    maxX: number;
+    maxY: number;
+};
+
+type CrsEstimate = {
+    code: string;
+    name: string;
+    confidence: 'high' | 'medium' | 'low';
+    reason: string;
+    transformCrs: string;
 };
 
 const qi = (name: string) => `"${name.replace(/"/g, '""')}"`;
@@ -314,7 +332,7 @@ class DuckDBService {
             });
     }
 
-    private async layerBounds(tableName: string, geomExpr: string): Promise<[[number, number], [number, number]] | undefined> {
+    private async layerExtent(tableName: string, geomExpr: string): Promise<LayerExtent | undefined> {
         try {
             const result = await this.query(`
                 WITH extent AS (
@@ -337,11 +355,89 @@ class DuckDBService {
             const maxX = Number(row?.max_x);
             const maxY = Number(row?.max_y);
             if (![minX, minY, maxX, maxY].every(Number.isFinite)) return undefined;
-            if (minX < -180 || maxX > 180 || minY < -90 || maxY > 90) return undefined;
-            return [[minX, minY], [maxX, maxY]];
+            return { minX, minY, maxX, maxY };
         } catch {
             return undefined;
         }
+    }
+
+    private estimateCrs(extent: LayerExtent | undefined, hint: string): CrsEstimate {
+        const normalizedHint = hint.toLowerCase();
+        if (!extent) {
+            return {
+                code: 'Unknown CRS',
+                name: 'Unknown coordinate reference system',
+                confidence: 'low',
+                reason: 'No geometry extent was available.',
+                transformCrs: 'EPSG:4326',
+            };
+        }
+
+        const withinLonLat =
+            extent.minX >= -180 && extent.maxX <= 180 &&
+            extent.minY >= -90 && extent.maxY <= 90;
+        if (withinLonLat) {
+            return {
+                code: 'EPSG:4326',
+                name: 'WGS 84 longitude/latitude',
+                confidence: 'high',
+                reason: 'Extent falls within longitude/latitude bounds.',
+                transformCrs: 'EPSG:4326',
+            };
+        }
+
+        const hasBritishGridHint = /\b(osng|osgb|bng|british|national_grid)\b/.test(normalizedHint);
+        const withinBritishNationalGrid =
+            extent.minX >= -100000 && extent.maxX <= 800000 &&
+            extent.minY >= -100000 && extent.maxY <= 1400000;
+        if (hasBritishGridHint || withinBritishNationalGrid) {
+            return {
+                code: 'EPSG:27700',
+                name: 'OSGB36 / British National Grid',
+                confidence: hasBritishGridHint ? 'high' : 'medium',
+                reason: hasBritishGridHint
+                    ? 'Filename/table hint and extent match OS National Grid coordinates.'
+                    : 'Extent matches the typical British National Grid range.',
+                transformCrs: 'EPSG:27700',
+            };
+        }
+
+        const withinWebMercator =
+            Math.abs(extent.minX) <= 20037508.342789244 &&
+            Math.abs(extent.maxX) <= 20037508.342789244 &&
+            Math.abs(extent.minY) <= 20037508.342789244 &&
+            Math.abs(extent.maxY) <= 20037508.342789244;
+        if (withinWebMercator) {
+            return {
+                code: 'EPSG:3857',
+                name: 'Web Mercator',
+                confidence: 'medium',
+                reason: 'Extent fits the Web Mercator coordinate range.',
+                transformCrs: 'EPSG:3857',
+            };
+        }
+
+        return {
+            code: 'Unknown projected CRS',
+            name: 'Projected coordinate system',
+            confidence: 'low',
+            reason: 'Extent is outside longitude/latitude bounds but does not match a known heuristic.',
+            transformCrs: 'EPSG:4326',
+        };
+    }
+
+    private async layerBounds(
+        tableName: string,
+        geomExpr: string,
+        sourceCrs: string,
+    ): Promise<[[number, number], [number, number]] | undefined> {
+        const boundsGeomExpr = sourceCrs === 'EPSG:4326'
+            ? geomExpr
+            : `ST_Transform(${geomExpr}, '${sourceCrs}', 'EPSG:4326', true)`;
+        const extent = await this.layerExtent(tableName, boundsGeomExpr);
+        if (!extent) return undefined;
+        if (extent.minX < -180 || extent.maxX > 180 || extent.minY < -90 || extent.maxY > 90) return undefined;
+        return [[extent.minX, extent.minY], [extent.maxX, extent.maxY]];
     }
 
     private geometryKindFromType(type: string): MvtTileSource['geometryKind'] {
@@ -491,7 +587,7 @@ class DuckDBService {
         return null;
     }
 
-    async prepareMvtTileSource(tableName: string, options: { filterWhereClause?: string } = {}): Promise<MvtTileSource | null> {
+    async prepareMvtTileSource(tableName: string, options: { filterWhereClause?: string; sourceCrs?: string } = {}): Promise<MvtTileSource | null> {
         if (!this.spatialLoaded) return null;
 
         const columns = await this.getTableSchemaRows(tableName);
@@ -504,12 +600,13 @@ class DuckDBService {
         const propertySelect = propertyColumns.length
             ? `, ${propertyColumns.map((name) => qi(name)).join(', ')}`
             : '';
+        const sourceCrs = options.sourceCrs || 'EPSG:4326';
 
         await this.query(`
             CREATE OR REPLACE TABLE ${qi(tileTable)} AS
             SELECT
                 ROW_NUMBER() OVER ()::BIGINT AS __ymn_mvt_id,
-                ST_Transform(${geomExpr}, 'EPSG:4326', 'EPSG:3857', true) AS __ymn_tile_geom
+                ST_Transform(${geomExpr}, '${sourceCrs}', 'EPSG:3857', true) AS __ymn_tile_geom
                 ${propertySelect}
             FROM ${sourceTable}
             WHERE ${geomExpr} IS NOT NULL;
@@ -541,7 +638,12 @@ class DuckDBService {
         const geomExpr = this.geometryExpression(columns);
         if (!geomExpr) return null;
 
-        const tileSource = await this.prepareMvtTileSource(tableName, { filterWhereClause: options.filterWhereClause });
+        const extent = await this.layerExtent(tableName, geomExpr);
+        const crsEstimate = this.estimateCrs(extent, `${tableName} ${options.originalTableName ?? ''}`);
+        const tileSource = await this.prepareMvtTileSource(tableName, {
+            filterWhereClause: options.filterWhereClause,
+            sourceCrs: crsEstimate.transformCrs,
+        });
         if (!tileSource) return null;
 
         const geomCol = columns.find((col: any) => String(col.type || '').toLowerCase() === 'geometry')
@@ -553,10 +655,13 @@ class DuckDBService {
             tableName,
             originalTableName: options.originalTableName ?? tableName,
             geometryColumn: String(geomCol.name || 'geometry'),
-            crs: 'EPSG:4326',
+            crs: crsEstimate.code,
+            crsName: crsEstimate.name,
+            crsConfidence: crsEstimate.confidence,
+            crsReason: crsEstimate.reason,
             geometryKind: tileSource.geometryKind,
             featureIdColumn: '__ymn_mvt_id',
-            bounds: await this.layerBounds(tableName, geomExpr),
+            bounds: await this.layerBounds(tableName, geomExpr, crsEstimate.transformCrs),
             fields: this.fieldsForLayerSource(columns),
             tileSource,
             renderVersion: Date.now(),
