@@ -11,7 +11,10 @@ import {
   Play,
   Settings,
   Terminal,
-  Download
+  Download,
+  Layers,
+  FileText,
+  BarChart3
 } from 'lucide-react';
 import { Sidebar } from './components/Sidebar';
 import { Chat } from './components/Chat';
@@ -19,6 +22,7 @@ import { MapView } from './components/Map/MapView';
 import { LayerManager } from './components/LayerManager';
 import { VisualisationPanel } from './components/Visualisation/VisualisationPanel';
 import { SelectionSummary } from './components/Visualisation/SelectionSummary';
+import { ChartPanel } from './components/Charts/ChartPanel';
 import { InputNode } from './components/Flow/InputNode';
 import { AnalysisNode } from './components/Flow/AnalysisNode';
 import { AttributeNode } from './components/Flow/AttributeNode';
@@ -99,6 +103,7 @@ export default function App() {
   const [previewData, setPreviewData] = useState<any[]>([]);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [workspaceTab, setWorkspaceTab] = useState<'diagram' | 'attributes'>('diagram');
+  const [rightPanelTab, setRightPanelTab] = useState<'layers' | 'charts' | 'details'>('layers');
   const [lastManualSql, setLastManualSql] = useState<string | null>(null);
   const [attributePageIndex, setAttributePageIndex] = useState(0);
   const [attributePageSize, setAttributePageSize] = useState(50);
@@ -716,94 +721,150 @@ export default function App() {
           </div>
         </main>
 
-        <aside className="w-96 shrink-0 border-l bg-white shadow-sm z-40 flex min-h-0 flex-col">
-          <div className="min-h-0 border-b" style={{ flexBasis: '34%' }}>
-            <ErrorBoundary name="Layer Manager">
-              <LayerManager />
-            </ErrorBoundary>
-          </div>
-
-          <div className="min-h-0 border-b" style={{ flexBasis: '32%' }}>
-            <ErrorBoundary name="Visualisation Panel">
-              <VisualisationPanel />
-            </ErrorBoundary>
-          </div>
-
-          <div className="max-h-64 shrink-0 overflow-y-auto border-b">
-            <ErrorBoundary name="Selection Summary">
-              <SelectionSummary
-                layer={selectedLayer}
-                filters={selectedLayerFilters}
-                selectedFeatureIds={selectedFeatureIds}
-              />
-            </ErrorBoundary>
-          </div>
-
-          <ErrorBoundary name="SQL Panel">
-          <div className="flex min-h-0 flex-1 flex-col bg-slate-50">
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4">
-            <div className="flex items-center justify-between gap-2 pb-4">
-              <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                SQL Editor & Workflow Preview
-              </h3>
-              <div className="flex items-center gap-2">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <span className="text-[9px] font-bold text-slate-400 uppercase">Manual Mode</span>
-                  <div className="relative">
-                    <input
-                      type="checkbox"
-                      className="sr-only peer"
-                      checked={isManualSQL}
-                      onChange={(e) => setIsManualSQL(e.target.checked)}
-                    />
-                    <div className="w-8 h-4 bg-slate-200 rounded-full peer peer-checked:bg-primary transition-colors"></div>
-                    <div className="absolute left-1 top-1 w-2 h-2 bg-white rounded-full transition-transform peer-checked:translate-x-4"></div>
-                  </div>
-                </label>
-              </div>
-            </div>
-
-            <div className="flex-1 flex flex-col min-h-0 relative">
-              <textarea
-                value={manualSQL}
-                onChange={(e) => isManualSQL && setManualSQL(e.target.value)}
-                readOnly={!isManualSQL}
+        <aside className="z-40 flex min-h-0 w-96 shrink-0 flex-col border-l bg-white shadow-sm">
+          <div className="shrink-0 border-b bg-slate-50 p-2">
+            <div className="grid grid-cols-3 gap-1 rounded-md border border-slate-200 bg-white p-1">
+              <button
+                type="button"
+                onClick={() => setRightPanelTab('layers')}
                 className={cn(
-                  "flex-1 w-full resize-none rounded-2xl border bg-white p-4 font-mono text-[11px] leading-relaxed shadow-inner outline-none transition-all",
-                  isManualSQL ? "border-primary ring-2 ring-primary/5 text-slate-800" : "border-slate-200 text-slate-500 bg-slate-100/50"
+                  'flex items-center justify-center gap-1.5 rounded px-2 py-1.5 text-[10px] font-bold uppercase tracking-widest transition-colors',
+                  rightPanelTab === 'layers'
+                    ? 'bg-slate-900 text-white'
+                    : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
                 )}
-                placeholder="Write your spatial SQL here..."
-              />
-
-              <div className="absolute bottom-4 right-4 flex flex-col gap-1.5 items-end">
-                {isManualSQL && (
-                  <>
-                    <button
-                      onClick={handleRunSQL}
-                      className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-bold hover:bg-slate-800 shadow-lg transition-all"
-                    >
-                      <Play className="w-3 h-3 fill-current" /> RUN QUERY
-                    </button>
-                    {lastManualSql && (
-                      <button
-                        onClick={handlePromoteToNode}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-xl text-[9px] font-bold hover:bg-indigo-100 border border-indigo-200 transition-all"
-                      >
-                        <Workflow className="w-3 h-3" /> Promote to Node
-                      </button>
-                    )}
-                  </>
+              >
+                <Layers className="h-3 w-3" />
+                Layers
+              </button>
+              <button
+                type="button"
+                onClick={() => setRightPanelTab('charts')}
+                className={cn(
+                  'flex items-center justify-center gap-1.5 rounded px-2 py-1.5 text-[10px] font-bold uppercase tracking-widest transition-colors',
+                  rightPanelTab === 'charts'
+                    ? 'bg-slate-900 text-white'
+                    : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
                 )}
-                {!isManualSQL && (
-                  <div className="px-3 py-1.5 bg-slate-200/50 text-slate-500 rounded-lg text-[9px] font-bold uppercase tracking-wider backdrop-blur-sm">
-                    Synced to Workflow
-                  </div>
+              >
+                <BarChart3 className="h-3 w-3" />
+                Charts
+              </button>
+              <button
+                type="button"
+                onClick={() => setRightPanelTab('details')}
+                className={cn(
+                  'flex items-center justify-center gap-1.5 rounded px-2 py-1.5 text-[10px] font-bold uppercase tracking-widest transition-colors',
+                  rightPanelTab === 'details'
+                    ? 'bg-slate-900 text-white'
+                    : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
                 )}
-              </div>
+              >
+                <FileText className="h-3 w-3" />
+                Details
+              </button>
             </div>
           </div>
+
+          <div className="min-h-0 flex-1 overflow-hidden">
+            {rightPanelTab === 'layers' ? (
+              <div className="flex h-full min-h-0 flex-col">
+                <div className="min-h-0 flex-1 border-b">
+                  <ErrorBoundary name="Layer Manager">
+                    <LayerManager />
+                  </ErrorBoundary>
+                </div>
+
+                <div className="min-h-0 flex-1">
+                  <ErrorBoundary name="Visualisation Panel">
+                    <VisualisationPanel />
+                  </ErrorBoundary>
+                </div>
+              </div>
+            ) : rightPanelTab === 'charts' ? (
+              <ErrorBoundary name="Chart Panel">
+                <ChartPanel />
+              </ErrorBoundary>
+            ) : (
+              <div className="flex h-full min-h-0 flex-col">
+                <div className="max-h-72 shrink-0 overflow-y-auto border-b">
+                  <ErrorBoundary name="Selection Summary">
+                    <SelectionSummary
+                      layer={selectedLayer}
+                      filters={selectedLayerFilters}
+                      selectedFeatureIds={selectedFeatureIds}
+                    />
+                  </ErrorBoundary>
+                </div>
+
+                <ErrorBoundary name="SQL Panel">
+                  <div className="flex min-h-0 flex-1 flex-col bg-slate-50">
+                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4">
+                      <div className="flex items-center justify-between gap-2 pb-4">
+                        <h3 className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                          SQL Editor & Workflow Preview
+                        </h3>
+                        <div className="flex items-center gap-2">
+                          <label className="flex cursor-pointer items-center gap-2">
+                            <span className="text-[9px] font-bold uppercase text-slate-400">Manual Mode</span>
+                            <div className="relative">
+                              <input
+                                type="checkbox"
+                                className="peer sr-only"
+                                checked={isManualSQL}
+                                onChange={(e) => setIsManualSQL(e.target.checked)}
+                              />
+                              <div className="h-4 w-8 rounded-full bg-slate-200 transition-colors peer-checked:bg-primary"></div>
+                              <div className="absolute left-1 top-1 h-2 w-2 rounded-full bg-white transition-transform peer-checked:translate-x-4"></div>
+                            </div>
+                          </label>
+                        </div>
+                      </div>
+
+                      <div className="relative flex min-h-0 flex-1 flex-col">
+                        <textarea
+                          value={manualSQL}
+                          onChange={(e) => isManualSQL && setManualSQL(e.target.value)}
+                          readOnly={!isManualSQL}
+                          className={cn(
+                            'min-h-0 flex-1 resize-none rounded-2xl border bg-white p-4 font-mono text-[11px] leading-relaxed shadow-inner outline-none transition-all',
+                            isManualSQL ? 'border-primary text-slate-800 ring-2 ring-primary/5' : 'border-slate-200 bg-slate-100/50 text-slate-500'
+                          )}
+                          placeholder="Write your spatial SQL here..."
+                        />
+
+                        <div className="absolute bottom-4 right-4 flex flex-col items-end gap-1.5">
+                          {isManualSQL && (
+                            <>
+                              <button
+                                onClick={handleRunSQL}
+                                className="flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-[10px] font-bold text-white shadow-lg transition-all hover:bg-slate-800"
+                              >
+                                <Play className="h-3 w-3 fill-current" /> RUN QUERY
+                              </button>
+                              {lastManualSql && (
+                                <button
+                                  onClick={handlePromoteToNode}
+                                  className="flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-[9px] font-bold text-indigo-700 transition-all hover:bg-indigo-100"
+                                >
+                                  <Workflow className="h-3 w-3" /> Promote to Node
+                                </button>
+                              )}
+                            </>
+                          )}
+                          {!isManualSQL && (
+                            <div className="rounded-lg bg-slate-200/50 px-3 py-1.5 text-[9px] font-bold uppercase tracking-wider text-slate-500 backdrop-blur-sm">
+                              Synced to Workflow
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </ErrorBoundary>
+              </div>
+            )}
           </div>
-          </ErrorBoundary>
         </aside>
       </div>
 

@@ -2,12 +2,47 @@ export const FEATURE_ID_PROPERTY = '_ymn_feature_id';
 
 export type LayerFeatureSelection = {
   hoveredFeatureId?: string;
+  highlightedFeatureIds?: string[];
   selectedFeatureIds: string[];
   filters: VisualFilter[];
 };
 
 export type VisualAnalyticsState = {
   layers: Record<string, LayerFeatureSelection>;
+  charts: VisualChartSpec[];
+};
+
+export type VisualChartType = 'bar' | 'donut' | 'rose' | 'histogram';
+
+export type VisualChartAggregation = 'count' | 'sum' | 'avg' | 'min' | 'max';
+
+export type VisualChartSpec = {
+  id: string;
+  title: string;
+  layerId: string;
+  type: VisualChartType;
+  dimensionField: string;
+  measureField?: string;
+  aggregation: VisualChartAggregation;
+  paletteId: string;
+  maxCategories: number;
+};
+
+export type VisualChartDatum = {
+  key: string;
+  label: string;
+  value: number;
+  count: number;
+  color: string;
+  filter: VisualFilter;
+  featureIds: string[];
+};
+
+export type VisualChartResult = {
+  chartId: string;
+  totalRows: number;
+  filteredRows: number;
+  data: VisualChartDatum[];
 };
 
 export type VisualFilter =

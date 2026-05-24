@@ -4,7 +4,9 @@ import { duckdbService } from './duckdb';
 import {
   __visualAnalyticsCacheSizeForTests,
   clearLayerAnalyticsCache,
+  queryLayerChart,
   registerLayerForAnalytics,
+  visualChartFilterKey,
 } from './visualAnalyticsService';
 
 const layer = (id: string): { id: string; geojson: GeoJSON.FeatureCollection } => ({
@@ -52,5 +54,105 @@ describe('visual analytics cache helpers', () => {
     await registerLayerForAnalytics(layer('areas'));
     clearLayerAnalyticsCache();
     expect(__visualAnalyticsCacheSizeForTests()).toBe(0);
+  });
+
+  it('queries categorical chart data with active filters and feature ids', async () => {
+    const register = vi.spyOn(duckdbService, 'registerJsonRows').mockResolvedValue(undefined);
+    const query = vi.spyOn(duckdbService, 'query')
+      .mockResolvedValueOnce({ toArray: () => [{ row_count: 3 }] } as any)
+      .mockResolvedValueOnce({ toArray: () => [{ row_count: 2 }] } as any)
+      .mockResolvedValueOnce({
+        toArray: () => [
+          { label: 'Camden', count_value: 2, aggregate_value: 2, feature_ids: 'a\u001fb' },
+        ],
+      } as any);
+
+    const result = await queryLayerChart({
+      layer: layer('areas'),
+      filters: [{ kind: 'range', field: 'value', min: 1, max: 2 }],
+      chart: {
+        id: 'chart-1',
+        title: 'Type counts',
+        layerId: 'areas',
+        type: 'bar',
+        dimensionField: 'borough',
+        aggregation: 'count',
+        paletteId: 'categorical',
+        maxCategories: 8,
+      },
+    });
+
+    expect(register).toHaveBeenCalledTimes(1);
+    expect(query.mock.calls[1][0]).toContain('WHERE');
+    expect(query.mock.calls[2][0]).toContain('GROUP BY label');
+    expect(result.totalRows).toBe(3);
+    expect(result.filteredRows).toBe(2);
+    expect(result.data[0]).toMatchObject({
+      label: 'Camden',
+      value: 2,
+      count: 2,
+      featureIds: ['a', 'b'],
+      filter: { kind: 'category', field: 'borough', values: ['Camden'] },
+    });
+  });
+
+  it('uses the MVT backing table for DuckDB chart feature ids', async () => {
+    vi.spyOn(duckdbService, 'getTableSchema').mockResolvedValue({
+      toArray: () => [
+        { name: '__ymn_mvt_id' },
+        { name: 'Annual Generation [kWh]' },
+      ],
+    } as any);
+    const query = vi.spyOn(duckdbService, 'query')
+      .mockResolvedValueOnce({ toArray: () => [{ row_count: 3 }] } as any)
+      .mockResolvedValueOnce({ toArray: () => [{ row_count: 3 }] } as any)
+      .mockResolvedValueOnce({
+        toArray: () => [
+          { label: '1200', count_value: 1, aggregate_value: 1, feature_ids: '7' },
+        ],
+      } as any);
+
+    const result = await queryLayerChart({
+      layer: {
+        id: 'pv',
+        source: {
+          kind: 'duckdb-table',
+          tableName: 'rooftop_pv',
+          geometryColumn: 'geometry',
+          crs: 'EPSG:27700',
+          geometryKind: 'polygon',
+          featureIdColumn: '__ymn_mvt_id',
+          fields: [{ name: 'Annual Generation [kWh]', type: 'DOUBLE' }],
+          tileSource: {
+            tableName: '__ymn_mvt_rooftop_pv',
+            layerName: 'features',
+            geometryKind: 'polygon',
+            propertyColumns: ['Annual Generation [kWh]'],
+          },
+          renderVersion: 1,
+        },
+      },
+      filters: [],
+      chart: {
+        id: 'chart-2',
+        title: 'Generation',
+        layerId: 'pv',
+        type: 'bar',
+        dimensionField: 'Annual Generation [kWh]',
+        aggregation: 'count',
+        paletteId: 'categorical',
+        maxCategories: 8,
+      },
+    });
+
+    expect(query.mock.calls[0][0]).toContain('FROM "__ymn_mvt_rooftop_pv"');
+    expect(query.mock.calls[2][0]).toContain('STRING_AGG(CAST("__ymn_mvt_id" AS VARCHAR)');
+    expect(query.mock.calls[2][0]).not.toContain('FROM "rooftop_pv"');
+    expect(result.data[0].featureIds).toEqual(['7']);
+  });
+
+  it('builds stable chart filter keys for linked brushing', () => {
+    expect(visualChartFilterKey({ kind: 'category', field: 'type', values: ['A'] })).toBe('type:category:A:');
+    expect(visualChartFilterKey({ kind: 'range', field: 'score', min: 10, max: 20 })).toBe('score:range:10:20:');
   });
 });

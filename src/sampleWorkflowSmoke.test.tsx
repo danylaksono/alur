@@ -153,10 +153,11 @@ describe('sample GIS workflow smoke test', () => {
     expect(html).toContain('Node Diagram');
     expect(html).toContain('Layer Output');
     expect(html).toContain('Visualize or export the final result');
-    expect(html).toContain('SQL Editor &amp; Workflow Preview');
+    expect(html).toContain('Layers');
+    expect(html).toContain('Details');
     expect(html).toContain('Map Layers');
+    expect(html).toContain('Visualise');
     expect(html).toContain('Basemap');
-    expect(html).toContain('Synced to Workflow');
   });
 
   it('exposes output node configuration for map preview and file export modes', () => {

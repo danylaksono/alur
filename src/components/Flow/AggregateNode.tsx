@@ -4,7 +4,8 @@ import { Layers } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { spatialFunctions } from '../../utils/spatialFunctions';
 import { cn } from '../../utils/cn';
-import { FlowNodeShell, fieldLabelClass, inputClass, nodeHandleClass, selectClass } from './FlowNodeShell';
+import { FlowNodeShell, fieldLabelClass, inputClass, nodeHandleClass } from './FlowNodeShell';
+import { TypeaheadSelect } from './TypeaheadSelect';
 
 export const AggregateNode = ({ data, id }: any) => {
   const updateNode = useStore((s) => s.updateNode);
@@ -15,6 +16,15 @@ export const AggregateNode = ({ data, id }: any) => {
 
   const aggregateFunctions = spatialFunctions.filter(fn => fn.category === 'Aggregate');
   const selectedFunction = aggregateFunctions.find(fn => fn.name === operation) || aggregateFunctions[0];
+  const aggregateOptions = useMemo(
+    () => aggregateFunctions.map((op) => ({
+      value: op.name,
+      label: op.name,
+      description: op.summary,
+      group: op.category,
+    })),
+    [aggregateFunctions]
+  );
 
   const updateConfig = (payload: any) => updateNode(id, { ...data.config, ...payload });
 
@@ -49,15 +59,12 @@ export const AggregateNode = ({ data, id }: any) => {
           <label className={cn(fieldLabelClass, 'mb-1')}>
             Aggregate Function
           </label>
-          <select
-            className={selectClass}
+          <TypeaheadSelect
             value={operation}
-            onChange={(e) => updateConfig({ operation: e.target.value })}
-          >
-            {aggregateFunctions.map((op) => (
-              <option key={op.name} value={op.name}>{op.name}</option>
-            ))}
-          </select>
+            options={aggregateOptions}
+            onChange={(nextOperation) => updateConfig({ operation: nextOperation })}
+            placeholder="Search aggregate functions..."
+          />
         </div>
 
         <div>

@@ -1,4 +1,5 @@
-import { Download, Eye, EyeOff, Focus, Trash2, Layers, Route } from 'lucide-react';
+import { useState } from 'react';
+import { Download, Eye, EyeOff, Focus, GripVertical, Trash2, Layers, Route } from 'lucide-react';
 import { useStore, type MapLayer } from '../store/useStore';
 import { cn } from '../utils/cn';
 import { BASEMAPS } from '../utils/basemaps';
@@ -20,6 +21,7 @@ const fallbackColor = (index: number) => {
 };
 
 export const LayerManager = () => {
+  const [draggedLayerId, setDraggedLayerId] = useState<string | null>(null);
   const mapLayers = useStore((s) => s.mapLayers);
   const selectedBasemapId = useStore((s) => s.selectedBasemapId);
   const nodes = useStore((s) => s.nodes);
@@ -30,6 +32,7 @@ export const LayerManager = () => {
   const focusLayer = useStore((s) => s.focusLayer);
   const toggleMapLayerVisibility = useStore((s) => s.toggleMapLayerVisibility);
   const updateMapLayer = useStore((s) => s.updateMapLayer);
+  const reorderMapLayer = useStore((s) => s.reorderMapLayer);
   const removeMapLayer = useStore((s) => s.removeMapLayer);
   const clearFeatureSelection = useStore((s) => s.clearFeatureSelection);
   const clearLayerFilters = useStore((s) => s.clearLayerFilters);
@@ -89,40 +92,71 @@ export const LayerManager = () => {
           </div>
         ) : (
           <div className="space-y-2">
-            {mapLayers.map((layer, index) => {
+            {[...mapLayers].reverse().map((layer) => {
+              const index = mapLayers.findIndex((item) => item.id === layer.id);
               const isSelected = selectedLayerId === layer.id;
               const color = layer.color || fallbackColor(index);
               const isNodeSelected = layer.sourceNodeId && layer.sourceNodeId === selectedNodeId;
               const selectedFeatureCount = visualAnalytics.layers[layer.id]?.selectedFeatureIds.length || 0;
               const filterCount = visualAnalytics.layers[layer.id]?.filters.length || 0;
+              const isDragTarget = draggedLayerId && draggedLayerId !== layer.id;
 
               return (
                 <div
                   key={layer.id}
+                  onDragOver={(event) => {
+                    if (!draggedLayerId || draggedLayerId === layer.id) return;
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = 'move';
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    const sourceLayerId = draggedLayerId || event.dataTransfer.getData('text/plain');
+                    if (!sourceLayerId || sourceLayerId === layer.id) return;
+                    reorderMapLayer(sourceLayerId, index);
+                    setDraggedLayerId(null);
+                  }}
+                  onDragEnd={() => setDraggedLayerId(null)}
                   className={cn(
                     'rounded-lg border bg-white p-3 text-[11px] transition-colors',
                     isSelected ? 'border-slate-900 ring-1 ring-slate-900' : 'border-slate-200 hover:border-slate-300',
-                    !layer.visible && 'opacity-60'
+                    isDragTarget && 'border-dashed border-slate-400',
+                    draggedLayerId === layer.id && 'opacity-45',
+                    !layer.visible && draggedLayerId !== layer.id && 'opacity-60'
                   )}
                 >
-                  <button
-                    type="button"
-                    onClick={() => selectLayer(isSelected ? null : layer.id)}
-                    className="flex w-full items-start gap-2 text-left"
-                    title="Select layer"
-                  >
-                    <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate font-bold text-slate-800">{layer.name}</span>
-                      <span className="mt-0.5 flex items-center gap-1 truncate text-[9px] uppercase tracking-widest text-slate-400">
-                        <Route className="h-2.5 w-2.5" />
-                        {KIND_LABEL[layer.sourceKind || 'workflow']} · {sourceName(layer)}
-                      </span>
+                  <div className="flex items-start gap-2">
+                    <span
+                      draggable
+                      onDragStart={(event) => {
+                        setDraggedLayerId(layer.id);
+                        event.dataTransfer.effectAllowed = 'move';
+                        event.dataTransfer.setData('text/plain', layer.id);
+                      }}
+                      className="mt-0.5 flex h-7 w-4 shrink-0 cursor-grab items-center justify-center rounded text-slate-300 hover:bg-slate-100 hover:text-slate-500 active:cursor-grabbing"
+                      title="Drag to reorder layer"
+                    >
+                      <GripVertical className="h-3.5 w-3.5" />
                     </span>
+                    <button
+                      type="button"
+                      onClick={() => selectLayer(isSelected ? null : layer.id)}
+                      className="flex min-w-0 flex-1 items-start gap-2 text-left"
+                      title="Select layer"
+                    >
+                      <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-bold text-slate-800">{layer.name}</span>
+                        <span className="mt-0.5 flex items-center gap-1 truncate text-[9px] uppercase tracking-widest text-slate-400">
+                          <Route className="h-2.5 w-2.5" />
+                          {KIND_LABEL[layer.sourceKind || 'workflow']} · {sourceName(layer)}
+                        </span>
+                      </span>
+                    </button>
                     <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold text-slate-500">
                       {layer.visualisation?.kind || layer.featureCount.toLocaleString()}
                     </span>
-                  </button>
+                  </div>
 
                   {layer.legend && (
                     <div className="mt-2 flex flex-wrap gap-1.5">
@@ -137,24 +171,36 @@ export const LayerManager = () => {
                     </div>
                   )}
 
-                  <div className="mt-3 flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => toggleMapLayerVisibility(layer.id)}
-                      className="rounded-md border border-slate-200 bg-white p-1.5 text-slate-600 hover:bg-slate-50"
-                      title={layer.visible ? 'Hide layer' : 'Show layer'}
-                    >
-                      {layer.visible ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => focusLayer(layer.id)}
-                      className="rounded-md border border-slate-200 bg-white p-1.5 text-slate-600 hover:bg-slate-50"
-                      title="Zoom to layer"
-                    >
-                      <Focus className="h-3.5 w-3.5" />
-                    </button>
-                    <label className="flex min-w-0 flex-1 items-center gap-2 pl-1 text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                  <div className="mt-3 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => toggleMapLayerVisibility(layer.id)}
+                          className="rounded-md border border-slate-200 bg-white p-1.5 text-slate-600 hover:bg-slate-50"
+                          title={layer.visible ? 'Hide layer' : 'Show layer'}
+                        >
+                          {layer.visible ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => focusLayer(layer.id)}
+                          className="rounded-md border border-slate-200 bg-white p-1.5 text-slate-600 hover:bg-slate-50"
+                          title="Zoom to layer"
+                        >
+                          <Focus className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeMapLayer(layer.id)}
+                          className="rounded-md border border-slate-200 bg-white p-1.5 text-rose-600 hover:bg-rose-50"
+                          title="Remove layer"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                    <label className="flex min-w-0 items-center gap-2 text-[9px] font-bold uppercase tracking-wider text-slate-400">
                       Opacity
                       <input
                         type="range"
@@ -166,14 +212,6 @@ export const LayerManager = () => {
                         className="min-w-0 flex-1 accent-slate-900"
                       />
                     </label>
-                    <button
-                      type="button"
-                      onClick={() => removeMapLayer(layer.id)}
-                      className="rounded-md border border-slate-200 bg-white p-1.5 text-rose-600 hover:bg-rose-50"
-                      title="Remove layer"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
                   </div>
 
                   {isNodeSelected && (

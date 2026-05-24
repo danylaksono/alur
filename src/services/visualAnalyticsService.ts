@@ -1,6 +1,13 @@
 import { duckdbService } from './duckdb';
-import { FEATURE_ID_PROPERTY, type LayerAnalyticsSummary, type VisualFilter } from '../types/visualAnalytics';
+import {
+  FEATURE_ID_PROPERTY,
+  type LayerAnalyticsSummary,
+  type VisualChartResult,
+  type VisualChartSpec,
+  type VisualFilter,
+} from '../types/visualAnalytics';
 import { compileVisualFiltersWhereClause, quoteIdentifier } from '../utils/visualFilterSql';
+import { CATEGORICAL_PALETTE, getPalette } from '../utils/palettes';
 import type { MapLayer } from '../store/useStore';
 import type { FieldProfile } from '../utils/classification';
 
@@ -198,6 +205,211 @@ export const queryLayerColumnProfile = async ({
       value: String(row.label),
       count: Number(row.count),
     })),
+  };
+};
+
+const aggregationExpression = (chart: VisualChartSpec) => {
+  if (chart.aggregation === 'count' || !chart.measureField) return 'COUNT(*)';
+
+  const field = `TRY_CAST(${quoteIdentifier(chart.measureField)} AS DOUBLE)`;
+  if (chart.aggregation === 'sum') return `COALESCE(SUM(${field}), 0)`;
+  if (chart.aggregation === 'avg') return `COALESCE(AVG(${field}), 0)`;
+  if (chart.aggregation === 'min') return `COALESCE(MIN(${field}), 0)`;
+  return `COALESCE(MAX(${field}), 0)`;
+};
+
+const chartPalette = (chart: VisualChartSpec, count: number) => {
+  if (chart.type === 'histogram') {
+    const palette = getPalette(chart.paletteId).colors;
+    return Array.from({ length: count }, (_, index) => palette[Math.min(palette.length - 1, Math.floor((index / Math.max(1, count - 1)) * (palette.length - 1)))]);
+  }
+
+  const sequential = getPalette(chart.paletteId, { id: 'categorical', name: 'Categorical', colors: CATEGORICAL_PALETTE }).colors;
+  const source = chart.paletteId === 'categorical' ? CATEGORICAL_PALETTE : sequential;
+  return Array.from({ length: count }, (_, index) => source[index % source.length]);
+};
+
+const featureIdColumnForLayer = (layer: AnalyticsLayer) => {
+  if (layer.source?.kind === 'duckdb-table' || layer.source?.kind === 'duckdb-query') {
+    return layer.source.featureIdColumn || FEATURE_ID_PROPERTY;
+  }
+  return FEATURE_ID_PROPERTY;
+};
+
+const tableColumnNames = async (tableName: string) => {
+  const schema = await duckdbService.getTableSchema(tableName);
+  return new Set(normalizeRows(schema.toArray()).map((row) => String(row.name || '')));
+};
+
+const chartTableForLayer = async (layer: AnalyticsLayer, chart: VisualChartSpec) => {
+  const tableName = await analyticsTableForLayer(layer);
+  const featureIdColumn = featureIdColumnForLayer(layer);
+  const requiredColumns = [
+    chart.dimensionField,
+    ...(chart.aggregation !== 'count' && chart.measureField ? [chart.measureField] : []),
+  ].filter(Boolean);
+
+  if (!layer.source || layer.source.kind === 'legacy-geojson') {
+    return {
+      tableName,
+      featureIdExpression: quoteIdentifier(FEATURE_ID_PROPERTY),
+    };
+  }
+
+  if ((layer.source?.kind === 'duckdb-table' || layer.source?.kind === 'duckdb-query') && layer.source.tileSource?.tableName) {
+    try {
+      const tileColumns = await tableColumnNames(layer.source.tileSource.tableName);
+      const tileHasRequiredFields = requiredColumns.every((column) => tileColumns.has(column));
+      if (tileHasRequiredFields && tileColumns.has(featureIdColumn)) {
+        return {
+          tableName: layer.source.tileSource.tableName,
+          featureIdExpression: quoteIdentifier(featureIdColumn),
+        };
+      }
+    } catch {
+      // Fall through to the analytic source table below.
+    }
+  }
+
+  try {
+    const sourceColumns = await tableColumnNames(tableName);
+    if (sourceColumns.has(featureIdColumn)) {
+      return {
+        tableName,
+        featureIdExpression: quoteIdentifier(featureIdColumn),
+      };
+    }
+  } catch {
+    // If schema inspection fails, let the main chart query surface the data error.
+  }
+
+  return {
+    tableName,
+    featureIdExpression: 'NULL',
+  };
+};
+
+const featureIdsFromValue = (value: unknown) =>
+  String(value ?? '')
+    .split('\u001f')
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 200);
+
+export const visualChartFilterKey = (filter: VisualFilter) => {
+  if (filter.kind === 'category') return `${filter.field}:category:${filter.values.join('|')}:${filter.includeNull ? 'null' : ''}`;
+  if (filter.kind === 'temporal') return `${filter.field}:temporal:${filter.start ?? ''}:${filter.end ?? ''}:${filter.includeNull ? 'null' : ''}`;
+  return `${filter.field}:range:${filter.min ?? ''}:${filter.max ?? ''}:${filter.includeNull ? 'null' : ''}`;
+};
+
+export const queryLayerChart = async ({
+  layer,
+  filters,
+  chart,
+}: {
+  layer: AnalyticsLayer;
+  filters: VisualFilter[];
+  chart: VisualChartSpec;
+}): Promise<VisualChartResult> => {
+  const { tableName, featureIdExpression } = await chartTableForLayer(layer, chart);
+  const table = `"${tableName}"`;
+  const whereClause = compileVisualFiltersWhereClause(filters);
+  const field = quoteIdentifier(chart.dimensionField);
+  const aggregate = aggregationExpression(chart);
+
+  const [totalResult, filteredResult] = await Promise.all([
+    duckdbService.query(`SELECT COUNT(*) AS row_count FROM ${table};`),
+    duckdbService.query(`SELECT COUNT(*) AS row_count FROM ${table} ${whereClause};`),
+  ]);
+  const totalRaw = normalizeRows(totalResult.toArray())[0] || {};
+  const filteredRaw = normalizeRows(filteredResult.toArray())[0] || {};
+
+  if (chart.type === 'histogram') {
+    const statsResult = await duckdbService.query(
+      `SELECT MIN(TRY_CAST(${field} AS DOUBLE)) AS min_value, MAX(TRY_CAST(${field} AS DOUBLE)) AS max_value
+       FROM ${table} ${whereClause};`
+    );
+    const stats = normalizeRows(statsResult.toArray())[0] || {};
+    const min = Number(stats.min_value);
+    const max = Number(stats.max_value);
+    if (!Number.isFinite(min) || !Number.isFinite(max)) {
+      return {
+        chartId: chart.id,
+        totalRows: Number(totalRaw.row_count ?? 0),
+        filteredRows: Number(filteredRaw.row_count ?? 0),
+        data: [],
+      };
+    }
+
+    const binCount = Math.max(4, Math.min(24, chart.maxCategories || 12));
+    const width = max === min ? 1 : (max - min) / binCount;
+    const bucketExpr = max === min
+      ? '0'
+      : `LEAST(${binCount - 1}, CAST(FLOOR((TRY_CAST(${field} AS DOUBLE) - ${min}) / ${width || 1}) AS INTEGER))`;
+    const andOrWhere = whereClause ? `${whereClause} AND` : 'WHERE';
+    const result = await duckdbService.query(
+      `SELECT ${bucketExpr} AS bucket, COUNT(*) AS count_value, ${aggregate} AS aggregate_value,
+              STRING_AGG(CAST(${featureIdExpression} AS VARCHAR), '\u001f') AS feature_ids
+       FROM ${table} ${andOrWhere} TRY_CAST(${field} AS DOUBLE) IS NOT NULL
+       GROUP BY bucket
+       ORDER BY bucket;`
+    );
+    const rows = normalizeRows(result.toArray());
+    const colors = chartPalette(chart, binCount);
+    const rowMap = new Map<number, any>();
+    rows.forEach((row) => rowMap.set(Number(row.bucket), row));
+
+    return {
+      chartId: chart.id,
+      totalRows: Number(totalRaw.row_count ?? 0),
+      filteredRows: Number(filteredRaw.row_count ?? 0),
+      data: Array.from({ length: binCount }, (_, index) => {
+        const row = rowMap.get(index) || {};
+        const from = min + width * index;
+        const to = min + width * (index + 1);
+        const label = `${from.toLocaleString(undefined, { maximumFractionDigits: 2 })}-${to.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+        return {
+          key: `bin-${index}`,
+          label,
+          value: Number(row.aggregate_value ?? row.count_value ?? 0),
+          count: Number(row.count_value ?? 0),
+          color: colors[index],
+          filter: { kind: 'range' as const, field: chart.dimensionField, min: from, max: to },
+          featureIds: featureIdsFromValue(row.feature_ids),
+        };
+      }),
+    };
+  }
+
+  const limit = Math.max(3, Math.min(30, chart.maxCategories || 8));
+  const andOrWhere = whereClause ? `${whereClause} AND` : 'WHERE';
+  const result = await duckdbService.query(
+    `SELECT CAST(${field} AS VARCHAR) AS label, COUNT(*) AS count_value, ${aggregate} AS aggregate_value,
+            STRING_AGG(CAST(${featureIdExpression} AS VARCHAR), '\u001f') AS feature_ids
+     FROM ${table} ${andOrWhere} ${field} IS NOT NULL
+     GROUP BY label
+     ORDER BY aggregate_value DESC, count_value DESC
+     LIMIT ${limit};`
+  );
+  const rows = normalizeRows(result.toArray());
+  const colors = chartPalette(chart, rows.length);
+
+  return {
+    chartId: chart.id,
+    totalRows: Number(totalRaw.row_count ?? 0),
+    filteredRows: Number(filteredRaw.row_count ?? 0),
+    data: rows.map((row, index) => {
+      const label = String(row.label);
+      return {
+        key: label,
+        label,
+        value: Number(row.aggregate_value ?? row.count_value ?? 0),
+        count: Number(row.count_value ?? 0),
+        color: colors[index],
+        filter: { kind: 'category' as const, field: chart.dimensionField, values: [label] },
+        featureIds: featureIdsFromValue(row.feature_ids),
+      };
+    }),
   };
 };
 

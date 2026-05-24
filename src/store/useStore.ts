@@ -12,7 +12,7 @@ import {
 import { DEFAULT_BASEMAP_ID, type BasemapId } from '../utils/basemaps';
 import type { LayerVisualisation, LegendSpec } from '../types/visualisation';
 import { ensureFeatureIds } from '../utils/featureIdentity';
-import type { VisualAnalyticsState, VisualFilter } from '../types/visualAnalytics';
+import type { VisualAnalyticsState, VisualChartSpec, VisualFilter } from '../types/visualAnalytics';
 import type { MvtTileSource } from '../services/duckdb';
 import type { LayerSource } from '../types/layers';
 
@@ -116,10 +116,14 @@ interface AppState {
   clearLayerVisualisation: (layerId: string) => void;
   reorderMapLayer: (layerId: string, targetIndex: number) => void;
   setHoveredFeature: (layerId: string, featureId: string | null) => void;
+  setHighlightedFeatures: (layerId: string, featureIds: string[]) => void;
   toggleSelectedFeature: (layerId: string, featureId: string) => void;
   clearFeatureSelection: (layerId: string) => void;
   setLayerFilters: (layerId: string, filters: VisualFilter[]) => void;
   clearLayerFilters: (layerId: string) => void;
+  addChart: (chart: VisualChartSpec) => void;
+  updateChart: (chartId: string, patch: Partial<Omit<VisualChartSpec, 'id'>>) => void;
+  removeChart: (chartId: string) => void;
   addChatMessage: (role: 'user' | 'assistant' | 'system', content: string, data?: { kind?: string; toolName?: string; summary?: string; icon?: string }) => void;
   addToast: (toast: Omit<Toast, 'id'>) => void;
   removeToast: (id: string) => void;
@@ -193,7 +197,7 @@ export const useStore = create<AppState>()((set, get) => ({
   layerFocusRequest: null,
   nodeSchemas: {},
   nodeExecutionStates: {},
-  visualAnalytics: { layers: {} },
+  visualAnalytics: { layers: {}, charts: [] },
   toasts: [],
 
   setDuckDBReady: (ready) => set({ duckdbReady: ready }),
@@ -240,7 +244,7 @@ export const useStore = create<AppState>()((set, get) => ({
     layerFocusRequest: null,
     nodeSchemas: {},
     nodeExecutionStates: {},
-    visualAnalytics: { layers: {} },
+    visualAnalytics: { layers: {}, charts: [] },
   }),
 
   onNodesChange: (changes) => {
@@ -265,6 +269,7 @@ export const useStore = create<AppState>()((set, get) => ({
         layers: Object.fromEntries(
           Object.entries(get().visualAnalytics.layers).filter(([layerId]) => nextLayerIds.has(layerId))
         ),
+        charts: get().visualAnalytics.charts.filter((chart) => nextLayerIds.has(chart.layerId)),
       },
       selectedNodeId: get().selectedNodeId && nextNodeIds.has(get().selectedNodeId!)
         ? get().selectedNodeId
@@ -305,17 +310,21 @@ export const useStore = create<AppState>()((set, get) => ({
       layer.sourceNodeId !== id && (!tableName || layer.id !== tableName)
     ));
     const layerIds = new Set(mapLayers.map((layer) => layer.id));
-    const visualAnalyticsLayers = removeRecordKeys(state.visualAnalytics.layers, new Set(
+    const removedLayerIds = new Set(
       state.mapLayers
         .filter((layer) => layer.sourceNodeId === id || (tableName && layer.id === tableName))
         .map((layer) => layer.id)
-    ));
+    );
+    const visualAnalyticsLayers = removeRecordKeys(state.visualAnalytics.layers, removedLayerIds);
 
     return {
       nodes: state.nodes.filter((n) => n.id !== id),
       edges: state.edges.filter((edge) => edge.source !== id && edge.target !== id),
       mapLayers,
-      visualAnalytics: { layers: visualAnalyticsLayers },
+      visualAnalytics: {
+        layers: visualAnalyticsLayers,
+        charts: state.visualAnalytics.charts.filter((chart) => !removedLayerIds.has(chart.layerId)),
+      },
       selectedNodeId: state.selectedNodeId === id ? null : state.selectedNodeId,
       selectedLayerId: state.selectedLayerId && layerIds.has(state.selectedLayerId) ? state.selectedLayerId : null,
       nodeSchemas: removeRecordKeys(state.nodeSchemas, removedIds),
@@ -367,7 +376,10 @@ export const useStore = create<AppState>()((set, get) => ({
         .map((item) => item.dotDensityLayerId === layerId
           ? { ...item, dotDensityLayerId: undefined, visualisation: undefined, legend: undefined }
           : item),
-      visualAnalytics: { layers: removeRecordKeys(state.visualAnalytics.layers, keysToRemove) },
+      visualAnalytics: {
+        layers: removeRecordKeys(state.visualAnalytics.layers, keysToRemove),
+        charts: state.visualAnalytics.charts.filter((chart) => !keysToRemove.has(chart.layerId)),
+      },
       selectedLayerId: state.selectedLayerId === layerId ? null : state.selectedLayerId,
     };
   }),
@@ -414,11 +426,28 @@ export const useStore = create<AppState>()((set, get) => ({
     const current = state.visualAnalytics.layers[layerId] || { selectedFeatureIds: [], filters: [] };
     return {
       visualAnalytics: {
+        ...state.visualAnalytics,
         layers: {
           ...state.visualAnalytics.layers,
           [layerId]: {
             ...current,
             hoveredFeatureId: featureId || undefined,
+          },
+        },
+      },
+    };
+  }),
+
+  setHighlightedFeatures: (layerId, featureIds) => set((state) => {
+    const current = state.visualAnalytics.layers[layerId] || { selectedFeatureIds: [], filters: [] };
+    return {
+      visualAnalytics: {
+        ...state.visualAnalytics,
+        layers: {
+          ...state.visualAnalytics.layers,
+          [layerId]: {
+            ...current,
+            highlightedFeatureIds: featureIds,
           },
         },
       },
@@ -436,6 +465,7 @@ export const useStore = create<AppState>()((set, get) => ({
     return {
       selectedLayerId: layerId,
       visualAnalytics: {
+        ...state.visualAnalytics,
         layers: {
           ...state.visualAnalytics.layers,
           [layerId]: {
@@ -451,6 +481,7 @@ export const useStore = create<AppState>()((set, get) => ({
     const current = state.visualAnalytics.layers[layerId] || { selectedFeatureIds: [], filters: [] };
     return {
       visualAnalytics: {
+        ...state.visualAnalytics,
         layers: {
           ...state.visualAnalytics.layers,
           [layerId]: {
@@ -466,6 +497,7 @@ export const useStore = create<AppState>()((set, get) => ({
     const current = state.visualAnalytics.layers[layerId] || { selectedFeatureIds: [], filters: [] };
     return {
       visualAnalytics: {
+        ...state.visualAnalytics,
         layers: {
           ...state.visualAnalytics.layers,
           [layerId]: {
@@ -481,6 +513,7 @@ export const useStore = create<AppState>()((set, get) => ({
     const current = state.visualAnalytics.layers[layerId] || { selectedFeatureIds: [], filters: [] };
     return {
       visualAnalytics: {
+        ...state.visualAnalytics,
         layers: {
           ...state.visualAnalytics.layers,
           [layerId]: {
@@ -491,6 +524,29 @@ export const useStore = create<AppState>()((set, get) => ({
       },
     };
   }),
+
+  addChart: (chart) => set((state) => ({
+    visualAnalytics: {
+      ...state.visualAnalytics,
+      charts: [...state.visualAnalytics.charts, chart],
+    },
+  })),
+
+  updateChart: (chartId, patch) => set((state) => ({
+    visualAnalytics: {
+      ...state.visualAnalytics,
+      charts: state.visualAnalytics.charts.map((chart) =>
+        chart.id === chartId ? { ...chart, ...patch } : chart
+      ),
+    },
+  })),
+
+  removeChart: (chartId) => set((state) => ({
+    visualAnalytics: {
+      ...state.visualAnalytics,
+      charts: state.visualAnalytics.charts.filter((chart) => chart.id !== chartId),
+    },
+  })),
 
   addChatMessage: (role, content, data) => set((state) => ({
     chatMessages: [...state.chatMessages, { role, content, kind: data?.kind as any, data }]

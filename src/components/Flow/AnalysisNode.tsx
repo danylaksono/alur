@@ -4,7 +4,8 @@ import { Zap } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { spatialFunctions, spatialFunctionsByCategory } from '../../utils/spatialFunctions';
 import { cn } from '../../utils/cn';
-import { FlowNodeShell, fieldLabelClass, inputClass, nodeHandleClass, selectClass } from './FlowNodeShell';
+import { FlowNodeShell, fieldLabelClass, inputClass, nodeHandleClass } from './FlowNodeShell';
+import { TypeaheadSelect } from './TypeaheadSelect';
 
 const EPSG_PATTERN = /^EPSG:\d{1,6}$/i;
 
@@ -17,6 +18,17 @@ export const AnalysisNode = ({ data, id }: any) => {
 
   const selectedFunction = spatialFunctions.find((fn) => fn.name === operation) ?? spatialFunctions.find((fn) => fn.name === 'ST_Buffer');
   const requiredInputCount = selectedFunction?.requiredInputCount ?? 1;
+  const operationOptions = useMemo(
+    () => Object.entries(spatialFunctionsByCategory).flatMap(([category, ops]) =>
+      ops.map((op) => ({
+        value: op.name,
+        label: op.name,
+        description: op.summary,
+        group: category,
+      }))
+    ),
+    []
+  );
 
   const updateConfig = (payload: any) => updateNode(id, { ...data.config, ...payload });
 
@@ -53,19 +65,12 @@ export const AnalysisNode = ({ data, id }: any) => {
           <label className={cn(fieldLabelClass, 'mb-1')}>
             Operation
           </label>
-          <select
-            className={selectClass}
+          <TypeaheadSelect
             value={operation}
-            onChange={(e) => updateConfig({ operation: e.target.value })}
-          >
-            {Object.entries(spatialFunctionsByCategory).map(([category, ops]) => (
-              <optgroup key={category} label={category}>
-                {ops.map((op) => (
-                  <option key={op.name} value={op.name}>{op.name}</option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
+            options={operationOptions}
+            onChange={(nextOperation) => updateConfig({ operation: nextOperation })}
+            placeholder="Search functions..."
+          />
         </div>
 
         {operation === 'ST_Buffer' && (

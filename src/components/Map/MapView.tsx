@@ -103,7 +103,7 @@ export const MapView = () => {
   const renderedLayerIds = useRef<Set<string>>(new Set());
   const renderedSourceVersions = useRef<Map<string, string>>(new Map());
   const nodeLayerMap = useRef<Map<string, string>>(new Map());
-  const previousFeatureState = useRef<Map<string, { hoveredFeatureId?: string; selectedFeatureIds: Set<string> }>>(new Map());
+  const previousFeatureState = useRef<Map<string, { hoveredFeatureId?: string; highlightedFeatureIds: Set<string>; selectedFeatureIds: Set<string> }>>(new Map());
 
   const selectedBasemapId = useStore((s) => s.selectedBasemapId);
   const mapLayers = useStore((s) => s.mapLayers);
@@ -428,9 +428,10 @@ export const MapView = () => {
       if (!m.getSource(sourceId)) return;
       if (mvtSourceForLayer(layer)) return;
 
-      const previous = previousFeatureState.current.get(layer.id) || { selectedFeatureIds: new Set<string>() };
+      const previous = previousFeatureState.current.get(layer.id) || { highlightedFeatureIds: new Set<string>(), selectedFeatureIds: new Set<string>() };
       const current = visualAnalytics.layers[layer.id] || { selectedFeatureIds: [] };
       const nextSelected = new Set(current.selectedFeatureIds);
+      const nextHighlighted = new Set(current.highlightedFeatureIds || []);
 
       const setState = (featureId: string | undefined, state: Record<string, boolean>) => {
         if (!featureId) return;
@@ -442,15 +443,20 @@ export const MapView = () => {
       };
 
       setState(previous.hoveredFeatureId, { hover: false });
+      previous.highlightedFeatureIds.forEach((featureId) => {
+        if (!nextHighlighted.has(featureId)) setState(featureId, { hover: false });
+      });
       previous.selectedFeatureIds.forEach((featureId) => {
         if (!nextSelected.has(featureId)) setState(featureId, { selected: false });
       });
 
       setState(current.hoveredFeatureId, { hover: true });
+      nextHighlighted.forEach((featureId) => setState(featureId, { hover: true }));
       nextSelected.forEach((featureId) => setState(featureId, { selected: true }));
 
       previousFeatureState.current.set(layer.id, {
         hoveredFeatureId: current.hoveredFeatureId,
+        highlightedFeatureIds: nextHighlighted,
         selectedFeatureIds: nextSelected,
       });
     });

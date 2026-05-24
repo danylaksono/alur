@@ -58,6 +58,18 @@ type CrsEstimate = {
 const qi = (name: string) => `"${name.replace(/"/g, '""')}"`;
 const escapeSqlString = (value: string) => value.replace(/'/g, "''");
 const mvtTableNameFor = (tableName: string) => `__ymn_mvt_${tableName.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+const withFileNameSuffix = (path: string, suffix: string) => {
+    const slashIndex = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+    const directory = slashIndex >= 0 ? path.slice(0, slashIndex + 1) : '';
+    const fileName = slashIndex >= 0 ? path.slice(slashIndex + 1) : path;
+    const dotIndex = fileName.lastIndexOf('.');
+
+    if (dotIndex > 0) {
+        return `${directory}${fileName.slice(0, dotIndex)}${suffix}${fileName.slice(dotIndex)}`;
+    }
+
+    return `${path}${suffix}`;
+};
 const isSupportedMvtPropertyType = (type: string) => {
     const normalized = type.toLowerCase();
     return (
@@ -129,9 +141,9 @@ class DuckDBService {
         return name;
     }
 
-    async registerFileHandle(name: string, file: File) {
+    async registerFileHandle(name: string, file: File, directIO = true) {
         if (!this.db) throw new Error('DuckDB not initialized');
-        await this.db.registerFileHandle(name, file, duckdb.DuckDBDataProtocol.BROWSER_FILEREADER, true);
+        await this.db.registerFileHandle(name, file, duckdb.DuckDBDataProtocol.BROWSER_FILEREADER, directIO);
         await this.db.flushFiles();
         return name;
     }
@@ -139,7 +151,6 @@ class DuckDBService {
     async registerUploadedFile(name: string, file: File, kind: 'parquet' | 'csv') {
         if (!this.db) throw new Error('DuckDB not initialized');
 
-        const candidates = [name];
         const scanExpressions = (path: string) => {
             const escaped = escapeSqlString(path);
             if (kind === 'parquet') {
@@ -161,27 +172,46 @@ class DuckDBService {
         };
 
         const errors: string[] = [];
+        const handleFallbackPath = withFileNameSuffix(name, '__handle');
+        const bufferFallbackPath = withFileNameSuffix(name, '__buffer');
+        const attempts: Array<{
+            label: string;
+            path: string;
+            register: () => Promise<void>;
+        }> = [
+            {
+                label: 'file handle',
+                path: name,
+                register: async () => {
+                    await this.registerFileHandle(name, file, true);
+                },
+            },
+            {
+                label: 'file handle without direct IO',
+                path: handleFallbackPath,
+                register: async () => {
+                    await this.registerFileHandle(handleFallbackPath, file, false);
+                },
+            },
+            {
+                label: 'buffer',
+                path: bufferFallbackPath,
+                register: async () => {
+                    const fileBuffer = await file.arrayBuffer();
+                    await this.registerFileBuffer(bufferFallbackPath, new Uint8Array(fileBuffer));
+                },
+            },
+        ];
 
-        const fileBuffer = await file.arrayBuffer();
-        for (const path of candidates) {
+        for (const attempt of attempts) {
             try {
-                await this.db.dropFile(path).catch(() => null);
-                await this.registerFileBuffer(path, new Uint8Array(fileBuffer.slice(0)));
-                const scanSql = await probe(path);
-                return { path, scanSql };
+                await this.db.dropFile(attempt.path).catch(() => null);
+                await attempt.register();
+                const scanSql = await probe(attempt.path);
+                return { path: attempt.path, scanSql };
             } catch (err: any) {
-                errors.push(`buffer ${path}: ${err?.message || String(err)}`);
-            }
-        }
-
-        for (const path of candidates) {
-            try {
-                await this.db.dropFile(path).catch(() => null);
-                await this.registerFileHandle(path, file);
-                const scanSql = await probe(path);
-                return { path, scanSql };
-            } catch (err: any) {
-                errors.push(`file handle ${path}: ${err?.message || String(err)}`);
+                await this.db.dropFile(attempt.path).catch(() => null);
+                errors.push(`${attempt.label} ${attempt.path}: ${err?.message || String(err)}`);
             }
         }
 

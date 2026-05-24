@@ -147,10 +147,49 @@ describe('layer state', () => {
     const store = useStore.getState();
     store.addMapLayer({ id: 'areas', name: 'Areas', geojson: fc(1), sourceKind: 'manual' });
     store.toggleSelectedFeature('areas', '1');
+    store.addChart({
+      id: 'chart-areas',
+      title: 'Areas chart',
+      layerId: 'areas',
+      type: 'bar',
+      dimensionField: 'id',
+      aggregation: 'count',
+      paletteId: 'categorical',
+      maxCategories: 8,
+    });
 
     store.removeMapLayer('areas');
 
     expect(useStore.getState().visualAnalytics.layers.areas).toBeUndefined();
+    expect(useStore.getState().visualAnalytics.charts).toEqual([]);
+  });
+
+  it('stores chart specs and hover highlights alongside layer filters', () => {
+    const store = useStore.getState();
+    store.addMapLayer({ id: 'areas', name: 'Areas', geojson: fc(3), sourceKind: 'manual' });
+
+    store.addChart({
+      id: 'chart-1',
+      title: 'ID distribution',
+      layerId: 'areas',
+      type: 'bar',
+      dimensionField: 'id',
+      aggregation: 'count',
+      paletteId: 'categorical',
+      maxCategories: 8,
+    });
+    store.updateChart('chart-1', { type: 'donut', title: 'ID share' });
+    store.setHighlightedFeatures('areas', ['1', '2']);
+
+    expect(useStore.getState().visualAnalytics.charts[0]).toMatchObject({
+      id: 'chart-1',
+      title: 'ID share',
+      type: 'donut',
+    });
+    expect(useStore.getState().visualAnalytics.layers.areas.highlightedFeatureIds).toEqual(['1', '2']);
+
+    store.removeChart('chart-1');
+    expect(useStore.getState().visualAnalytics.charts).toEqual([]);
   });
 
   it('removing a node cleans up linked layers and active layer selection', () => {
