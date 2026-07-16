@@ -39,7 +39,7 @@ export const AggregateNode = ({ data, id }: any) => {
     <>
       <div className="font-semibold text-slate-800">{selectedFunction?.name}</div>
       <div>{selectedFunction?.summary}</div>
-      <div className="text-[9px] text-slate-500 mt-2">
+      <div className="text-[11px] text-slate-500 mt-2">
         Grouping by a column will return one geometry per unique value.
         Leaving it empty will union/extent everything into a single geometry.
       </div>
@@ -77,7 +77,7 @@ export const AggregateNode = ({ data, id }: any) => {
                 <button
                   key={col}
                   className={cn(
-                    'text-[8px] font-mono px-1.5 py-0.5 rounded border transition-colors',
+                    'text-[10px] font-mono px-1.5 py-0.5 rounded border transition-colors',
                     groupBy === col
                       ? 'bg-orange-200 text-orange-800 border-orange-300'
                       : 'bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100'

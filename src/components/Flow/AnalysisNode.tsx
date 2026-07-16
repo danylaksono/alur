@@ -48,7 +48,7 @@ export const AnalysisNode = ({ data, id }: any) => {
     <>
       <div className="font-semibold text-slate-800">{selectedFunction.name}</div>
       <div>{selectedFunction.summary}</div>
-      <div className="text-[9px] text-slate-500">Required inputs: {requiredInputCount} geometry{requiredInputCount > 1 ? 's' : ''}</div>
+      <div className="text-[11px] text-slate-500">Required inputs: {requiredInputCount} geometry{requiredInputCount > 1 ? 's' : ''}</div>
     </>
   ) : null;
 
@@ -125,19 +125,19 @@ export const AnalysisNode = ({ data, id }: any) => {
         )}
 
         {errors.length > 0 && (
-          <div className="text-[9px] text-red-500 space-y-0.5 font-medium">
+          <div className="text-[11px] text-red-500 space-y-0.5 font-medium">
             {errors.map((err, i) => <div key={i}>{err}</div>)}
           </div>
         )}
       <div className="absolute -left-1.5 top-1/2 -translate-y-1/2 flex flex-col gap-6">
         <div className="relative">
           <Handle type="target" id="input-0" position={Position.Left} className={nodeHandleClass('purple')} />
-          {requiredInputCount > 1 && <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[8px] font-bold text-slate-400 uppercase">A</span>}
+          {requiredInputCount > 1 && <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 uppercase">A</span>}
         </div>
         {requiredInputCount > 1 && (
           <div className="relative">
             <Handle type="target" id="input-1" position={Position.Left} className={nodeHandleClass('purple')} />
-            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[8px] font-bold text-slate-400 uppercase">B</span>
+            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 uppercase">B</span>
           </div>
         )}
       </div>

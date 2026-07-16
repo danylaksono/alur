@@ -53,7 +53,7 @@ export const FlowNodeShell = ({
           <Icon className="h-3.5 w-3.5" />
         </div>
         <div className="min-w-0">
-          <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
             {label}
           </div>
           {title && (
@@ -70,6 +70,6 @@ export const FlowNodeShell = ({
   );
 };
 
-export const fieldLabelClass = 'block text-[10px] font-semibold uppercase tracking-wide text-slate-500';
+export const fieldLabelClass = 'block text-[11px] font-semibold uppercase tracking-wide text-slate-500';
 export const inputClass = 'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition-colors focus:border-slate-400 focus:ring-2 focus:ring-slate-200';
 export const selectClass = 'w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none transition-colors focus:border-slate-400 focus:ring-2 focus:ring-slate-200';

@@ -104,6 +104,8 @@ export const MapView = () => {
   const renderedSourceVersions = useRef<Map<string, string>>(new Map());
   const nodeLayerMap = useRef<Map<string, string>>(new Map());
   const previousFeatureState = useRef<Map<string, { hoveredFeatureId?: string; highlightedFeatureIds: Set<string>; selectedFeatureIds: Set<string> }>>(new Map());
+  type LayerEventName = 'click' | 'mousemove' | 'mouseleave';
+  const layerEventHandlers = useRef<Map<string, Array<{ event: LayerEventName; mapLayerId: string; fn: (...args: any[]) => void }>>>(new Map());
 
   const selectedBasemapId = useStore((s) => s.selectedBasemapId);
   const mapLayers = useStore((s) => s.mapLayers);
@@ -133,8 +135,9 @@ export const MapView = () => {
 	    const m = new maplibregl.Map({
 	      container: mapContainer.current,
 	      style: getBasemap(selectedBasemapId).styleUrl,
-	      center: [-74.006, 40.7128],
-	      zoom: 12,
+	      // Blank-canvas start: world view until the first layer focuses the map.
+	      center: [0, 20],
+	      zoom: 1.5,
 	    });
     m.addControl(new maplibregl.NavigationControl(), 'top-right');
     map.current = m;
@@ -145,7 +148,13 @@ export const MapView = () => {
       maxWidth: '300px',
     });
 
+    const resizeObserver = new ResizeObserver(() => {
+      requestAnimationFrame(() => map.current?.resize());
+    });
+    resizeObserver.observe(mapContainer.current);
+
     return () => {
+      resizeObserver.disconnect();
       m.remove();
       map.current = null;
       popup.current = null;
@@ -156,6 +165,10 @@ export const MapView = () => {
     const m = map.current;
     if (!m) return;
     const nextStyleUrl = getBasemap(selectedBasemapId).styleUrl;
+    layerEventHandlers.current.forEach((handlers) => {
+      handlers.forEach(({ event, mapLayerId, fn }) => m.off(event, mapLayerId, fn as any));
+    });
+    layerEventHandlers.current.clear();
     renderedLayerIds.current.clear();
     renderedSourceVersions.current.clear();
     nodeLayerMap.current.clear();
@@ -168,6 +181,20 @@ export const MapView = () => {
     const m = map.current;
     if (!m) return;
 
+    const detachLayerHandlers = (layerId: string) => {
+      const handlers = layerEventHandlers.current.get(layerId);
+      if (!handlers) return;
+      handlers.forEach(({ event, mapLayerId, fn }) => m.off(event, mapLayerId, fn as any));
+      layerEventHandlers.current.delete(layerId);
+    };
+
+    const attachLayerHandler = (layerId: string, event: 'click' | 'mousemove' | 'mouseleave', mapLayerId: string, fn: (...args: any[]) => void) => {
+      m.on(event, mapLayerId, fn as any);
+      const handlers = layerEventHandlers.current.get(layerId) || [];
+      handlers.push({ event, mapLayerId, fn });
+      layerEventHandlers.current.set(layerId, handlers);
+    };
+
     const syncLayers = () => {
       if (!m.isStyleLoaded()) { m.once('load', syncLayers); return; }
 
@@ -175,6 +202,7 @@ export const MapView = () => {
       const currentIds = new Set(mapLayers.map((l) => l.id));
       renderedLayerIds.current.forEach((rid) => {
         if (!currentIds.has(rid)) {
+          detachLayerHandlers(rid);
           const baseLayerId = `input-layer-${rid}`;
           const clusterLayerId = `${baseLayerId}-clusters`;
           const clusterCountLayerId = `${baseLayerId}-cluster-count`;
@@ -297,6 +325,9 @@ export const MapView = () => {
           popup.current?.setLngLat(e.lngLat).setHTML(html).addTo(m);
         };
 
+        // Detach this layer's previous handlers so re-syncs never accumulate duplicates.
+        detachLayerHandlers(layer.id);
+
         if (isClustered) {
           if (m.getLayer(clusterLayerId)) m.removeLayer(clusterLayerId);
           m.addLayer({
@@ -350,18 +381,18 @@ export const MapView = () => {
             });
           }
 
-          m.on('click', clusterLayerId, handleFeatureClick);
-          m.on('click', layerId, handleFeatureClick);
+          attachLayerHandler(layer.id, 'click', clusterLayerId, handleFeatureClick);
+          attachLayerHandler(layer.id, 'click', layerId, handleFeatureClick);
 
-          m.on('mousemove', clusterLayerId, () => { m.getCanvas().style.cursor = 'pointer'; });
-          m.on('mouseleave', clusterLayerId, () => { m.getCanvas().style.cursor = ''; });
-          m.on('mousemove', layerId, (e) => {
+          attachLayerHandler(layer.id, 'mousemove', clusterLayerId, () => { m.getCanvas().style.cursor = 'pointer'; });
+          attachLayerHandler(layer.id, 'mouseleave', clusterLayerId, () => { m.getCanvas().style.cursor = ''; });
+          attachLayerHandler(layer.id, 'mousemove', layerId, (e) => {
             const feature = e.features?.[0];
             const featureId = feature ? featureIdFromMapFeature(feature) : null;
             if (featureId) setHoveredFeature(layer.id, featureId);
             m.getCanvas().style.cursor = 'pointer';
           });
-          m.on('mouseleave', layerId, () => {
+          attachLayerHandler(layer.id, 'mouseleave', layerId, () => {
             setHoveredFeature(layer.id, null);
             m.getCanvas().style.cursor = '';
           });
@@ -389,15 +420,15 @@ export const MapView = () => {
             });
           }
 
-          m.on('click', layerId, handleFeatureClick);
+          attachLayerHandler(layer.id, 'click', layerId, handleFeatureClick);
 
-          m.on('mousemove', layerId, (e) => {
+          attachLayerHandler(layer.id, 'mousemove', layerId, (e) => {
             const feature = e.features?.[0];
             const featureId = feature ? featureIdFromMapFeature(feature) : null;
             if (featureId) setHoveredFeature(layer.id, featureId);
             m.getCanvas().style.cursor = 'pointer';
           });
-          m.on('mouseleave', layerId, () => {
+          attachLayerHandler(layer.id, 'mouseleave', layerId, () => {
             setHoveredFeature(layer.id, null);
             m.getCanvas().style.cursor = '';
           });

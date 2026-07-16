@@ -128,7 +128,7 @@ const Bars = ({
             title={`${datum.label}: ${formatNumber(datum.value)} (${datum.count.toLocaleString()} rows)`}
           >
             <span className="min-w-0">
-              <span className="block truncate text-[10px] font-semibold text-slate-600">{datum.label}</span>
+              <span className="block truncate text-[11px] font-semibold text-slate-600">{datum.label}</span>
               <span className="mt-1 block h-2 overflow-hidden rounded-full bg-slate-100">
                 <span
                   className="block h-full rounded-full"
@@ -136,7 +136,7 @@ const Bars = ({
                 />
               </span>
             </span>
-            <span className="text-right text-[10px] font-bold tabular-nums text-slate-700">
+            <span className="text-right text-[11px] font-bold tabular-nums text-slate-700">
               {formatNumber(datum.value)}
             </span>
           </button>
@@ -206,8 +206,8 @@ const RadialChart = ({
             title={datum.label}
           >
             <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: datum.color }} />
-            <span className="min-w-0 flex-1 truncate text-[10px] text-slate-600">{datum.label}</span>
-            <span className="text-[10px] font-bold tabular-nums text-slate-700">{formatNumber(datum.value)}</span>
+            <span className="min-w-0 flex-1 truncate text-[11px] text-slate-600">{datum.label}</span>
+            <span className="text-[11px] font-bold tabular-nums text-slate-700">{formatNumber(datum.value)}</span>
           </button>
         ))}
       </div>
@@ -278,9 +278,9 @@ const ChartCard = ({
           <input
             value={chart.title}
             onChange={(event) => onUpdate({ title: event.target.value })}
-            className="w-full truncate bg-transparent text-[11px] font-bold uppercase tracking-widest text-slate-700 outline-none"
+            className="w-full truncate bg-transparent text-[11px] font-semibold uppercase tracking-wide text-slate-700 outline-none"
           />
-          <div className="truncate text-[10px] text-slate-400">
+          <div className="truncate text-[11px] text-slate-400">
             {layer?.name || 'Missing layer'}
           </div>
         </div>
@@ -296,7 +296,7 @@ const ChartCard = ({
 
       <div className="grid grid-cols-2 gap-2 border-b p-3">
         <label className="space-y-1">
-          <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Layer</span>
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Layer</span>
           <select
             value={chart.layerId}
             onChange={(event) => {
@@ -317,7 +317,7 @@ const ChartCard = ({
         </label>
 
         <label className="space-y-1">
-          <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Type</span>
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Type</span>
           <select
             value={chart.type}
             onChange={(event) => onUpdate({ type: event.target.value as VisualChartType })}
@@ -330,7 +330,7 @@ const ChartCard = ({
         </label>
 
         <label className="space-y-1">
-          <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Dimension</span>
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Dimension</span>
           <select
             value={chart.dimensionField}
             onChange={(event) => onUpdate({ dimensionField: event.target.value })}
@@ -343,7 +343,7 @@ const ChartCard = ({
         </label>
 
         <label className="space-y-1">
-          <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Value</span>
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Value</span>
           <select
             value={chart.aggregation === 'count' ? '' : chart.measureField || ''}
             disabled={chart.aggregation === 'count'}
@@ -358,7 +358,7 @@ const ChartCard = ({
         </label>
 
         <label className="space-y-1">
-          <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Aggregate</span>
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Aggregate</span>
           <select
             value={chart.aggregation}
             onChange={(event) => onUpdate({ aggregation: event.target.value as VisualChartAggregation })}
@@ -371,7 +371,7 @@ const ChartCard = ({
         </label>
 
         <label className="space-y-1">
-          <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Palette</span>
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Palette</span>
           <select
             value={chart.paletteId}
             onChange={(event) => onUpdate({ paletteId: event.target.value })}
@@ -399,7 +399,7 @@ const ChartCard = ({
           </div>
         ) : (
           <div className="space-y-3">
-            <div className="flex items-center justify-between text-[10px] text-slate-400">
+            <div className="flex items-center justify-between text-[11px] text-slate-400">
               <span>{result.filteredRows.toLocaleString()} active rows</span>
               <span>{result.totalRows.toLocaleString()} total</span>
             </div>
@@ -472,11 +472,11 @@ export const ChartPanel = () => {
       <div className="shrink-0 border-b bg-white px-4 py-3">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <h3 className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-slate-600">
+            <h3 className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
               <BarChart3 className="h-3.5 w-3.5" />
               Charts
             </h3>
-            <p className="mt-1 truncate text-[10px] text-slate-400">
+            <p className="mt-1 truncate text-[11px] text-slate-400">
               Click chart marks to filter. Hover to highlight mapped features.
             </p>
           </div>
@@ -484,7 +484,7 @@ export const ChartPanel = () => {
             type="button"
             onClick={handleAddChart}
             disabled={!hasChartableLayer}
-            className="flex h-8 items-center gap-1.5 rounded-md bg-slate-900 px-3 text-[10px] font-bold uppercase tracking-wider text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+            className="flex h-8 items-center gap-1.5 rounded-md bg-slate-900 px-3 text-[11px] font-semibold uppercase tracking-wider text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
             <Plus className="h-3.5 w-3.5" />
             Add

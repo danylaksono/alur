@@ -36,7 +36,7 @@ export const FilterNode = ({ data, id }: any) => {
           <div>
             <div className="font-semibold text-slate-800">Filter Rows</div>
             <div>Filter the dataset using a SQL WHERE clause.</div>
-            <div className="text-[9px] text-slate-500 mt-2">
+            <div className="text-[11px] text-slate-500 mt-2">
               Example: <code>price &gt; 100 AND category = 'urban'</code>
             </div>
           </div>
@@ -47,7 +47,7 @@ export const FilterNode = ({ data, id }: any) => {
             {columnNames.slice(0, 8).map((col) => (
               <button
                 key={col}
-                className="text-[8px] font-mono bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded border border-amber-200 hover:bg-amber-100 transition-colors"
+                className="text-[10px] font-mono bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded border border-amber-200 hover:bg-amber-100 transition-colors"
                 onClick={() => updateConfig({ condition: condition ? `${condition} ${col}` : col })}
                 title={`Insert "${col}" into condition`}
               >
@@ -55,7 +55,7 @@ export const FilterNode = ({ data, id }: any) => {
               </button>
             ))}
             {columnNames.length > 8 && (
-              <span className="text-[8px] text-slate-400">+{columnNames.length - 8}</span>
+              <span className="text-[10px] text-slate-400">+{columnNames.length - 8}</span>
             )}
           </div>
         )}
@@ -74,7 +74,7 @@ export const FilterNode = ({ data, id }: any) => {
             onChange={(e) => updateConfig({ condition: e.target.value })}
             placeholder="e.g. need > 10"
           />
-          {error && <div className="text-[9px] text-red-500 mt-1 font-medium">{error}</div>}
+          {error && <div className="text-[11px] text-red-500 mt-1 font-medium">{error}</div>}
         </div>
       <Handle type="target" position={Position.Left} className={nodeHandleClass('amber')} />
       <Handle type="source" position={Position.Right} className={nodeHandleClass('amber')} />

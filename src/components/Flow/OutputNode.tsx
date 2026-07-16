@@ -101,7 +101,7 @@ export const OutputNode = ({ data, id }: any) => {
       title={isExportMode ? exportFormat.toUpperCase() : 'Visualize results'}
     >
       <div>
-        <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+        <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
           Output Type
         </label>
         <select
@@ -124,7 +124,7 @@ export const OutputNode = ({ data, id }: any) => {
 
       {isExportMode ? (
         <div>
-          <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+          <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
             Format
           </label>
           <select
@@ -141,14 +141,14 @@ export const OutputNode = ({ data, id }: any) => {
       ) : (
         <div className="mt-2 flex items-center gap-2">
         <Settings2 className="w-2.5 h-2.5 text-slate-400" />
-        <label className="text-[9px] text-slate-500 font-medium">Max features:</label>
+        <label className="text-[11px] text-slate-500 font-medium">Max features:</label>
         <input
           type="number"
           min={1}
           max={100000}
           value={maxFeatures}
           onChange={(e) => updateConfig({ maxFeatures: Number(e.target.value) })}
-          className={`${inputClass} w-24 px-2 py-1 text-[10px] font-mono`}
+          className={`${inputClass} w-24 px-2 py-1 text-[11px] font-mono`}
         />
       </div>
       )}
@@ -157,14 +157,14 @@ export const OutputNode = ({ data, id }: any) => {
         {isExportMode ? (
           <button
             onClick={handleExport}
-            className="flex flex-1 items-center justify-center gap-1.5 bg-emerald-50 text-emerald-700 py-1.5 rounded-lg text-[10px] font-bold hover:bg-emerald-100 transition-colors"
+            className="flex flex-1 items-center justify-center gap-1.5 bg-emerald-50 text-emerald-700 py-1.5 rounded-lg text-[11px] font-bold hover:bg-emerald-100 transition-colors"
           >
             <Download className="w-3 h-3" /> EXPORT
           </button>
         ) : (
           <button
             onClick={handlePreview}
-            className="flex-1 bg-emerald-50 text-emerald-700 py-1.5 rounded-lg text-[10px] font-bold hover:bg-emerald-100 transition-colors"
+            className="flex-1 bg-emerald-50 text-emerald-700 py-1.5 rounded-lg text-[11px] font-bold hover:bg-emerald-100 transition-colors"
           >
             PREVIEW
           </button>

@@ -44,13 +44,13 @@ export const FilterChips = ({
 
   return (
     <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b bg-sky-50 px-3 py-2">
-      <span className="mr-1 text-[9px] font-bold uppercase tracking-widest text-sky-700">Filters</span>
+      <span className="mr-1 text-[11px] font-semibold uppercase tracking-wide text-sky-700">Filters</span>
       {filters.map((filter, index) => (
         <button
           type="button"
           key={`${filterKey(filter)}-${index}`}
           onClick={() => onRemove(index)}
-          className="flex max-w-[240px] items-center gap-1 rounded-md border border-sky-200 bg-white px-2 py-1 text-[10px] font-semibold text-sky-800 hover:bg-sky-100"
+          className="flex max-w-[240px] items-center gap-1 rounded-md border border-sky-200 bg-white px-2 py-1 text-[11px] font-semibold text-sky-800 hover:bg-sky-100"
           title={`Remove ${filterLabel(filter)}`}
         >
           <span className="truncate">{filterLabel(filter)}</span>
@@ -60,7 +60,7 @@ export const FilterChips = ({
       <button
         type="button"
         onClick={onClear}
-        className="rounded-md border border-sky-200 bg-sky-100 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-sky-800 hover:bg-sky-200"
+        className="rounded-md border border-sky-200 bg-sky-100 px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-sky-800 hover:bg-sky-200"
       >
         Clear all
       </button>

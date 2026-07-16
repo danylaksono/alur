@@ -96,7 +96,7 @@ export const TemporalSlider = ({
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-2.5">
       <div className="flex items-center justify-between gap-2">
-        <span className="truncate text-[9px] font-bold uppercase tracking-widest text-slate-400">
+        <span className="truncate text-[11px] font-semibold uppercase tracking-wide text-slate-400">
           Time · {field}
         </span>
         <div className="flex items-center gap-1">
@@ -142,25 +142,25 @@ export const TemporalSlider = ({
         />
       </div>
 
-      <div className="flex items-center justify-between text-[10px] font-semibold text-slate-600">
+      <div className="flex items-center justify-between text-[11px] font-semibold text-slate-600">
         <span>{formatIso(currentStart)}</span>
         <span>{formatIso(currentEnd)}</span>
       </div>
 
       <div className="flex items-center gap-3">
-        <label className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-widest text-slate-400">
+        <label className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
           Window
           <select
             value={windowSize}
             onChange={(e) => setWindowSize(Number(e.target.value))}
-            className="h-7 rounded border border-slate-200 bg-white px-1.5 text-[10px] font-semibold text-slate-700"
+            className="h-7 rounded border border-slate-200 bg-white px-1.5 text-[11px] font-semibold text-slate-700"
           >
             {[7, 14, 30, 90, 180, 365].map((d) => (
               <option key={d} value={d}>{d}d</option>
             ))}
           </select>
         </label>
-        <label className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-widest text-slate-400">
+        <label className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
           Speed
           <input
             type="range"

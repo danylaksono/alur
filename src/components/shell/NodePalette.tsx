@@ -1,0 +1,179 @@
+import { useState } from 'react';
+import { Calculator, Database, Eye, Filter, Layers, Loader2, Palette, Plus, Search, Zap } from 'lucide-react';
+import { useStore } from '../../store/useStore';
+import { buildWorkflowSQL } from '../../utils/workflowEngine';
+import { spatialFunctions } from '../../utils/spatialFunctions';
+import { materializeWorkflowMapLayer } from '../../services/layerMaterialization';
+import { cn } from '../../utils/cn';
+
+const colorStyles: Record<string, { hoverBg: string; hoverBorder: string; iconBg: string; iconHoverBg: string }> = {
+  blue: { hoverBg: 'hover:bg-blue-50', hoverBorder: 'hover:border-blue-200', iconBg: 'bg-blue-50', iconHoverBg: 'group-hover:bg-blue-100' },
+  purple: { hoverBg: 'hover:bg-purple-50', hoverBorder: 'hover:border-purple-200', iconBg: 'bg-purple-50', iconHoverBg: 'group-hover:bg-purple-100' },
+  slate: { hoverBg: 'hover:bg-slate-50', hoverBorder: 'hover:border-slate-200', iconBg: 'bg-slate-50', iconHoverBg: 'group-hover:bg-slate-100' },
+  orange: { hoverBg: 'hover:bg-orange-50', hoverBorder: 'hover:border-orange-200', iconBg: 'bg-orange-50', iconHoverBg: 'group-hover:bg-orange-100' },
+  amber: { hoverBg: 'hover:bg-amber-50', hoverBorder: 'hover:border-amber-200', iconBg: 'bg-amber-50', iconHoverBg: 'group-hover:bg-amber-100' },
+  emerald: { hoverBg: 'hover:bg-emerald-50', hoverBorder: 'hover:border-emerald-200', iconBg: 'bg-emerald-50', iconHoverBg: 'group-hover:bg-emerald-100' },
+};
+
+type NodeType = 'input' | 'analysis' | 'attribute' | 'filter' | 'aggregate' | 'visualisation' | 'output';
+
+const nodeCards: Array<{ type: NodeType; icon: typeof Database; title: string; desc: string; color: string; config?: Record<string, unknown> }> = [
+  { type: 'input', icon: Database, title: 'Data Input', desc: 'Load Parquet or CSV', color: 'blue' },
+  { type: 'analysis', icon: Zap, title: 'Spatial Analysis', desc: 'Buffer, intersect, transform…', color: 'purple' },
+  { type: 'attribute', icon: Calculator, title: 'Attribute Calc', desc: 'Add computed columns', color: 'slate' },
+  { type: 'filter', icon: Filter, title: 'Filter', desc: 'SQL WHERE conditions', color: 'amber' },
+  { type: 'aggregate', icon: Layers, title: 'Aggregate', desc: 'GROUP BY, dissolve', color: 'orange' },
+  { type: 'visualisation', icon: Palette, title: 'Visualisation', desc: 'Attach a reusable map style', color: 'purple', config: { kind: 'choropleth', method: 'quantile', classCount: 5, paletteId: 'teal' } },
+  { type: 'output', icon: Eye, title: 'Layer Output', desc: 'Visualize or export the result', color: 'emerald', config: { outputMode: 'visualize' } },
+];
+
+const nodeLabels: Record<NodeType, string> = {
+  input: 'Data Source',
+  analysis: 'Spatial Op',
+  attribute: 'Attribute Op',
+  filter: 'Filter',
+  aggregate: 'Aggregate',
+  visualisation: 'Visualisation',
+  output: 'Layer Output',
+};
+
+export const NodePalette = () => {
+  const addNode = useStore((s) => s.addNode);
+  const duckdbReady = useStore((s) => s.duckdbReady);
+  const addMapLayer = useStore((s) => s.addMapLayer);
+  const addToast = useStore((s) => s.addToast);
+  const [executing, setExecuting] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const matchedFunctions = normalizedQuery
+    ? spatialFunctions
+        .filter((fn) =>
+          fn.name.toLowerCase().includes(normalizedQuery) || fn.summary.toLowerCase().includes(normalizedQuery)
+        )
+        .slice(0, 30)
+    : [];
+
+  const handleAddNode = (type: NodeType, config: Record<string, unknown> = {}, label?: string) => {
+    addNode({
+      id: `${type}-${Date.now()}`,
+      type,
+      position: { x: 100 + Math.random() * 80, y: 80 + Math.random() * 80 },
+      data: {
+        label: label || nodeLabels[type],
+        type,
+        config,
+      },
+    });
+  };
+
+  const handleExecute = async () => {
+    const { nodes, edges } = useStore.getState();
+    try {
+      setExecuting(true);
+      const workflow = buildWorkflowSQL(nodes, edges);
+      const layer = await materializeWorkflowMapLayer({
+        workflow,
+        layerId: workflow.outputLayerName,
+        name: 'Workflow Result',
+        sourceKind: 'workflow',
+        visualisationConfig: workflow.visualisationConfig,
+      });
+      if (!layer.featureCount) {
+        addToast({ type: 'warning', message: 'Workflow executed but produced no features.' });
+        return;
+      }
+      addMapLayer({ ...layer, name: `Workflow Result (${layer.featureCount.toLocaleString()} features)` });
+      addToast({ type: 'success', message: `Workflow complete — ${layer.featureCount.toLocaleString()} features added to the map.` });
+    } catch (err: any) {
+      console.error('Workflow execution error:', err);
+      addToast({ type: 'error', message: `Workflow error: ${err.message}` });
+    } finally {
+      setExecuting(false);
+    }
+  };
+
+  return (
+    <div className="flex h-full w-60 shrink-0 flex-col border-r bg-white">
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-3">
+        <div>
+          <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Nodes</h3>
+          <div className="grid grid-cols-1 gap-1.5">
+            {nodeCards.map((item) => {
+              const Icon = item.icon;
+              const cs = colorStyles[item.color] || colorStyles.blue;
+              return (
+                <button
+                  key={item.type}
+                  type="button"
+                  onClick={() => handleAddNode(item.type, item.config, item.title === 'Layer Output' ? item.title : undefined)}
+                  className={cn('group flex cursor-pointer items-center justify-between rounded-lg border p-2 text-left text-xs transition-all', cs.hoverBg, cs.hoverBorder)}
+                >
+                  <div className="flex min-w-0 items-center gap-2">
+                    <div className={cn('shrink-0 rounded-md p-1.5 transition-colors', cs.iconBg, cs.iconHoverBg)}>
+                      <Icon className="h-3.5 w-3.5" style={{ color: `var(--${item.color})` }} />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="block text-xs font-semibold text-foreground">{item.title}</span>
+                      <span className="block truncate text-[11px] text-muted-foreground">{item.desc}</span>
+                    </div>
+                  </div>
+                  <Plus className="h-3 w-3 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div>
+          <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Spatial Functions</h3>
+          <div className="relative mb-2">
+            <Search className="absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={`Search ${spatialFunctions.length} functions…`}
+              className="w-full rounded-lg border bg-slate-50 py-1.5 pl-7 pr-2 text-[11px] outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
+            />
+          </div>
+          {normalizedQuery && (
+            <div className="max-h-56 space-y-1 overflow-y-auto">
+              {matchedFunctions.length === 0 ? (
+                <div className="p-2 text-[11px] italic text-muted-foreground">No functions matched</div>
+              ) : (
+                matchedFunctions.map((fn) => (
+                  <button
+                    key={fn.name}
+                    type="button"
+                    className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] transition-colors hover:bg-purple-50"
+                    title={fn.summary}
+                    onClick={() => handleAddNode('analysis', { operation: fn.name }, fn.name)}
+                  >
+                    <Zap className="h-2.5 w-2.5 shrink-0 text-purple-500" />
+                    <span className="shrink-0 font-mono font-semibold text-purple-700">{fn.name}</span>
+                    <span className="truncate text-muted-foreground">{fn.summary}</span>
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="border-t bg-muted/20 p-3">
+        <button
+          onClick={handleExecute}
+          disabled={!duckdbReady || executing}
+          className="flex w-full items-center justify-center gap-2 rounded-lg bg-slate-900 py-2.5 text-xs font-semibold text-white shadow transition-all hover:bg-black active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {executing ? (
+            <><Loader2 className="h-4 w-4 animate-spin" /> Executing…</>
+          ) : (
+            <><Zap className="h-4 w-4 fill-white" /> Execute Workflow</>
+          )}
+        </button>
+      </div>
+    </div>
+  );
+};

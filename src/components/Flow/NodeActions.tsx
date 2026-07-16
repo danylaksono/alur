@@ -113,7 +113,7 @@ export const NodeActions = ({ id, helperContent }: NodeActionsProps) => {
       {execState && execState.status !== 'idle' && (
         <div
           className={`
-            flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider cursor-pointer
+            flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider cursor-pointer
             ${execState.status === 'running' ? 'bg-amber-100 text-amber-700' : ''}
             ${execState.status === 'done' ? 'bg-emerald-100 text-emerald-700' : ''}
             ${execState.status === 'error' ? 'bg-red-100 text-red-700' : ''}
@@ -152,7 +152,7 @@ export const NodeActions = ({ id, helperContent }: NodeActionsProps) => {
         <div className="absolute right-0 top-full mt-1 z-50 hidden group-hover:block">
           <button
             onClick={() => handleExport('csv')}
-            className="whitespace-nowrap bg-white border border-slate-200 rounded-lg px-2 py-1 text-[9px] font-semibold text-slate-600 hover:bg-slate-50 shadow-lg"
+            className="whitespace-nowrap bg-white border border-slate-200 rounded-lg px-2 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 shadow-lg"
           >
             Export CSV
           </button>
@@ -170,7 +170,7 @@ export const NodeActions = ({ id, helperContent }: NodeActionsProps) => {
             <Info className="w-3.5 h-3.5" />
           </button>
           {showHelper && (
-            <div className="absolute right-0 top-full mt-1 z-50 w-56 rounded-xl border border-slate-200 bg-white p-3 shadow-xl text-[10px] text-slate-600 space-y-1">
+            <div className="absolute right-0 top-full mt-1 z-50 w-56 rounded-xl border border-slate-200 bg-white p-3 shadow-xl text-[11px] text-slate-600 space-y-1">
               {helperContent}
             </div>
           )}

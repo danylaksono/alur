@@ -21,8 +21,8 @@ export const LegendControl = ({
   if (!legends.length) return null;
 
   return (
-    <aside className="pointer-events-auto absolute bottom-4 left-4 z-10 max-h-[45%] w-64 overflow-y-auto rounded-md border border-slate-200 bg-white/95 p-3 text-[10px] shadow-lg backdrop-blur">
-      <div className="mb-2 text-[9px] font-bold uppercase tracking-widest text-slate-500">Legend</div>
+    <aside className="pointer-events-auto absolute bottom-4 left-4 z-10 max-h-[45%] w-64 overflow-y-auto rounded-md border border-slate-200 bg-white/95 p-3 text-[11px] shadow-lg backdrop-blur">
+      <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Legend</div>
       <div className="space-y-3">
         {legends.slice(0, 4).map(({ layerId, layerName, legend }) => (
           <div key={layerId} className="space-y-1.5">
@@ -30,7 +30,7 @@ export const LegendControl = ({
               <div className="min-w-0 truncate font-bold text-slate-700" title={layerName}>
                 {layerName}
               </div>
-              <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-slate-500">
+              <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
                 {legendKindLabel[legend.kind]}
               </span>
             </div>
@@ -50,7 +50,7 @@ export const LegendControl = ({
                 </div>
               ))}
               {legend.items.length > MAX_ITEMS && (
-                <div className="text-[9px] font-semibold text-slate-400">
+                <div className="text-[11px] font-semibold text-slate-400">
                   + {(legend.items.length - MAX_ITEMS).toLocaleString()} more
                 </div>
               )}

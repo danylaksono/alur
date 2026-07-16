@@ -4,7 +4,9 @@
 
 ## What it does
 
-GeoModeler Pro is a single-page web application that brings the GIS workflow to your browser. Load spatial data, build processing pipelines as visual node diagrams, style and interact with map layers, and get AI assistance — all without installing a server or desktop GIS.
+YMNNGIS is a single-page web application that brings the GIS workflow to your browser. Load spatial data, build processing pipelines as visual node diagrams, style and interact with map layers, and get AI assistance — all without installing a server or desktop GIS.
+
+The app starts as a blank canvas: drop a Parquet or CSV file onto the map (or use **Add data**) and everything runs locally in your browser. The AI copilot is bring-your-own-key — add an OpenRouter API key in Settings; it is stored only in your browser's localStorage.
 
 ## Tech Stack
 
@@ -32,27 +34,28 @@ npm run test       # Run test suite (60 tests)
 
 ## GitHub Pages Deployment
 
-The production build is configured for the `/ymnngis/` GitHub Pages subpath, so static assets and the bundled sample dataset resolve correctly after deployment.
+The production build is configured for the `/ymnngis/` GitHub Pages subpath, so static assets resolve correctly after deployment.
 
 Pushes to `main` are deployed through GitHub Actions in `.github/workflows/deploy.yml`. In the repository settings, set Pages to use GitHub Actions as the source.
 
 ## Architecture
 
-The platform has four integrated workspaces:
+Map-first shell: the map fills the viewport; everything else lives in a collapsible left panel and a resizable bottom drawer.
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│  Sidebar           Map View          Right Panel        │
-│  ┌─────────┐    ┌──────────────┐    ┌───────────────┐  │
-│  │ Node    │    │              │    │ Visualise     │  │
-│  │ library │    │  MapLibre GL │    │ panel         │  │
-│  │         │    │              │    │               │  │
-│  │ Nodes   │    │  Legend      │    │ Layer mgr     │  │
-│  │ diagram │    │  Popups      │    │ Data table    │  │
-│  │         │    │              │    │ Summary       │  │
-│  │ Chat    │    │              │    │               │  │
-│  └─────────┘    └──────────────┘    └───────────────┘  │
-└─────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│ Header: logo · Add data · New project · Settings (BYOK)  │
+├──┬───────────────┬───────────────────────────────────────┤
+│R │ Left panel    │                                       │
+│a │ (collapsible) │           MapLibre GL (full-bleed)    │
+│i │  · Layers +   │                                       │
+│l │    Style      │   Legend overlay    Selection overlay │
+│  │  · Charts     │                                       │
+│  │  · Copilot    │                                       │
+├──┴───────────────┴───────────────────────────────────────┤
+│ Bottom drawer (collapsed ▲ / resizable / maximizable)    │
+│   Workflow (node canvas + palette) · Table · SQL         │
+└──────────────────────────────────────────────────────────┘
          │               │                    │
          └───────────────┼────────────────────┘
                          │
@@ -120,14 +123,14 @@ All styles are compiled to native MapLibre expressions — no hand-written JSON.
 ```
 Data Input           Filter              Analysis            Output
 ┌──────────┐      ┌──────────┐      ┌──────────────┐      ┌──────────┐
-│ need_london│ ──► │ need >= 10│ ──► │ ST_Buffer    │ ──► │ Map      │
-│ .parquet  │      │          │      │ (500m)       │      │ Preview  │
+│ wards      │ ──► │ need >= 10│ ──► │ ST_Buffer    │ ──► │ Map      │
+│ .parquet   │      │          │      │ (500m)       │      │ Preview  │
 └──────────┘      └──────────┘      └──────────────┘      └──────────┘
 ```
 
 This compiles to a single DuckDB query:
 ```sql
-WITH step1 AS (SELECT * FROM "need_london"),
+WITH step1 AS (SELECT * FROM "wards"),
      step2 AS (SELECT * FROM step1 WHERE need >= 10),
      step3 AS (SELECT *, ST_Buffer("geometry", 500) AS geom_buffered FROM step2)
 SELECT * FROM step3 LIMIT 5000;
@@ -168,11 +171,19 @@ src/
 │   │   └── LegendControl.tsx      # Map-corner legend overlay
 │   ├── Flow/
 │   │   └── VisualisationNode.tsx  # Workflow style recipe node
-│   ├── Chat.tsx                   # LLM agent with tool execution
-│   ├── Sidebar.tsx                # Node library + spatial search
+│   ├── shell/
+│   │   ├── AppShell.tsx           # Map-first layout composition
+│   │   ├── Header.tsx             # Add data, New project, Settings
+│   │   ├── LeftRail.tsx           # Icon rail: Layers / Charts / Copilot
+│   │   ├── LeftPanel.tsx          # Collapsible panel for the active rail tab
+│   │   ├── BottomDrawer.tsx       # Resizable drawer: Workflow / Table / SQL
+│   │   ├── NodePalette.tsx        # Node cards + spatial function search
+│   │   ├── SettingsDialog.tsx     # BYOK OpenRouter settings
+│   │   └── MapEmptyState.tsx      # Blank-canvas first-run overlay
+│   ├── Chat.tsx                   # LLM agent with tool execution (BYOK)
 │   ├── DataTable.tsx              # Attribute table with profiling
 │   └── LayerManager.tsx           # Layer visibility, opacity, management
-└── App.tsx                        # Root layout + workflow diagram
+└── App.tsx                        # DuckDB init + AppShell mount
 ```
 
 ## Tests

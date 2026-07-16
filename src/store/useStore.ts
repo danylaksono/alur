@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { createJSONStorage, persist } from 'zustand/middleware';
 import {
   Connection,
   Edge,
@@ -61,6 +62,24 @@ export type Toast = {
   message: string;
 };
 
+export type RailTab = 'layers' | 'charts' | 'chat';
+export type DrawerTab = 'workflow' | 'table' | 'sql';
+export type DrawerMode = 'collapsed' | 'open' | 'maximized';
+
+export type UIState = {
+  activeRailTab: RailTab;
+  isPanelCollapsed: boolean;
+  drawerMode: DrawerMode;
+  drawerHeight: number;
+  activeDrawerTab: DrawerTab;
+  isSettingsOpen: boolean;
+};
+
+export type SettingsState = {
+  openRouterApiKey: string;
+  openRouterModelId: string;
+};
+
 export type ChatMessage = {
   role: 'user' | 'assistant' | 'system';
   content: string;
@@ -88,7 +107,17 @@ interface AppState {
   nodeExecutionStates: Record<string, NodeExecutionState>;
   visualAnalytics: VisualAnalyticsState;
   toasts: Toast[];
+  ui: UIState;
+  settings: SettingsState;
 
+  setActiveRailTab: (tab: RailTab) => void;
+  togglePanelCollapsed: () => void;
+  setDrawerMode: (mode: DrawerMode) => void;
+  setDrawerHeight: (height: number) => void;
+  setActiveDrawerTab: (tab: DrawerTab) => void;
+  openDrawerTab: (tab: DrawerTab) => void;
+  setSettingsOpen: (open: boolean) => void;
+  updateSettings: (patch: Partial<SettingsState>) => void;
   setDuckDBReady: (ready: boolean) => void;
   setSelectedBasemapId: (id: BasemapId) => void;
   setManualSQL: (sql: string) => void;
@@ -183,7 +212,30 @@ const hydrateLayer = (layer: NewMapLayer, previous?: MapLayer): MapLayer => {
 
 const sameJson = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 
-export const useStore = create<AppState>()((set, get) => ({
+const noopStorage: Storage = {
+  length: 0,
+  clear: () => {},
+  getItem: () => null,
+  key: () => null,
+  removeItem: () => {},
+  setItem: () => {},
+};
+
+const initialUIState: UIState = {
+  activeRailTab: 'layers',
+  isPanelCollapsed: false,
+  drawerMode: 'collapsed',
+  drawerHeight: 320,
+  activeDrawerTab: 'workflow',
+  isSettingsOpen: false,
+};
+
+const initialSettings: SettingsState = {
+  openRouterApiKey: '',
+  openRouterModelId: 'openai/gpt-4o-mini',
+};
+
+export const useStore = create<AppState>()(persist((set, get) => ({
   nodes: [],
   edges: [],
   duckdbReady: false,
@@ -199,7 +251,38 @@ export const useStore = create<AppState>()((set, get) => ({
   nodeExecutionStates: {},
   visualAnalytics: { layers: {}, charts: [] },
   toasts: [],
+  ui: initialUIState,
+  settings: initialSettings,
 
+  setActiveRailTab: (tab) => set((state) => ({
+    ui: { ...state.ui, activeRailTab: tab, isPanelCollapsed: false },
+  })),
+  togglePanelCollapsed: () => set((state) => ({
+    ui: { ...state.ui, isPanelCollapsed: !state.ui.isPanelCollapsed },
+  })),
+  setDrawerMode: (mode) => set((state) => ({
+    ui: { ...state.ui, drawerMode: mode },
+  })),
+  setDrawerHeight: (height) => set((state) => {
+    const maxHeight = typeof window === 'undefined' ? 800 : window.innerHeight - 160;
+    return { ui: { ...state.ui, drawerHeight: Math.max(160, Math.min(height, maxHeight)) } };
+  }),
+  setActiveDrawerTab: (tab) => set((state) => ({
+    ui: { ...state.ui, activeDrawerTab: tab },
+  })),
+  openDrawerTab: (tab) => set((state) => ({
+    ui: {
+      ...state.ui,
+      activeDrawerTab: tab,
+      drawerMode: state.ui.drawerMode === 'collapsed' ? 'open' : state.ui.drawerMode,
+    },
+  })),
+  setSettingsOpen: (open) => set((state) => ({
+    ui: { ...state.ui, isSettingsOpen: open },
+  })),
+  updateSettings: (patch) => set((state) => ({
+    settings: { ...state.settings, ...patch },
+  })),
   setDuckDBReady: (ready) => set({ duckdbReady: ready }),
   setSelectedBasemapId: (id) => set({ selectedBasemapId: id }),
   setManualSQL: (sql) => set({ manualSQL: sql }),
@@ -359,8 +442,10 @@ export const useStore = create<AppState>()((set, get) => ({
     const nextLayer = hydrateLayer(layer, previous);
     return {
       mapLayers: [...state.mapLayers.filter((item) => item.id !== layer.id), nextLayer],
-      selectedLayerId: nextLayer.id,
-      selectedNodeId: nextLayer.sourceNodeId ?? state.selectedNodeId,
+      // Only auto-select genuinely new layers; updates (style bumps, re-materialization)
+      // must not hijack whatever the user currently has selected.
+      selectedLayerId: previous ? state.selectedLayerId : nextLayer.id,
+      selectedNodeId: previous ? state.selectedNodeId : nextLayer.sourceNodeId ?? state.selectedNodeId,
     };
   }),
 
@@ -559,4 +644,10 @@ export const useStore = create<AppState>()((set, get) => ({
   removeToast: (id) => set((state) => ({
     toasts: state.toasts.filter((t) => t.id !== id)
   })),
+}), {
+  name: 'ymnngis-settings',
+  version: 1,
+  // Only user settings persist; workflow/layer state is ephemeral by design.
+  partialize: (state) => ({ settings: state.settings }) as AppState,
+  storage: createJSONStorage(() => (typeof window === 'undefined' ? noopStorage : window.localStorage)),
 }));

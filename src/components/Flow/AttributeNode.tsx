@@ -22,7 +22,7 @@ export const AttributeNode = ({ data, id }: any) => {
           <div>
             <div className="font-semibold text-slate-800">Attribute Computation</div>
             <div>Add a calculated field using any DuckDB expression.</div>
-            <div className="text-[9px] text-slate-500 mt-2">
+            <div className="text-[11px] text-slate-500 mt-2">
               Example: <code>population / ST_Area(geom)</code>
             </div>
           </div>

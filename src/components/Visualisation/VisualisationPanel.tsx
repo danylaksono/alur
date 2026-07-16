@@ -63,7 +63,7 @@ const DistributionPreview = ({
               style={{ height: `${Math.max(4, (bin.count / maxCount) * 60)}px` }}
               title={`Filter ${field} by ${bin.label}: ${formatCount(bin.count)}`}
             />
-            <span className="w-full truncate text-center text-[8px] text-slate-400" title={bin.label}>
+            <span className="w-full truncate text-center text-[10px] text-slate-400" title={bin.label}>
               {bin.label}
             </span>
           </div>
@@ -81,7 +81,7 @@ const DistributionPreview = ({
           key={category.value}
           onClick={() => onToggleFilter({ kind: 'category', field, values: [category.value] })}
           className={cn(
-            'grid w-full grid-cols-[minmax(0,1fr)_56px] items-center gap-2 rounded px-1 py-0.5 text-left text-[10px]',
+            'grid w-full grid-cols-[minmax(0,1fr)_56px] items-center gap-2 rounded px-1 py-0.5 text-left text-[11px]',
             activeFilterKeys.has(`${field}:category:${category.value}`)
               ? 'bg-orange-50 text-orange-700 ring-1 ring-orange-200'
               : 'hover:bg-slate-50'
@@ -349,7 +349,7 @@ export const VisualisationPanel = () => {
     <section className="flex min-h-0 flex-col bg-white">
       <div className="border-b bg-slate-50 px-4 py-3">
         <div className="flex items-center justify-between">
-          <h3 className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+          <h3 className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
             <Palette className="h-3.5 w-3.5" />
             Visualise
           </h3>
@@ -383,17 +383,17 @@ export const VisualisationPanel = () => {
         ) : (
           <div className="space-y-3">
             <div>
-              <div className="mb-1.5 text-[9px] font-bold uppercase tracking-widest text-slate-400">Layer</div>
+              <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Layer</div>
               <div className="truncate text-[11px] font-bold text-slate-700">{selectedLayer.name}</div>
             </div>
 
             <div className="grid grid-cols-2 gap-2">
               <label className="space-y-1">
-                <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Type</span>
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Type</span>
                 <select
                   value={kind}
                   onChange={(event) => setKind(event.target.value as typeof kind)}
-                  className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[10px] font-semibold text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                  className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
                 >
                   <option value="simple">Raw geometry</option>
                   <option value="choropleth">Choropleth</option>
@@ -405,11 +405,11 @@ export const VisualisationPanel = () => {
                 </select>
               </label>
               <label className="space-y-1">
-                <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Field</span>
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Field</span>
                 <select
                   value={field}
                   onChange={(event) => setField(event.target.value)}
-                  className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[10px] font-semibold text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                  className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
                 >
                   {fields.map((name) => (
                     <option key={name} value={name}>{name}</option>
@@ -421,33 +421,33 @@ export const VisualisationPanel = () => {
             {kind !== 'simple' && (kind === 'choropleth' || kind === 'heatmap') && (
               <div className="grid grid-cols-3 gap-2">
                 {kind === 'choropleth' && <label className="space-y-1">
-                  <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Method</span>
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Method</span>
                   <select
                     value={method}
                     onChange={(event) => setMethod(event.target.value as typeof method)}
-                    className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[10px] font-semibold text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                    className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
                   >
                     <option value="quantile">Quantile</option>
                     <option value="equal_interval">Equal interval</option>
                   </select>
                 </label>}
                 {kind === 'choropleth' && <label className="space-y-1">
-                  <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Classes</span>
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Classes</span>
                   <input
                     type="number"
                     min={2}
                     max={9}
                     value={classCount}
                     onChange={(event) => setClassCount(Number(event.target.value))}
-                    className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[10px] font-semibold text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                    className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
                   />
                 </label>}
                 <label className="space-y-1">
-                  <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Palette</span>
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Palette</span>
                   <select
                     value={paletteId}
                     onChange={(event) => setPaletteId(event.target.value)}
-                    className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[10px] font-semibold text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                    className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
                   >
                     {SEQUENTIAL_PALETTES.map((palette) => (
                       <option key={palette.id} value={palette.id}>{palette.name}</option>
@@ -461,7 +461,7 @@ export const VisualisationPanel = () => {
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2">
                 <div className="grid grid-cols-2 gap-2">
                   <label className="space-y-1">
-                    <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Dot value</span>
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Dot value</span>
                     <input
                       type="number"
                       min={1}
@@ -471,11 +471,11 @@ export const VisualisationPanel = () => {
                         const vis = { ...selectedLayer.visualisation, dotValue: Number(event.target.value) };
                         updateLayerVisualisation(selectedLayer.id, vis, selectedLayer.legend);
                       }}
-                      className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[10px] font-semibold text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                      className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
                     />
                   </label>
                   <label className="space-y-1">
-                    <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Radius</span>
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Radius</span>
                     <input
                       type="number"
                       min={0.5}
@@ -487,7 +487,7 @@ export const VisualisationPanel = () => {
                         const vis = { ...selectedLayer.visualisation, radius: Number(event.target.value) };
                         updateLayerVisualisation(selectedLayer.id, vis, selectedLayer.legend);
                       }}
-                      className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[10px] font-semibold text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                      className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
                     />
                   </label>
                 </div>
@@ -525,7 +525,7 @@ export const VisualisationPanel = () => {
                       .catch(() => {})
                       .finally(() => setDotDensityGenerating(false));
                   }}
-                  className="flex h-7 w-full items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-2 text-[9px] font-bold uppercase tracking-widest text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                  className="flex h-7 w-full items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-2 text-[11px] font-semibold uppercase tracking-wide text-slate-600 hover:bg-slate-50 disabled:opacity-40"
                 >
                   {dotDensityGenerating ? 'Generating...' : 'Regenerate dots'}
                 </button>
@@ -535,7 +535,7 @@ export const VisualisationPanel = () => {
             {geometryKind === 'point' && (
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Point Clustering</span>
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Point Clustering</span>
                   <label className="flex items-center gap-1.5 cursor-pointer">
                     <input
                       type="checkbox"
@@ -549,13 +549,13 @@ export const VisualisationPanel = () => {
                       }}
                       className="h-3.5 w-3.5 rounded border-slate-300 text-purple-600 focus:ring-purple-500"
                     />
-                    <span className="text-[10px] font-semibold text-slate-600">Cluster</span>
+                    <span className="text-[11px] font-semibold text-slate-600">Cluster</span>
                   </label>
                 </div>
                 {typeof selectedLayer?.clusterRadius === 'number' && (
                   <div className="grid grid-cols-2 gap-2">
                     <label className="space-y-1">
-                      <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Radius</span>
+                      <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Radius</span>
                       <input
                         type="number"
                         min={10}
@@ -565,11 +565,11 @@ export const VisualisationPanel = () => {
                           if (!selectedLayer) return;
                           updateMapLayer(selectedLayer.id, { clusterRadius: Number(event.target.value) });
                         }}
-                        className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[10px] font-semibold text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                        className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
                       />
                     </label>
                     <label className="space-y-1">
-                      <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Max Zoom</span>
+                      <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Max Zoom</span>
                       <input
                         type="number"
                         min={8}
@@ -579,7 +579,7 @@ export const VisualisationPanel = () => {
                           if (!selectedLayer) return;
                           updateMapLayer(selectedLayer.id, { clusterMaxZoom: Number(event.target.value) });
                         }}
-                        className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[10px] font-semibold text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                        className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
                       />
                     </label>
                   </div>
@@ -588,7 +588,7 @@ export const VisualisationPanel = () => {
             )}
 
             {kind !== 'simple' && <div className={cn('rounded-lg border p-3', canApply ? 'border-slate-200 bg-slate-50' : 'border-amber-200 bg-amber-50')}>
-              <div className="mb-2 flex items-center gap-2 text-[9px] font-bold uppercase tracking-widest text-slate-400">
+              <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                 <BarChart3 className="h-3.5 w-3.5" />
                 Distribution
               </div>
@@ -615,13 +615,13 @@ export const VisualisationPanel = () => {
             </div>}
 
             <div className="rounded-lg border border-slate-200 bg-white p-3">
-              <div className="mb-2 text-[9px] font-bold uppercase tracking-widest text-slate-400">Temporal Filter</div>
+              <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Temporal Filter</div>
               <select
                 value={temporalField}
                 onChange={(event) => {
                   setTemporalField(event.target.value);
                 }}
-                className="mb-2 h-8 w-full min-w-0 rounded-md border border-slate-200 bg-white px-2 text-[10px] font-semibold text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                className="mb-2 h-8 w-full min-w-0 rounded-md border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
               >
                 {fields.map((name) => (
                   <option key={name} value={name}>{name}</option>
@@ -647,20 +647,20 @@ export const VisualisationPanel = () => {
                       type="date"
                       value={temporalStart}
                       onChange={(event) => setTemporalStart(event.target.value)}
-                      className="h-8 rounded-md border border-slate-200 bg-white px-2 text-[10px] font-semibold text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                      className="h-8 rounded-md border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
                     />
                     <input
                       type="date"
                       value={temporalEnd}
                       onChange={(event) => setTemporalEnd(event.target.value)}
-                      className="h-8 rounded-md border border-slate-200 bg-white px-2 text-[10px] font-semibold text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                      className="h-8 rounded-md border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
                     />
                   </div>
                   <button
                     type="button"
                     onClick={applyTemporalFilter}
                     disabled={!temporalField || (!temporalStart && !temporalEnd)}
-                    className="mt-2 w-full rounded-md border border-slate-200 bg-slate-900 px-2 py-1.5 text-[9px] font-bold uppercase tracking-widest text-white disabled:cursor-not-allowed disabled:opacity-40"
+                    className="mt-2 w-full rounded-md border border-slate-200 bg-slate-900 px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-white disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     Apply Date Range
                   </button>
@@ -671,14 +671,14 @@ export const VisualisationPanel = () => {
             {activeLegend && (
               <div className="rounded-lg border border-slate-200 bg-white p-3">
                 <div className="mb-2 flex items-center justify-between gap-2">
-                  <div className="truncate text-[9px] font-bold uppercase tracking-widest text-slate-400">
+                  <div className="truncate text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                     Legend · {activeLegend.title}
                   </div>
                   {activeFilters.length > 0 && (
                     <button
                       type="button"
                       onClick={() => selectedLayer && clearLayerFilters(selectedLayer.id)}
-                      className="rounded border border-slate-200 px-1.5 py-0.5 text-[8px] font-bold uppercase text-slate-500"
+                      className="rounded border border-slate-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-slate-500"
                     >
                       Clear
                     </button>
@@ -691,7 +691,7 @@ export const VisualisationPanel = () => {
                       key={`${item.label}-${item.color}`}
                       onClick={() => toggleLegendFilter(item)}
                       className={cn(
-                        'flex w-full items-center gap-2 rounded px-1 py-0.5 text-left text-[10px]',
+                        'flex w-full items-center gap-2 rounded px-1 py-0.5 text-left text-[11px]',
                         activeFilterKeys.has(item.value !== undefined
                           ? `${activeLegend.title}:category:${item.value}`
                           : `${activeLegend.title}:range:${item.min ?? ''}:${item.max ?? ''}`)

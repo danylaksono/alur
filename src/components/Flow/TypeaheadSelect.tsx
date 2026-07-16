@@ -101,7 +101,7 @@ export const TypeaheadSelect = ({
         <span className="min-w-0">
           <span className="block truncate font-medium">{selected?.label || value}</span>
           {selected?.description && (
-            <span className="mt-0.5 block truncate text-[9px] text-slate-400">
+            <span className="mt-0.5 block truncate text-[11px] text-slate-400">
               {selected.description}
             </span>
           )}
@@ -124,7 +124,7 @@ export const TypeaheadSelect = ({
           </div>
           <div className="max-h-64 overflow-y-auto py-1">
             {filteredOptions.length === 0 ? (
-              <div className="px-3 py-3 text-center text-[10px] text-slate-400">{emptyLabel}</div>
+              <div className="px-3 py-3 text-center text-[11px] text-slate-400">{emptyLabel}</div>
             ) : (
               filteredOptions.map((option, index) => {
                 const showGroup = option.group && option.group !== previousGroup;
@@ -135,7 +135,7 @@ export const TypeaheadSelect = ({
                 return (
                   <div key={option.value}>
                     {showGroup && (
-                      <div className="px-3 pb-1 pt-2 text-[8px] font-bold uppercase tracking-widest text-slate-400">
+                      <div className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
                         {option.group}
                       </div>
                     )}
@@ -152,7 +152,7 @@ export const TypeaheadSelect = ({
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-[11px] font-semibold text-slate-700">{option.label}</span>
                         {option.description && (
-                          <span className="mt-0.5 block truncate text-[9px] text-slate-400">{option.description}</span>
+                          <span className="mt-0.5 block truncate text-[11px] text-slate-400">{option.description}</span>
                         )}
                       </span>
                     </button>

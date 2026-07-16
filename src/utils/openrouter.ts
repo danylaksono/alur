@@ -1,17 +1,36 @@
 import axios from 'axios';
-import { spatialFunctions } from './spatialFunctions';
 import { llmToolDefinitions } from './toolDefinitions';
+import { useStore } from '../store/useStore';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const OPENROUTER_KEY_URL = 'https://openrouter.ai/api/v1/key';
+
+/** Thrown when the user has not configured an OpenRouter API key yet. */
+export class OpenRouterConfigError extends Error {
+  constructor() {
+    super('No OpenRouter API key configured. Open Settings to add one.');
+    this.name = 'OpenRouterConfigError';
+  }
+}
+
+export const testOpenRouterConnection = async (apiKey: string): Promise<boolean> => {
+  if (!apiKey) return false;
+  try {
+    // GET /key returns the key's metadata; an invalid key returns 401.
+    const response = await axios.get(OPENROUTER_KEY_URL, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    return response.status === 200;
+  } catch {
+    return false;
+  }
+};
 
 export const callOpenRouter = async (messages: any[]) => {
-  const apiKey = (import.meta as any).env?.VITE_OPENROUTER_API_KEY;
-  if (!apiKey) {
-    throw new Error('VITE_OPENROUTER_API_KEY is not set');
+  const { openRouterApiKey, openRouterModelId } = useStore.getState().settings;
+  if (!openRouterApiKey) {
+    throw new OpenRouterConfigError();
   }
-
-  const exampleOps = ['ST_Buffer', 'ST_Intersection', 'ST_Centroid', 'ST_Difference', 'ST_Transform', 'ST_Union'];
-  const supportedFunctionCount = spatialFunctions.length;
 
   const systemPrompt = `
 You are an expert GIS AI Assistant for "YMNNGIS - You Might Not Need A Desktop GIS".
@@ -25,7 +44,7 @@ Your goal is to help users build complex spatial workflows using DuckDB-Wasm Spa
 
 ### GUIDELINES
 - **Plan First**: Think step-by-step about the GIS workflow needed to solve the user's request.
-- **Node IDs**: When adding nodes, use descriptive IDs like "london_buffer" or "intersect_result".
+- **Node IDs**: When adding nodes, use descriptive IDs like "roads_buffer" or "intersect_result".
 - **Schema Awareness**: Pay attention to column names. Use the "Attribute Inspector" and "Output Schema" info provided in user messages if available.
 - **Tone**: Professional, technical, and helpful.
 
@@ -43,7 +62,7 @@ Use structured tool calls. Only return a tool call when a UI action is required.
   const response = await axios.post(
     OPENROUTER_API_URL,
     {
-      model: 'openai/gpt-4o-mini',
+      model: openRouterModelId || 'openai/gpt-4o-mini',
       messages: [
         { role: 'system', content: systemPrompt },
         ...messages
@@ -56,9 +75,7 @@ Use structured tool calls. Only return a tool call when a UI action is required.
     },
     {
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'HTTP-Referer': 'https://github.com/danylaksono/ymnngis',
-        'X-Title': 'YMNNGIS - You Might Not Need A Desktop GIS',
+        'Authorization': `Bearer ${openRouterApiKey}`,
         'Content-Type': 'application/json',
       },
     }

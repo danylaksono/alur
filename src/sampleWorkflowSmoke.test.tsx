@@ -2,6 +2,9 @@ import { renderToString } from 'react-dom/server';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Edge } from '@xyflow/react';
 import App from './App';
+import { WorkflowTab } from './components/shell/WorkflowTab';
+import { SqlTab } from './components/shell/SqlTab';
+import { Chat } from './components/Chat';
 import { useStore, type GISNode } from './store/useStore';
 import { buildWorkflowSQL } from './utils/workflowEngine';
 import { llmToolDefinitions } from './utils/toolDefinitions';
@@ -107,57 +110,35 @@ describe('sample GIS workflow smoke test', () => {
     expect(state.selectedNodeId).toBe('need_buffer');
   });
 
-  it('keeps chat tools, node workspace, SQL preview, layer manager, and basemap UI mounted', () => {
-    const nodes: GISNode[] = [
-      node('sample_need', 'input', { tableName: 'need_london', fileName: 'need_london.parquet' }, 'London NEED sample'),
-      node('map_output', 'output', { maxFeatures: 5000 }, 'Map output'),
-    ];
-    const edges: Edge[] = [{ id: 'e1', source: 'sample_need', target: 'map_output', type: 'smoothstep' }];
-
-    useStore.setState({
-      nodes,
-      edges,
-      mapLayers: [
-        {
-          id: 'need_london',
-          name: 'need_london.parquet',
-          geojson: featureCollection('need', 3),
-          source: {
-            kind: 'legacy-geojson',
-            geometryKind: 'point',
-            fields: [
-              { name: 'id', type: 'INTEGER' },
-              { name: 'name', type: 'VARCHAR' },
-              { name: 'need', type: 'DOUBLE' },
-              { name: 'borough', type: 'VARCHAR' },
-            ],
-          },
-          visible: true,
-          sourceNodeId: 'sample_need',
-          sourceKind: 'input',
-          opacity: 0.8,
-          createdAt: 1,
-          featureCount: 3,
-          styleVersion: 1,
-        },
-      ],
-      selectedLayerId: 'need_london',
-      manualSQL: buildWorkflowSQL(nodes, edges).sql,
-    });
-
-    const html = renderToString(<App />);
+  it('keeps chat tools, workflow drawer, SQL preview, layer manager, and basemap UI mounted', () => {
+    // Note: SSR renders zustand's *initial* state, so each surface is rendered
+    // directly and asserted on its default-visible content.
     const toolNames = llmToolDefinitions.map((tool) => tool.name);
-
     expect(toolNames).toEqual(expect.arrayContaining(['add_node', 'connect_nodes', 'run_spatial_query', 'add_visualisation_node']));
-    expect(html).toContain('GIS Copilot Agent');
-    expect(html).toContain('Node Diagram');
-    expect(html).toContain('Layer Output');
-    expect(html).toContain('Visualize or export the final result');
-    expect(html).toContain('Layers');
-    expect(html).toContain('Details');
-    expect(html).toContain('Map Layers');
-    expect(html).toContain('Visualise');
-    expect(html).toContain('Basemap');
+
+    const shellHtml = renderToString(<App />);
+    expect(shellHtml).toContain('Add data');
+    expect(shellHtml).toContain('New project');
+    expect(shellHtml).toContain('Map Layers');
+    expect(shellHtml).toContain('Visualise');
+    expect(shellHtml).toContain('Basemap');
+    expect(shellHtml).toContain('Workflow');
+    expect(shellHtml).toContain('Table');
+    expect(shellHtml).toContain('SQL');
+
+    const workflowHtml = renderToString(<WorkflowTab />);
+    expect(workflowHtml).toContain('Data Input');
+    expect(workflowHtml).toContain('Layer Output');
+    expect(workflowHtml).toContain('Spatial Functions');
+    expect(workflowHtml).toContain('Execute Workflow');
+
+    const chatHtml = renderToString(<Chat />);
+    expect(chatHtml).toContain('GIS Copilot');
+    expect(chatHtml).toContain('Bring your own key');
+
+    const sqlHtml = renderToString(<SqlTab setManualPreview={() => {}} />);
+    expect(sqlHtml).toContain('Workflow SQL Preview');
+    expect(sqlHtml).toContain('Manual mode');
   });
 
   it('exposes output node configuration for map preview and file export modes', () => {

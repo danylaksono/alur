@@ -226,14 +226,6 @@ class DuckDBService {
         throw new Error(`DuckDB could not read ${file.name}.${mountedFiles} ${errors.join(' | ')}`);
     }
 
-    async registerFileUrl(name: string, url: string) {
-        if (!this.db) throw new Error('DuckDB not initialized');
-        // Use DuckDB Wasm's native URL registration
-        await this.db.registerFileURL(name, url, duckdb.DuckDBDataProtocol.HTTP, false);
-        await this.db.flushFiles();
-        return name;
-    }
-
     async registerJsonRows(tableName: string, rows: Record<string, unknown>[]) {
         if (!this.db || !this.conn) throw new Error('DuckDB not initialized');
         const fileName = `${tableName}.json`;

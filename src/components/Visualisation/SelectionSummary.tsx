@@ -49,7 +49,7 @@ export const SelectionSummary = ({
   return (
     <section className="border-t bg-white">
       <div className="flex items-center justify-between border-b bg-slate-50 px-4 py-2">
-        <h3 className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+        <h3 className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
           <Activity className="h-3.5 w-3.5" />
           Summary
         </h3>
@@ -64,22 +64,22 @@ export const SelectionSummary = ({
         <div className="space-y-3 px-4 py-3 text-[11px]">
           <div className="grid grid-cols-3 gap-2">
             <div>
-              <div className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Total</div>
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Total</div>
               <div className="font-bold text-slate-800">{summary.totalRows.toLocaleString()}</div>
             </div>
             <div>
-              <div className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Active</div>
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Active</div>
               <div className="font-bold text-slate-800">{summary.filteredRows.toLocaleString()}</div>
             </div>
             <div>
-              <div className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Selected</div>
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Selected</div>
               <div className="font-bold text-slate-800">{summary.selectedRows.toLocaleString()}</div>
             </div>
           </div>
 
           {summary.numericMetrics.slice(0, 2).map((metric) => (
             <div key={metric.field} className="rounded-md border border-slate-200 bg-slate-50 p-2">
-              <div className="mb-1 truncate text-[9px] font-bold uppercase tracking-widest text-slate-500">
+              <div className="mb-1 truncate text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                 {metric.field}
               </div>
               <div className="grid grid-cols-3 gap-2">
@@ -92,7 +92,7 @@ export const SelectionSummary = ({
 
           {summary.categoryBreakdowns.slice(0, 1).map((category) => (
             <div key={category.field} className="space-y-1">
-              <div className="truncate text-[9px] font-bold uppercase tracking-widest text-slate-400">{category.field}</div>
+              <div className="truncate text-[11px] font-semibold uppercase tracking-wide text-slate-400">{category.field}</div>
               {category.values.map((value) => (
                 <div key={value.label} className="flex justify-between gap-2">
                   <span className="truncate text-slate-600">{value.label}</span>

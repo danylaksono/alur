@@ -103,7 +103,7 @@ export const DataTable = ({
             >
               <span className="truncate">{key}</span>
               {sortBy === key && (
-                <span className="text-[9px] text-slate-400">{sortDirection === 'asc' ? 'ASC' : 'DESC'}</span>
+                <span className="text-[11px] text-slate-400">{sortDirection === 'asc' ? 'ASC' : 'DESC'}</span>
               )}
             </button>
             <button
@@ -112,7 +112,7 @@ export const DataTable = ({
                 event.stopPropagation();
                 onProfileColumn(key);
               }}
-              className="rounded border border-slate-200 bg-white px-1 text-[8px] font-bold text-slate-400 hover:text-slate-700"
+              className="rounded border border-slate-200 bg-white px-1 text-[10px] font-bold text-slate-400 hover:text-slate-700"
               title={`Profile ${key}`}
             >
               HIST
@@ -140,7 +140,7 @@ export const DataTable = ({
       <div className="h-full w-full flex items-center justify-center bg-white/50 backdrop-blur-sm">
         <div className="flex flex-col items-center gap-2">
           <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Loading Data...</span>
+          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Loading Data...</span>
         </div>
       </div>
     );
@@ -171,7 +171,7 @@ export const DataTable = ({
           <button
             type="button"
             onClick={() => onSortChange(sortBy)}
-            className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[9px] font-bold uppercase tracking-wider text-slate-500"
+            className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500"
             title="Toggle sort direction"
           >
             {sortBy} · {sortDirection}
@@ -181,7 +181,7 @@ export const DataTable = ({
           <button
             type="button"
             onClick={onClearSelection}
-            className="h-7 rounded-md border border-orange-200 bg-orange-50 px-2 text-[9px] font-bold uppercase tracking-wider text-orange-700"
+            className="h-7 rounded-md border border-orange-200 bg-orange-50 px-2 text-[11px] font-semibold uppercase tracking-wider text-orange-700"
             title="Clear selected map features"
           >
             {selectedFeatureIds.length.toLocaleString()} selected
@@ -198,17 +198,17 @@ export const DataTable = ({
       {(columnProfile || isProfileLoading) && (
         <div className="shrink-0 border-b bg-slate-50 px-3 py-2">
           {isProfileLoading ? (
-            <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
               Profiling column...
             </div>
           ) : columnProfile ? (
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0">
-                  <div className="truncate text-[10px] font-bold uppercase tracking-widest text-slate-600">
+                  <div className="truncate text-[11px] font-semibold uppercase tracking-wide text-slate-600">
                     {columnProfile.column} · {columnProfile.kind}
                   </div>
-                  <div className="text-[10px] text-slate-500">
+                  <div className="text-[11px] text-slate-500">
                     {columnProfile.total.toLocaleString()} rows · {columnProfile.nullCount.toLocaleString()} nulls
                     {columnProfile.kind === 'numeric' && columnProfile.min !== undefined && columnProfile.max !== undefined
                       ? ` · ${columnProfile.min.toLocaleString()} to ${columnProfile.max.toLocaleString()}`
@@ -218,7 +218,7 @@ export const DataTable = ({
                 <button
                   type="button"
                   onClick={onClearProfile}
-                  className="rounded border border-slate-200 bg-white px-2 py-1 text-[9px] font-bold uppercase text-slate-500"
+                  className="rounded border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold uppercase text-slate-500"
                 >
                   Close
                 </button>
@@ -239,7 +239,7 @@ export const DataTable = ({
                         style={{ height: `${Math.max(4, (bin.count / maxCount) * 52)}px` }}
                         title={`Filter ${columnProfile.column} by ${bin.label}: ${bin.count.toLocaleString()}`}
                       />
-                      <div className="w-full truncate text-center text-[8px] text-slate-400" title={bin.label}>
+                      <div className="w-full truncate text-center text-[10px] text-slate-400" title={bin.label}>
                         {bin.label}
                       </div>
                     </div>
@@ -287,7 +287,7 @@ export const DataTable = ({
         </table>
       </div>
 
-      <div className="flex h-10 shrink-0 items-center justify-between border-t bg-slate-50 px-3 text-[10px] text-slate-500">
+      <div className="flex h-10 shrink-0 items-center justify-between border-t bg-slate-50 px-3 text-[11px] text-slate-500">
         <div className="font-semibold">
           {rowCount.toLocaleString()} rows · page {pageIndex + 1} of {pageCount}
         </div>
@@ -297,7 +297,7 @@ export const DataTable = ({
             <select
               value={pageSize}
               onChange={(event) => onPageSizeChange(Number(event.target.value))}
-              className="rounded border border-slate-200 bg-white px-1.5 py-1 text-[10px] outline-none"
+              className="rounded border border-slate-200 bg-white px-1.5 py-1 text-[11px] outline-none"
             >
               {[25, 50, 100, 250].map((size) => (
                 <option key={size} value={size}>{size}</option>

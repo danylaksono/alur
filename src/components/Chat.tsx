@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
-import { ArrowRight, Loader2, Sparkles, Zap } from 'lucide-react';
+import { ArrowRight, KeyRound, Loader2, Sparkles, Zap } from 'lucide-react';
 import { useStore } from '../store/useStore';
-import { callOpenRouter } from '../utils/openrouter';
+import { callOpenRouter, OpenRouterConfigError } from '../utils/openrouter';
 import { duckdbService } from '../services/duckdb';
 import { cn } from '../utils/cn';
 import {
@@ -32,6 +32,9 @@ export const Chat = () => {
     selectedLayerId,
     nodeSchemas
   } = useStore();
+  const settings = useStore((s) => s.settings);
+  const setSettingsOpen = useStore((s) => s.setSettingsOpen);
+  const hasApiKey = Boolean(settings.openRouterApiKey);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -325,21 +328,49 @@ export const Chat = () => {
         addChatMessage('assistant', response.content || 'No assistant content returned.');
       }
     } catch (err: any) {
-      addChatMessage('system', `Error: ${err.message || 'Failed to reach AI agent'}`);
+      if (err instanceof OpenRouterConfigError) {
+        addChatMessage('system', err.message);
+        setSettingsOpen(true);
+      } else {
+        addChatMessage('system', `Error: ${err.message || 'Failed to reach AI agent'}`);
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="w-full border-l bg-white flex flex-col shadow-sm z-40 shrink-0">
-      <div className="p-4 border-b bg-muted/20 flex items-center justify-between">
-        <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-1">
-          <Sparkles className="w-3 h-3 text-primary" /> GIS Copilot Agent
+    <div className="flex h-full min-h-0 flex-col bg-white">
+      <div className="p-3 border-b bg-muted/20 flex items-center justify-between shrink-0">
+        <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+          <Sparkles className="w-3 h-3 text-primary" /> GIS Copilot
         </h3>
-        <span className="text-[9px] bg-primary/10 text-primary px-1.5 py-0.5 rounded font-bold">GPT-4O-MINI</span>
+        {hasApiKey && (
+          <span className="max-w-40 truncate text-[11px] bg-primary/10 text-primary px-1.5 py-0.5 rounded font-semibold" title={settings.openRouterModelId}>
+            {settings.openRouterModelId}
+          </span>
+        )}
       </div>
 
+      {!hasApiKey ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
+          <div className="rounded-full bg-primary/10 p-3">
+            <KeyRound className="h-5 w-5 text-primary" />
+          </div>
+          <p className="text-xs font-semibold text-slate-700">Bring your own key</p>
+          <p className="max-w-64 text-[11px] leading-relaxed text-slate-500">
+            The copilot needs an OpenRouter API key. It is stored only in this browser and calls
+            OpenRouter directly — no middleman server.
+          </p>
+          <button
+            type="button"
+            onClick={() => setSettingsOpen(true)}
+            className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-slate-700"
+          >
+            Configure OpenRouter key
+          </button>
+        </div>
+      ) : (
       <div
         ref={scrollRef}
         className="flex-1 overflow-y-auto p-4 space-y-4 scroll-smooth"
@@ -352,11 +383,11 @@ export const Chat = () => {
                   <div className="w-5 h-5 rounded bg-indigo-200 flex items-center justify-center">
                     <Zap className="w-3 h-3 text-indigo-700" />
                   </div>
-                  <span className="text-[9px] font-bold text-indigo-600 uppercase tracking-wide">
+                  <span className="text-[11px] font-bold text-indigo-600 uppercase tracking-wide">
                     {msg.data?.toolName || 'Tool Call'}
                   </span>
                 </div>
-                <div className="text-[10px] text-indigo-900 font-mono bg-indigo-100/50 p-2 rounded mt-1 max-h-20 overflow-y-auto break-all">
+                <div className="text-[11px] text-indigo-900 font-mono bg-indigo-100/50 p-2 rounded mt-1 max-h-20 overflow-y-auto break-all">
                   {msg.data?.summary || msg.content}
                 </div>
               </div>
@@ -368,7 +399,7 @@ export const Chat = () => {
               <div key={i} className="bg-emerald-50 mr-6 p-2 rounded-xl border border-emerald-100">
                 <div className="flex items-center gap-1.5">
                   <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                  <span className="text-[9px] text-emerald-700 font-semibold uppercase tracking-wide">
+                  <span className="text-[11px] text-emerald-700 font-semibold uppercase tracking-wide">
                     {msg.data?.summary || msg.content}
                   </span>
                 </div>
@@ -386,9 +417,9 @@ export const Chat = () => {
                     "bg-primary/5 mr-6 border-primary/10 text-foreground"
               )}
             >
-              {msg.role === 'assistant' && <div className="font-bold text-[9px] text-primary uppercase mb-1">Copilot</div>}
-              {msg.role === 'user' && <div className="font-bold text-[9px] text-muted-foreground uppercase mb-1">You</div>}
-              {msg.role === 'system' && <div className="font-bold text-[9px] text-amber-700 uppercase mb-1">System</div>}
+              {msg.role === 'assistant' && <div className="font-bold text-[11px] text-primary uppercase mb-1">Copilot</div>}
+              {msg.role === 'user' && <div className="font-bold text-[11px] text-muted-foreground uppercase mb-1">You</div>}
+              {msg.role === 'system' && <div className="font-bold text-[11px] text-amber-700 uppercase mb-1">System</div>}
               {msg.content}
             </div>
           );
@@ -396,24 +427,26 @@ export const Chat = () => {
         {isLoading && (
           <div className="bg-primary/5 mr-6 p-3 rounded-xl border border-primary/10 flex items-center gap-2">
             <Loader2 className="w-3 h-3 animate-spin text-primary" />
-            <span className="text-[10px] text-primary font-medium italic">Reasoning...</span>
+            <span className="text-[11px] text-primary font-medium italic">Reasoning...</span>
           </div>
         )}
       </div>
+      )}
 
-      <div className="p-4 border-t bg-muted/10">
+      <div className="p-3 border-t bg-muted/10 shrink-0">
         <div className="relative">
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-            placeholder="Ask to build a workflow..."
-            className="w-full text-xs p-3 pr-10 border rounded-xl focus:ring-2 focus:ring-primary outline-none shadow-sm transition-all"
+            disabled={!hasApiKey}
+            placeholder={hasApiKey ? 'Ask to build a workflow...' : 'Add an API key in Settings to chat'}
+            className="w-full text-xs p-3 pr-10 border rounded-xl focus:ring-2 focus:ring-primary outline-none shadow-sm transition-all disabled:cursor-not-allowed disabled:bg-slate-50"
           />
           <button
             onClick={handleSendMessage}
-            disabled={!input.trim() || isLoading}
+            disabled={!input.trim() || isLoading || !hasApiKey}
             className="absolute right-2 top-2 p-1.5 text-primary hover:bg-primary/10 rounded-lg transition-colors disabled:opacity-30"
           >
             <ArrowRight className="w-4 h-4" />
