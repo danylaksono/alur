@@ -303,9 +303,20 @@ export function buildWorkflowSQL(nodes: GISNode[], edges: Edge[], options?: { li
       if (!source) throw new Error(`Filter node "${node.id}" has no source.`);
       const meta = nodeMetadata.get(source)!;
       const condition = config?.condition || '1=1';
-      ctes.push(
-        `${alias} AS (\n  SELECT * FROM ${source} WHERE ${condition}\n)`
-      );
+      const selectionIds = Array.isArray(config?.selectionIds)
+        ? config.selectionIds.map(String).filter(Boolean)
+        : [];
+      if (selectionIds.length) {
+        const selectedValues = selectionIds.map((id: string) => `'${id.replace(/'/g, "''")}'`).join(', ');
+        const geometryPredicate = meta.geom ? ` WHERE ${qi(meta.geom)} IS NOT NULL` : '';
+        ctes.push(
+          `${alias} AS (\n  SELECT * EXCLUDE (__ymn_selection_row)\n  FROM (\n    SELECT *, ROW_NUMBER() OVER ()::BIGINT AS __ymn_selection_row\n    FROM ${source}${geometryPredicate}\n  )\n  WHERE CAST(__ymn_selection_row AS VARCHAR) IN (${selectedValues})\n)`
+        );
+      } else {
+        ctes.push(
+          `${alias} AS (\n  SELECT * FROM ${source} WHERE ${condition}\n)`
+        );
+      }
       nodeMetadata.set(alias, meta);
       lastAlias = alias;
     } else if (type === 'attribute') {

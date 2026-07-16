@@ -10,6 +10,7 @@ import { compileVisualFiltersWhereClause, quoteIdentifier } from '../utils/visua
 import { CATEGORICAL_PALETTE, getPalette } from '../utils/palettes';
 import type { MapLayer } from '../store/useStore';
 import type { FieldProfile } from '../utils/classification';
+import { buildComputedRelation, type ComputedField } from '../utils/fieldCalculator';
 
 type AnalyticsLayer = { id: string; source?: MapLayer['source']; geojson?: GeoJSON.FeatureCollection };
 
@@ -151,6 +152,7 @@ export const queryLayerRows = async ({
   sortDirection,
   pageIndex,
   pageSize,
+  computedFields = [],
 }: {
   layer: AnalyticsLayer;
   filters: VisualFilter[];
@@ -159,9 +161,14 @@ export const queryLayerRows = async ({
   sortDirection: 'asc' | 'desc';
   pageIndex: number;
   pageSize: number;
+  computedFields?: ComputedField[];
 }) => {
   const tableName = await analyticsTableForLayer(layer);
-  const searchableColumns = analyticsFieldsForLayer(layer).filter((key) => key !== FEATURE_ID_PROPERTY);
+  const relation = buildComputedRelation(`"${tableName}"`, computedFields);
+  const searchableColumns = [
+    ...analyticsFieldsForLayer(layer).filter((key) => key !== FEATURE_ID_PROPERTY),
+    ...computedFields.map((field) => field.name),
+  ];
   const filterClause = compileVisualFiltersWhereClause(filters);
   const normalizedSearch = search.trim();
   const searchPredicate = normalizedSearch && searchableColumns.length
@@ -173,8 +180,8 @@ export const queryLayerRows = async ({
   const offset = pageIndex * pageSize;
 
   const [countResult, rowsResult] = await Promise.all([
-    duckdbService.query(`SELECT COUNT(*) AS row_count FROM "${tableName}" ${whereClause};`),
-    duckdbService.query(`SELECT * FROM "${tableName}" ${whereClause} ${sortClause} LIMIT ${pageSize} OFFSET ${offset};`),
+    duckdbService.query(`SELECT COUNT(*) AS row_count FROM ${relation} ${whereClause};`),
+    duckdbService.query(`SELECT * FROM ${relation} ${whereClause} ${sortClause} LIMIT ${pageSize} OFFSET ${offset};`),
   ]);
   const countRaw = normalizeRows(countResult.toArray())[0] || {};
 
@@ -188,23 +195,26 @@ export const queryLayerColumnProfile = async ({
   layer,
   filters,
   column,
+  computedFields = [],
 }: {
   layer: AnalyticsLayer;
   filters: VisualFilter[];
   column: string;
+  computedFields?: ComputedField[];
 }) => {
   const tableName = await analyticsTableForLayer(layer);
+  const relation = buildComputedRelation(`"${tableName}"`, computedFields);
   const whereClause = compileVisualFiltersWhereClause(filters);
   const field = quoteIdentifier(column);
   const totalResult = await duckdbService.query(
-    `SELECT COUNT(*) AS total, SUM(CASE WHEN ${field} IS NULL THEN 1 ELSE 0 END) AS null_count FROM "${tableName}" ${whereClause};`
+    `SELECT COUNT(*) AS total, SUM(CASE WHEN ${field} IS NULL THEN 1 ELSE 0 END) AS null_count FROM ${relation} ${whereClause};`
   );
   const totalRaw = normalizeRows(totalResult.toArray())[0] || {};
   const total = Number(totalRaw.total ?? 0);
   const nullCount = Number(totalRaw.null_count ?? 0);
 
   const statsResult = await duckdbService.query(
-    `SELECT MIN(TRY_CAST(${field} AS DOUBLE)) AS min_value, MAX(TRY_CAST(${field} AS DOUBLE)) AS max_value, COUNT(TRY_CAST(${field} AS DOUBLE)) AS numeric_count, COUNT(${field}) AS non_null_count FROM "${tableName}" ${whereClause};`
+    `SELECT MIN(TRY_CAST(${field} AS DOUBLE)) AS min_value, MAX(TRY_CAST(${field} AS DOUBLE)) AS max_value, COUNT(TRY_CAST(${field} AS DOUBLE)) AS numeric_count, COUNT(${field}) AS non_null_count FROM ${relation} ${whereClause};`
   );
   const stats = normalizeRows(statsResult.toArray())[0] || {};
   const min = Number(stats.min_value);
@@ -220,7 +230,7 @@ export const queryLayerColumnProfile = async ({
       : `LEAST(${binCount - 1}, CAST(FLOOR((TRY_CAST(${field} AS DOUBLE) - ${min}) / ${width || 1}) AS INTEGER))`;
     const andOrWhere = whereClause ? `${whereClause} AND` : 'WHERE';
     const binsResult = await duckdbService.query(
-      `SELECT ${bucketExpr} AS bucket, COUNT(*) AS count FROM "${tableName}" ${andOrWhere} ${field} IS NOT NULL GROUP BY bucket ORDER BY bucket;`
+      `SELECT ${bucketExpr} AS bucket, COUNT(*) AS count FROM ${relation} ${andOrWhere} ${field} IS NOT NULL GROUP BY bucket ORDER BY bucket;`
     );
     const binMap = new Map<number, number>();
     normalizeRows(binsResult.toArray()).forEach((row) => {
@@ -244,7 +254,7 @@ export const queryLayerColumnProfile = async ({
 
   const andOrWhere = whereClause ? `${whereClause} AND` : 'WHERE';
   const binsResult = await duckdbService.query(
-    `SELECT CAST(${field} AS VARCHAR) AS label, COUNT(*) AS count FROM "${tableName}" ${andOrWhere} ${field} IS NOT NULL GROUP BY label ORDER BY count DESC LIMIT 12;`
+    `SELECT CAST(${field} AS VARCHAR) AS label, COUNT(*) AS count FROM ${relation} ${andOrWhere} ${field} IS NOT NULL GROUP BY label ORDER BY count DESC LIMIT 12;`
   );
   return {
     column,
@@ -257,6 +267,98 @@ export const queryLayerColumnProfile = async ({
       count: Number(row.count),
     })),
   };
+};
+
+const layerSearchWhereClause = (
+  layer: AnalyticsLayer,
+  filters: VisualFilter[],
+  search: string,
+  computedFields: ComputedField[],
+) => {
+  const searchableColumns = [
+    ...analyticsFieldsForLayer(layer).filter((key) => key !== FEATURE_ID_PROPERTY),
+    ...computedFields.map((field) => field.name),
+  ];
+  const normalizedSearch = search.trim();
+  const searchPredicate = normalizedSearch && searchableColumns.length
+    ? `(${searchableColumns.map((column) => `CAST(${quoteIdentifier(column)} AS VARCHAR) ILIKE '%${normalizedSearch.replace(/'/g, "''")}%'`).join(' OR ')})`
+    : '';
+  const predicates = [compileVisualFiltersWhereClause(filters).replace(/^WHERE\s+/, ''), searchPredicate].filter(Boolean);
+  return predicates.length ? `WHERE ${predicates.join(' AND ')}` : '';
+};
+
+export const queryLayerFeatureIds = async ({
+  layer,
+  filters,
+  search,
+  computedFields = [],
+}: {
+  layer: AnalyticsLayer;
+  filters: VisualFilter[];
+  search: string;
+  computedFields?: ComputedField[];
+}) => {
+  const tableName = await analyticsTableForLayer(layer);
+  const relation = buildComputedRelation(`"${tableName}"`, computedFields);
+  const whereClause = layerSearchWhereClause(layer, filters, search, computedFields);
+  const idColumn = layer.source?.kind === 'duckdb-table' || layer.source?.kind === 'duckdb-query'
+    ? layer.source.featureIdColumn
+    : FEATURE_ID_PROPERTY;
+  const result = await duckdbService.query(
+    `SELECT CAST(${quoteIdentifier(idColumn)} AS VARCHAR) AS feature_id FROM ${relation} ${whereClause};`,
+  );
+  return normalizeRows(result.toArray()).map((row) => String(row.feature_id)).filter(Boolean);
+};
+
+export const buildLayerExportSql = async ({
+  layer,
+  filters,
+  search,
+  sortBy,
+  sortDirection,
+  computedFields = [],
+}: {
+  layer: AnalyticsLayer;
+  filters: VisualFilter[];
+  search: string;
+  sortBy: string | null;
+  sortDirection: 'asc' | 'desc';
+  computedFields?: ComputedField[];
+}) => {
+  const tableName = await analyticsTableForLayer(layer);
+  const relation = buildComputedRelation(`"${tableName}"`, computedFields);
+  const whereClause = layerSearchWhereClause(layer, filters, search, computedFields);
+  const sortClause = sortBy ? `ORDER BY ${quoteIdentifier(sortBy)} ${sortDirection.toUpperCase()} NULLS LAST` : '';
+  const excludeGeometry = layer.source?.kind === 'duckdb-table' || layer.source?.kind === 'duckdb-query'
+    ? 'EXCLUDE (__ymn_tile_geom)'
+    : '';
+  return `SELECT * ${excludeGeometry} FROM ${relation} ${whereClause} ${sortClause}`;
+};
+
+export const materializeLayerSelection = async ({
+  layer,
+  featureIds,
+  computedFields = [],
+  outputTableName,
+}: {
+  layer: AnalyticsLayer;
+  featureIds: string[];
+  computedFields?: ComputedField[];
+  outputTableName: string;
+}) => {
+  if (!layer.source || layer.source.kind === 'legacy-geojson') return null;
+  const tableName = await analyticsTableForLayer(layer);
+  const relation = buildComputedRelation(`"${tableName}"`, computedFields);
+  const ids = featureIds.map((id) => `'${String(id).replace(/'/g, "''")}'`).join(', ');
+  if (!ids) return null;
+  const safeTableName = outputTableName.replace(/[^a-zA-Z0-9_]/g, '_');
+  await duckdbService.materializeQueryAsTable(
+    `SELECT * FROM ${relation} WHERE CAST(${quoteIdentifier(layer.source.featureIdColumn)} AS VARCHAR) IN (${ids})`,
+    safeTableName,
+  );
+  const source = await duckdbService.prepareLayerSource(safeTableName, { kind: 'duckdb-query', originalTableName: safeTableName });
+  if (!source) return null;
+  return { source, featureCount: await duckdbService.getTableFeatureCount(safeTableName) };
 };
 
 const aggregationExpression = (chart: VisualChartSpec) => {

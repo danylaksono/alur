@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyComputedFields,
+  buildComputedRelation,
+  compileComputedExpressionToSql,
   parseExpression,
   profileComputedColumn,
   validateComputedField,
@@ -44,5 +46,16 @@ describe('fieldCalculator', () => {
     expect(profile.kind).toBe('numeric');
     expect(profile.nullCount).toBe(1);
     expect(profile.bins.reduce((sum, bin) => sum + bin.count, 0)).toBe(3);
+  });
+
+  it('compiles safe expressions into nested DuckDB relations', () => {
+    expect(compileComputedExpressionToSql('population / area')).toContain('NULLIF');
+    expect(compileComputedExpressionToSql("if(kind == 'urban', population, 0)")).toContain('CASE WHEN');
+    const relation = buildComputedRelation('source_rows', [
+      { id: 'a', name: 'density', expression: 'population / area' },
+      { id: 'b', name: 'priority', expression: 'density > 20' },
+    ]);
+    expect(relation).toContain('AS "density"');
+    expect(relation).toContain('AS "priority"');
   });
 });

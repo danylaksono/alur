@@ -1,19 +1,32 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useStore } from '../store/useStore';
-import { queryLayerColumnProfile, queryLayerRows, queryLayerSelectionBounds } from '../services/visualAnalyticsService';
+import { useStore, type GISNode } from '../store/useStore';
+import {
+  materializeLayerSelection,
+  queryLayerColumnProfile,
+  queryLayerFeatureIds,
+  queryLayerRows,
+  queryLayerSelectionBounds,
+} from '../services/visualAnalyticsService';
 import { queryNodeColumnProfile, queryNodePreviewRows } from '../services/workflowPreviewService';
 import { useDebouncedValue } from './useDebouncedValue';
 import type { ColumnProfile, HistogramBin } from '../components/DataTable';
 import type { VisualFilter } from '../types/visualAnalytics';
-import {
-  applyComputedFields,
-  profileComputedColumn,
-  type ComputedField,
-} from '../utils/fieldCalculator';
+import type { ComputedField } from '../utils/fieldCalculator';
+import type { AppliedTableLayout, SavedTableView, TableLayout } from '../types/table';
 
 const EMPTY_FILTERS: VisualFilter[] = [];
 const EMPTY_FEATURE_IDS: string[] = [];
 const EMPTY_COMPUTED_FIELDS: ComputedField[] = [];
+const TABLE_VIEWS_STORAGE_KEY = 'ymnngis-table-views';
+
+const loadSavedViews = (): Record<string, SavedTableView[]> => {
+  if (typeof window === 'undefined') return {};
+  try {
+    return JSON.parse(window.localStorage.getItem(TABLE_VIEWS_STORAGE_KEY) || '{}');
+  } catch {
+    return {};
+  }
+};
 
 const filterKeyOf = (filter: VisualFilter) => {
   if (filter.kind === 'category') return `${filter.field}:category:${filter.values.join('|')}`;
@@ -41,6 +54,10 @@ export function useAttributeTable() {
   const toggleSelectedFeature = useStore((s) => s.toggleSelectedFeature);
   const setFeatureSelection = useStore((s) => s.setFeatureSelection);
   const focusLayerBounds = useStore((s) => s.focusLayerBounds);
+  const setHoveredFeature = useStore((s) => s.setHoveredFeature);
+  const addMapLayer = useStore((s) => s.addMapLayer);
+  const addNode = useStore((s) => s.addNode);
+  const onConnect = useStore((s) => s.onConnect);
   const addToast = useStore((s) => s.addToast);
 
   const [pageIndex, setPageIndex] = useState(0);
@@ -60,6 +77,9 @@ export function useAttributeTable() {
   const [layerTotal, setLayerTotal] = useState<number | undefined>(undefined);
   const [isLayerLoading, setIsLayerLoading] = useState(false);
   const [isZoomingSelection, setIsZoomingSelection] = useState(false);
+  const [isSelectionActionLoading, setIsSelectionActionLoading] = useState(false);
+  const [savedViewsBySource, setSavedViewsBySource] = useState<Record<string, SavedTableView[]>>(loadSavedViews);
+  const [appliedLayout, setAppliedLayout] = useState<AppliedTableLayout | null>(null);
   // Manual-SQL results shown when the query produced no map layer (no geometry column).
   const [manualPreview, setManualPreview] = useState<Record<string, any>[] | null>(null);
 
@@ -78,13 +98,21 @@ export function useAttributeTable() {
   const selectedFeatureIds = selectedLayer
     ? visualAnalytics.layers[selectedLayer.id]?.selectedFeatureIds || EMPTY_FEATURE_IDS
     : EMPTY_FEATURE_IDS;
+  const hoveredFeatureId = selectedLayer
+    ? visualAnalytics.layers[selectedLayer.id]?.hoveredFeatureId
+    : undefined;
   const activeFilterKeys = filters.map(filterKeyOf);
   const sourceLabel = selectedLayer
     ? selectedLayer.name
     : selectedNode?.data.label || 'No node or layer selected';
   const computedFields = computedFieldsBySource[sourceKey] || EMPTY_COMPUTED_FIELDS;
-  const computedFieldNames = useMemo(() => new Set(computedFields.map((field) => field.name)), [computedFields]);
-  const databaseSortBy = sortBy && !computedFieldNames.has(sortBy) ? sortBy : null;
+  const savedViews = savedViewsBySource[sourceKey] || [];
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(TABLE_VIEWS_STORAGE_KEY, JSON.stringify(savedViewsBySource));
+    }
+  }, [savedViewsBySource]);
 
   // Reset paging/sort/profile when the inspected source changes or search settles.
   useEffect(() => {
@@ -94,6 +122,7 @@ export function useAttributeTable() {
     setSortDirection('asc');
     setColumnProfiles({});
     setProfileLoadingColumns([]);
+    setAppliedLayout(null);
     setManualPreview(null);
   }, [selectedLayerId, selectedNodeId]);
 
@@ -103,7 +132,7 @@ export function useAttributeTable() {
 
   useEffect(() => {
     setColumnProfiles({});
-  }, [debouncedSearch, filters]);
+  }, [debouncedSearch, filters, computedFields]);
 
   // Layer branch — DuckDB-backed filtered rows.
   useEffect(() => {
@@ -121,10 +150,11 @@ export function useAttributeTable() {
           layer: selectedLayer,
           filters,
           search: debouncedSearch,
-          sortBy: databaseSortBy,
+          sortBy,
           sortDirection,
           pageIndex,
           pageSize,
+          computedFields,
         });
         if (cancelled) return;
         setLayerRows(result.rows);
@@ -142,7 +172,7 @@ export function useAttributeTable() {
 
     fetchLayerRows();
     return () => { cancelled = true; };
-  }, [selectedLayer, filters, debouncedSearch, databaseSortBy, sortDirection, pageIndex, pageSize, addToast]);
+  }, [selectedLayer, filters, debouncedSearch, sortBy, sortDirection, pageIndex, pageSize, computedFields, addToast]);
 
   // Node branch — workflow CTE preview.
   useEffect(() => {
@@ -168,11 +198,12 @@ export function useAttributeTable() {
           nodeId: selectedNodeId,
           schema: nodeSchemas[selectedNodeId],
           search: debouncedSearch,
-          sortBy: databaseSortBy,
+          sortBy,
           sortDirection,
           pageIndex,
           pageSize,
           filters,
+          computedFields,
         });
         if (cancelled) return;
         setNodeRows(result.rows);
@@ -192,23 +223,9 @@ export function useAttributeTable() {
       fetchNodePreview();
     }
     return () => { cancelled = true; };
-  }, [selectedNodeId, nodes, edges, isManualSQL, pageIndex, pageSize, debouncedSearch, databaseSortBy, sortDirection, nodeSchemas, filters]);
+  }, [selectedNodeId, nodes, edges, isManualSQL, pageIndex, pageSize, debouncedSearch, sortBy, sortDirection, nodeSchemas, filters, computedFields]);
 
-  const rawData = selectedLayer ? layerRows : selectedNodeId ? nodeRows : manualPreview ?? [];
-  const data = useMemo(() => {
-    const calculated = applyComputedFields(rawData, computedFields);
-    if (!sortBy || !computedFieldNames.has(sortBy)) return calculated;
-    return [...calculated].sort((left, right) => {
-      const a = left[sortBy];
-      const b = right[sortBy];
-      if (a == null) return 1;
-      if (b == null) return -1;
-      const order = typeof a === 'number' && typeof b === 'number'
-        ? a - b
-        : String(a).localeCompare(String(b), undefined, { numeric: true });
-      return sortDirection === 'asc' ? order : -order;
-    });
-  }, [computedFieldNames, computedFields, rawData, sortBy, sortDirection]);
+  const data = selectedLayer ? layerRows : selectedNodeId ? nodeRows : manualPreview ?? [];
 
   const onSortChange = useCallback((column: string) => {
     setPageIndex(0);
@@ -228,16 +245,12 @@ export function useAttributeTable() {
     }
     try {
       setProfileLoadingColumns((current) => current.includes(column) ? current : [...current, column]);
-      if (computedFieldNames.has(column)) {
-        const profile = profileComputedColumn(column, data);
-        setColumnProfiles((current) => ({ ...current, [column]: profile }));
-        return;
-      }
       if (selectedLayer) {
         const profile = await queryLayerColumnProfile({
           layer: selectedLayer,
           filters,
           column,
+          computedFields,
         });
         setColumnProfiles((current) => ({ ...current, [column]: profile }));
         return;
@@ -251,6 +264,7 @@ export function useAttributeTable() {
         search: debouncedSearch,
         column,
         filters,
+        computedFields,
       });
       setColumnProfiles((current) => ({ ...current, [column]: profile }));
     } catch (err: any) {
@@ -262,7 +276,7 @@ export function useAttributeTable() {
     } finally {
       setProfileLoadingColumns((current) => current.filter((item) => item !== column));
     }
-  }, [columnProfiles, computedFieldNames, data, selectedLayer, selectedNodeId, filters, nodes, edges, nodeSchemas, debouncedSearch, addToast]);
+  }, [columnProfiles, computedFields, selectedLayer, selectedNodeId, filters, nodes, edges, nodeSchemas, debouncedSearch, addToast]);
 
   const onApplyProfileFilter = useCallback((profile: ColumnProfile, bin: HistogramBin) => {
     const nextFilter: VisualFilter = profile.kind === 'numeric'
@@ -321,6 +335,149 @@ export function useAttributeTable() {
     }
   }, [addToast, focusLayerBounds, selectedFeatureIds, selectedLayer]);
 
+  const fetchFilteredFeatureIds = useCallback(async () => {
+    if (!selectedLayer) return [];
+    return queryLayerFeatureIds({
+      layer: selectedLayer,
+      filters,
+      search: debouncedSearch,
+      computedFields,
+    });
+  }, [computedFields, debouncedSearch, filters, selectedLayer]);
+
+  const onSelectAllFiltered = useCallback(async () => {
+    if (!selectedLayer) return;
+    try {
+      setIsSelectionActionLoading(true);
+      const featureIds = await fetchFilteredFeatureIds();
+      setFeatureSelection(selectedLayer.id, featureIds);
+      addToast({ type: 'info', message: `Selected ${featureIds.length.toLocaleString()} filtered rows.` });
+    } catch (error) {
+      addToast({ type: 'error', message: `Select all failed: ${error instanceof Error ? error.message : 'Unknown error'}` });
+    } finally {
+      setIsSelectionActionLoading(false);
+    }
+  }, [addToast, fetchFilteredFeatureIds, selectedLayer, setFeatureSelection]);
+
+  const onInvertSelection = useCallback(async () => {
+    if (!selectedLayer) return;
+    try {
+      setIsSelectionActionLoading(true);
+      const featureIds = await fetchFilteredFeatureIds();
+      const selected = new Set(selectedFeatureIds);
+      setFeatureSelection(selectedLayer.id, featureIds.filter((id) => !selected.has(id)));
+    } catch (error) {
+      addToast({ type: 'error', message: `Invert selection failed: ${error instanceof Error ? error.message : 'Unknown error'}` });
+    } finally {
+      setIsSelectionActionLoading(false);
+    }
+  }, [addToast, fetchFilteredFeatureIds, selectedFeatureIds, selectedLayer, setFeatureSelection]);
+
+  const onHoverFeature = useCallback((featureId: string | null) => {
+    if (selectedLayer) setHoveredFeature(selectedLayer.id, featureId);
+  }, [selectedLayer, setHoveredFeature]);
+
+  const onCreateSelectionLayer = useCallback(async () => {
+    if (!selectedLayer || !selectedFeatureIds.length) return;
+    const id = `${selectedLayer.id}-selection-${Date.now()}`;
+    const name = `${selectedLayer.name} selection`;
+    try {
+      if (selectedLayer.source.kind === 'legacy-geojson') {
+        const selected = new Set(selectedFeatureIds);
+        const geojson: GeoJSON.FeatureCollection = {
+          type: 'FeatureCollection',
+          features: (selectedLayer.geojson?.features || []).filter((feature) => (
+            selected.has(String(feature.properties?._ymn_feature_id ?? feature.id ?? ''))
+          )),
+        };
+        addMapLayer({ id, name, geojson, sourceKind: 'manual' });
+      } else {
+        const result = await materializeLayerSelection({
+          layer: selectedLayer,
+          featureIds: selectedFeatureIds,
+          computedFields,
+          outputTableName: `ymn_selection_${Date.now()}`,
+        });
+        if (!result) throw new Error('Could not materialize the selected geometries.');
+        addMapLayer({ id, name, source: result.source, tileSource: result.source.tileSource, featureCount: result.featureCount, sourceKind: 'step' });
+      }
+      addToast({ type: 'success', message: `Created layer “${name}”.` });
+    } catch (error) {
+      addToast({ type: 'error', message: `Create selection layer failed: ${error instanceof Error ? error.message : 'Unknown error'}` });
+    }
+  }, [addMapLayer, addToast, computedFields, selectedFeatureIds, selectedLayer]);
+
+  const onCreateSelectionFilterNode = useCallback(() => {
+    if (!selectedLayer?.sourceNodeId || !selectedFeatureIds.length) {
+      addToast({ type: 'warning', message: 'This layer is not linked to a workflow node.' });
+      return;
+    }
+    const sourceNode = nodes.find((node) => node.id === selectedLayer.sourceNodeId);
+    const nodeId = `selection-filter-${Date.now()}`;
+    let config: Record<string, unknown>;
+    if (selectedLayer.source.kind === 'legacy-geojson') {
+      const selected = new Set(selectedFeatureIds);
+      const features = (selectedLayer.geojson?.features || []).filter((feature) => selected.has(String(feature.properties?._ymn_feature_id ?? feature.id ?? '')));
+      const candidates = ['id', 'ID', 'fid', 'FID', 'gid', 'GID', 'objectid', 'OBJECTID'];
+      const idField = candidates.find((field) => features.length > 0 && features.every((feature) => (
+        String(feature.properties?.[field] ?? '') === String(feature.properties?._ymn_feature_id ?? feature.id ?? '')
+      )));
+      if (!idField) {
+        addToast({ type: 'warning', message: 'These rows do not expose a stable source ID. Create a selection layer instead.' });
+        return;
+      }
+      const values = selectedFeatureIds.map((id) => `'${id.replace(/'/g, "''")}'`).join(', ');
+      config = { condition: `CAST("${idField.replace(/"/g, '""')}" AS VARCHAR) IN (${values})` };
+    } else {
+      config = {
+        condition: `Selection of ${selectedFeatureIds.length} rows`,
+        selectionIds: selectedFeatureIds,
+      };
+    }
+    const filterNode: GISNode = {
+      id: nodeId,
+      type: 'filter',
+      position: { x: (sourceNode?.position.x || 0) + 260, y: sourceNode?.position.y || 0 },
+      data: {
+        label: `Selected ${selectedFeatureIds.length} rows`,
+        type: 'filter',
+        config,
+      },
+    };
+    addNode(filterNode);
+    onConnect({ source: selectedLayer.sourceNodeId, target: nodeId, sourceHandle: null, targetHandle: 'input-0' });
+    addToast({ type: 'success', message: 'Created a workflow filter from the current selection.' });
+  }, [addNode, addToast, nodes, onConnect, selectedFeatureIds, selectedLayer]);
+
+  const onSaveTableView = useCallback((name: string, layout: TableLayout) => {
+    const view: SavedTableView = {
+      id: `view-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      name: name.trim(),
+      layout,
+      filters,
+      computedFields,
+      createdAt: Date.now(),
+    };
+    setSavedViewsBySource((current) => ({ ...current, [sourceKey]: [...(current[sourceKey] || []), view] }));
+  }, [computedFields, filters, sourceKey]);
+
+  const onApplyTableView = useCallback((viewId: string) => {
+    const view = savedViews.find((item) => item.id === viewId);
+    if (!view) return;
+    if (selectedLayer) setLayerFilters(selectedLayer.id, view.filters);
+    else setLocalFiltersBySource((current) => ({ ...current, [sourceKey]: view.filters }));
+    setComputedFieldsBySource((current) => ({ ...current, [sourceKey]: view.computedFields }));
+    setAppliedLayout({ ...view.layout, revision: Date.now() });
+    setPageIndex(0);
+  }, [savedViews, selectedLayer, setLayerFilters, sourceKey]);
+
+  const onDeleteTableView = useCallback((viewId: string) => {
+    setSavedViewsBySource((current) => ({
+      ...current,
+      [sourceKey]: (current[sourceKey] || []).filter((view) => view.id !== viewId),
+    }));
+  }, [sourceKey]);
+
   const onAddComputedField = useCallback((field: Omit<ComputedField, 'id'>) => {
     setComputedFieldsBySource((current) => ({
       ...current,
@@ -368,8 +525,12 @@ export function useAttributeTable() {
     filters,
     activeFilterKeys,
     selectedFeatureIds,
+    hoveredFeatureId,
     isZoomingSelection,
+    isSelectionActionLoading,
     computedFields,
+    savedViews,
+    appliedLayout,
     onSearchChange: setSearch,
     onSortChange,
     onProfileColumn,
@@ -382,6 +543,14 @@ export function useAttributeTable() {
     onToggleSelection,
     onSetSelection,
     onZoomSelection,
+    onSelectAllFiltered,
+    onInvertSelection,
+    onHoverFeature,
+    onCreateSelectionLayer,
+    onCreateSelectionFilterNode,
+    onSaveTableView,
+    onApplyTableView,
+    onDeleteTableView,
     onAddComputedField,
     onUpdateComputedField,
     onDeleteComputedField,

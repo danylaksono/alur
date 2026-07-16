@@ -2,7 +2,8 @@ import { Download, FunctionSquare } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useStore } from '../../store/useStore';
 import { duckdbService } from '../../services/duckdb';
-import { buildNodeSelectSql } from '../../services/workflowPreviewService';
+import { buildNodeTableExportSql } from '../../services/workflowPreviewService';
+import { buildLayerExportSql } from '../../services/visualAnalyticsService';
 import { DataTable } from '../DataTable';
 import { ErrorBoundary } from '../ErrorBoundary';
 import type { useAttributeTable } from '../../hooks/useAttributeTable';
@@ -25,9 +26,31 @@ export const TableTab = ({ table }: { table: ReturnType<typeof useAttributeTable
 
   const handleExport = async (format: 'parquet' | 'csv' | 'json' = 'csv') => {
     try {
-      if (nodes.length === 0 || !selectedNodeId) return;
-      // Export the node being viewed, not the whole workflow.
-      const exportSql = buildNodeSelectSql(nodes, edges, selectedNodeId);
+      let exportSql: string;
+      if (table.selectedLayer) {
+        exportSql = await buildLayerExportSql({
+          layer: table.selectedLayer,
+          filters: table.filters,
+          search: table.search,
+          sortBy: table.sortBy,
+          sortDirection: table.sortDirection,
+          computedFields: table.computedFields,
+        });
+      } else if (selectedNodeId) {
+        exportSql = buildNodeTableExportSql({
+          nodes,
+          edges,
+          nodeId: selectedNodeId,
+          schema: useStore.getState().nodeSchemas[selectedNodeId],
+          filters: table.filters,
+          search: table.search,
+          sortBy: table.sortBy,
+          sortDirection: table.sortDirection,
+          computedFields: table.computedFields,
+        });
+      } else {
+        return;
+      }
       const { buffer, fileName } = await duckdbService.exportTable(exportSql, format);
       const blob = new Blob([buffer as BlobPart], { type: 'application/octet-stream' });
       const url = URL.createObjectURL(blob);
@@ -59,7 +82,7 @@ export const TableTab = ({ table }: { table: ReturnType<typeof useAttributeTable
               {table.computedFields.length > 0 && <span className="rounded bg-violet-50 px-1 text-[9px] text-violet-600">{table.computedFields.length}</span>}
             </button>
           )}
-          {selectedNodeId && (
+          {(selectedNodeId || table.selectedLayer) && (
             <button
               onClick={() => handleExport('csv')}
               className="flex items-center gap-1.5 rounded border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-600 transition-colors hover:bg-slate-100"
@@ -95,6 +118,18 @@ export const TableTab = ({ table }: { table: ReturnType<typeof useAttributeTable
             onSetSelection={table.selectedLayer ? table.onSetSelection : undefined}
             onZoomSelection={table.selectedLayer ? table.onZoomSelection : undefined}
             isZoomingSelection={table.isZoomingSelection}
+            isSelectionActionLoading={table.isSelectionActionLoading}
+            onSelectAllFiltered={table.selectedLayer ? table.onSelectAllFiltered : undefined}
+            onInvertSelection={table.selectedLayer ? table.onInvertSelection : undefined}
+            onCreateSelectionLayer={table.selectedLayer ? table.onCreateSelectionLayer : undefined}
+            onCreateSelectionFilterNode={table.selectedLayer ? table.onCreateSelectionFilterNode : undefined}
+            hoveredFeatureId={table.hoveredFeatureId}
+            onHoverFeature={table.selectedLayer ? table.onHoverFeature : undefined}
+            savedViews={table.savedViews}
+            appliedLayout={table.appliedLayout}
+            onSaveView={table.onSaveTableView}
+            onApplyView={table.onApplyTableView}
+            onDeleteView={table.onDeleteTableView}
             filters={table.filters}
             activeFilterKeys={table.activeFilterKeys}
             onRemoveFilter={table.selectedLayer || table.selectedNode ? table.onRemoveFilter : undefined}

@@ -10,6 +10,7 @@ export const FilterNode = ({ data, id, selected }: any) => {
   const edges = useStore((s) => s.edges);
   const nodeSchemas = useStore((s) => s.nodeSchemas);
   const condition = data.config?.condition || '';
+  const selectionCount = Array.isArray(data.config?.selectionIds) ? data.config.selectionIds.length : 0;
 
   const error = useMemo(() => {
     if (!condition.trim()) return 'Condition is required';
@@ -49,7 +50,7 @@ export const FilterNode = ({ data, id, selected }: any) => {
               <button
                 key={col}
                 className="text-[10px] font-mono bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded border border-amber-200 hover:bg-amber-100 transition-colors"
-                onClick={() => updateConfig({ condition: condition ? `${condition} ${col}` : col })}
+                onClick={() => updateConfig({ condition: selectionCount ? col : condition ? `${condition} ${col}` : col, selectionIds: undefined })}
                 title={`Insert "${col}" into condition`}
               >
                 {col}
@@ -61,6 +62,11 @@ export const FilterNode = ({ data, id, selected }: any) => {
           </div>
         )}
         <div>
+          {selectionCount > 0 && (
+            <div className="mb-2 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[10px] font-semibold text-amber-700">
+              Snapshot of {selectionCount.toLocaleString()} selected rows. Editing the condition converts this to a regular SQL filter.
+            </div>
+          )}
           <label className={cn(fieldLabelClass, 'mb-1')}>
             WHERE Condition
           </label>
@@ -72,7 +78,7 @@ export const FilterNode = ({ data, id, selected }: any) => {
               error && 'border-red-300 bg-red-50 text-red-800 focus:border-red-400 focus:ring-red-200'
             )}
             value={condition}
-            onChange={(e) => updateConfig({ condition: e.target.value })}
+            onChange={(e) => updateConfig({ condition: e.target.value, selectionIds: undefined })}
             placeholder="e.g. need > 10"
           />
           {error && <div className="text-[11px] text-red-500 mt-1 font-medium">{error}</div>}

@@ -169,10 +169,21 @@ describe('visual analytics cache helpers', () => {
       renderVersion: 1,
     };
 
-    const result = await queryLayerRows({ layer: { id: 'points', source }, filters: [], search: '', sortBy: null, sortDirection: 'asc', pageIndex: 0, pageSize: 50 });
+    const result = await queryLayerRows({
+      layer: { id: 'points', source },
+      filters: [],
+      search: '',
+      sortBy: 'name_length',
+      sortDirection: 'desc',
+      pageIndex: 0,
+      pageSize: 50,
+      computedFields: [{ id: 'length', name: 'name_length', expression: "concat(name, 'x')" }],
+    });
 
     expect(query.mock.calls[0][0]).toContain('FROM "__ymn_mvt_source_table"');
     expect(query.mock.calls[1][0]).toContain('FROM "__ymn_mvt_source_table"');
+    expect(query.mock.calls[1][0]).toContain('AS "name_length"');
+    expect(query.mock.calls[1][0]).toContain('ORDER BY "name_length" DESC');
     expect(result.rows[0].__ymn_mvt_id).toBe(7);
   });
 

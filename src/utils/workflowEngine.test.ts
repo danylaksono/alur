@@ -70,6 +70,18 @@ describe('buildWorkflowSQL', () => {
     expect(result.sql).toContain('WHERE population > 1000');
   });
 
+  it('generates a reproducible row-selection filter workflow', () => {
+    const nodes: GISNode[] = [
+      makeNode({ id: 'src', data: { label: 'Src', type: 'input', config: { tableName: 'data' } } }),
+      makeNode({ id: 'flt', position: { x: 200, y: 0 }, data: { label: 'Selected rows', type: 'filter', config: { condition: 'Selection', selectionIds: ['2', '5'] } } }),
+    ];
+    const edges: Edge[] = [{ id: 'e1', source: 'src', target: 'flt', type: 'smoothstep' }];
+    const result = buildWorkflowSQL(nodes, edges);
+    expect(result.sql).toContain('ROW_NUMBER() OVER ()::BIGINT AS __ymn_selection_row');
+    expect(result.sql).toContain("IN ('2', '5')");
+    expect(result.sql).toContain('EXCLUDE (__ymn_selection_row)');
+  });
+
   it('generates an aggregate workflow', () => {
     const nodes: GISNode[] = [
       makeNode({ id: 'src', data: { label: 'Src', type: 'input', config: { tableName: 'zones' } } }),

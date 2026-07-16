@@ -5,6 +5,7 @@ import type { GISNode } from '../store/useStore';
 import type { ColumnProfile } from '../components/DataTable';
 import type { VisualFilter } from '../types/visualAnalytics';
 import { compileVisualFiltersWhereClause } from '../utils/visualFilterSql';
+import { buildComputedRelation, type ComputedField } from '../utils/fieldCalculator';
 
 export const qi = (name: string) => `"${name.replace(/"/g, '""')}"`;
 export const escapeSql = (value: string) => value.replace(/'/g, "''");
@@ -27,19 +28,19 @@ export const isNumericType = (type: string) =>
 
 const rowToJson = (row: any) => (typeof row?.toJSON === 'function' ? row.toJSON() : row);
 
-const searchPredicate = (schema: any[] | undefined, search: string) => {
+const searchPredicate = (schema: any[] | undefined, search: string, computedFields: ComputedField[] = []) => {
   const normalizedSearch = search.trim();
-  const columns = searchableColumnNames(schema);
+  const columns = [...searchableColumnNames(schema), ...computedFields.map((field) => field.name)];
   if (!normalizedSearch || !columns.length) return '';
   return columns
     .map((name) => `CAST(${qi(name)} AS VARCHAR) ILIKE '%${escapeSql(normalizedSearch)}%'`)
     .join(' OR ');
 };
 
-const combinedWhereClause = (schema: any[] | undefined, search: string, filters: VisualFilter[] = []) => {
+const combinedWhereClause = (schema: any[] | undefined, search: string, filters: VisualFilter[] = [], computedFields: ComputedField[] = []) => {
   const predicates = [
     compileVisualFiltersWhereClause(filters).replace(/^WHERE\s+/, ''),
-    searchPredicate(schema, search),
+    searchPredicate(schema, search, computedFields),
   ].filter(Boolean);
   return predicates.length ? ` WHERE (${predicates.join(') AND (')})` : '';
 };
@@ -47,6 +48,34 @@ const combinedWhereClause = (schema: any[] | undefined, search: string, filters:
 export const buildNodeSelectSql = (nodes: GISNode[], edges: Edge[], nodeId: string) => {
   const { withClause } = buildWorkflowSQL(nodes, edges);
   return `${withClause} SELECT * FROM ${cteAlias(nodeId)}`;
+};
+
+export const buildNodeTableExportSql = ({
+  nodes,
+  edges,
+  nodeId,
+  schema,
+  filters,
+  search,
+  sortBy,
+  sortDirection,
+  computedFields,
+}: {
+  nodes: GISNode[];
+  edges: Edge[];
+  nodeId: string;
+  schema: any[] | undefined;
+  filters: VisualFilter[];
+  search: string;
+  sortBy: string | null;
+  sortDirection: 'asc' | 'desc';
+  computedFields: ComputedField[];
+}) => {
+  const { withClause } = buildWorkflowSQL(nodes, edges);
+  const relation = buildComputedRelation(cteAlias(nodeId), computedFields);
+  const whereClause = combinedWhereClause(schema, search, filters, computedFields);
+  const sortClause = sortBy ? ` ORDER BY ${qi(sortBy)} ${sortDirection.toUpperCase()} NULLS LAST` : '';
+  return `${withClause} SELECT * FROM ${relation}${whereClause}${sortClause}`;
 };
 
 export const queryNodePreviewRows = async ({
@@ -60,6 +89,7 @@ export const queryNodePreviewRows = async ({
   pageIndex,
   pageSize,
   filters = [],
+  computedFields = [],
 }: {
   nodes: GISNode[];
   edges: Edge[];
@@ -71,16 +101,18 @@ export const queryNodePreviewRows = async ({
   pageIndex: number;
   pageSize: number;
   filters?: VisualFilter[];
+  computedFields?: ComputedField[];
 }) => {
   const { withClause } = buildWorkflowSQL(nodes, edges);
   const targetAlias = cteAlias(nodeId);
-  const whereClause = combinedWhereClause(schema, search, filters);
+  const relation = buildComputedRelation(targetAlias, computedFields);
+  const whereClause = combinedWhereClause(schema, search, filters, computedFields);
   const sortClause = sortBy
     ? ` ORDER BY ${qi(sortBy)} ${sortDirection.toUpperCase()} NULLS LAST`
     : '';
   const offset = pageIndex * pageSize;
-  const countSql = `${withClause} SELECT COUNT(*) AS row_count FROM ${targetAlias}${whereClause};`;
-  const previewSql = `${withClause} SELECT * FROM ${targetAlias}${whereClause}${sortClause} LIMIT ${pageSize} OFFSET ${offset};`;
+  const countSql = `${withClause} SELECT COUNT(*) AS row_count FROM ${relation}${whereClause};`;
+  const previewSql = `${withClause} SELECT * FROM ${relation}${whereClause}${sortClause} LIMIT ${pageSize} OFFSET ${offset};`;
 
   const [countResult, result] = await Promise.all([
     duckdbService.query(countSql),
@@ -101,6 +133,7 @@ export const queryNodeColumnProfile = async ({
   search,
   column,
   filters = [],
+  computedFields = [],
 }: {
   nodes: GISNode[];
   edges: Edge[];
@@ -109,22 +142,26 @@ export const queryNodeColumnProfile = async ({
   search: string;
   column: string;
   filters?: VisualFilter[];
+  computedFields?: ComputedField[];
 }): Promise<ColumnProfile> => {
   const { withClause } = buildWorkflowSQL(nodes, edges);
   const targetAlias = cteAlias(nodeId);
   const type = columnType(schema, column);
-  const whereClause = combinedWhereClause(schema, search, filters);
+  const relation = buildComputedRelation(targetAlias, computedFields);
+  const whereClause = combinedWhereClause(schema, search, filters, computedFields);
 
-  const totalSql = `${withClause} SELECT COUNT(*) AS total, SUM(CASE WHEN ${qi(column)} IS NULL THEN 1 ELSE 0 END) AS null_count FROM ${targetAlias}${whereClause};`;
+  const totalSql = `${withClause} SELECT COUNT(*) AS total, SUM(CASE WHEN ${qi(column)} IS NULL THEN 1 ELSE 0 END) AS null_count FROM ${relation}${whereClause};`;
   const totalResult = await duckdbService.query(totalSql);
   const totalRaw = rowToJson(totalResult.toArray()[0]);
   const total = Number(totalRaw?.total ?? 0);
   const nullCount = Number(totalRaw?.null_count ?? 0);
 
-  if (isNumericType(type)) {
-    const statsSql = `${withClause} SELECT MIN(${qi(column)}) AS min_value, MAX(${qi(column)}) AS max_value FROM ${targetAlias}${whereClause};`;
-    const statsResult = await duckdbService.query(statsSql);
-    const statsRaw = rowToJson(statsResult.toArray()[0]);
+  const statsSql = `${withClause} SELECT MIN(TRY_CAST(${qi(column)} AS DOUBLE)) AS min_value, MAX(TRY_CAST(${qi(column)} AS DOUBLE)) AS max_value, COUNT(TRY_CAST(${qi(column)} AS DOUBLE)) AS numeric_count, COUNT(${qi(column)}) AS non_null_count FROM ${relation}${whereClause};`;
+  const statsResult = await duckdbService.query(statsSql);
+  const statsRaw = rowToJson(statsResult.toArray()[0]);
+  const numericCount = Number(statsRaw?.numeric_count ?? 0);
+  const nonNullCount = Number(statsRaw?.non_null_count ?? 0);
+  if (isNumericType(type) || (numericCount > 0 && numericCount >= nonNullCount * 0.8)) {
     const min = Number(statsRaw?.min_value);
     const max = Number(statsRaw?.max_value);
     if (!Number.isFinite(min) || !Number.isFinite(max)) {
@@ -133,8 +170,8 @@ export const queryNodeColumnProfile = async ({
     const binCount = 12;
     const bucketExpr = max === min
       ? '0'
-      : `LEAST(${binCount - 1}, CAST(FLOOR((CAST(${qi(column)} AS DOUBLE) - ${min}) / ${((max - min) / binCount) || 1}) AS INTEGER))`;
-    const binsSql = `${withClause} SELECT ${bucketExpr} AS bucket, COUNT(*) AS count FROM ${targetAlias}${whereClause}${whereClause ? ' AND' : ' WHERE'} ${qi(column)} IS NOT NULL GROUP BY bucket ORDER BY bucket;`;
+      : `LEAST(${binCount - 1}, CAST(FLOOR((TRY_CAST(${qi(column)} AS DOUBLE) - ${min}) / ${((max - min) / binCount) || 1}) AS INTEGER))`;
+    const binsSql = `${withClause} SELECT ${bucketExpr} AS bucket, COUNT(*) AS count FROM ${relation}${whereClause}${whereClause ? ' AND' : ' WHERE'} ${qi(column)} IS NOT NULL GROUP BY bucket ORDER BY bucket;`;
     const binsResult = await duckdbService.query(binsSql);
     const binMap = new Map<number, number>();
     binsResult.toArray().forEach((row: any) => {
@@ -151,7 +188,7 @@ export const queryNodeColumnProfile = async ({
     return { column, kind: 'numeric', total, nullCount, min, max, bins };
   }
 
-  const binsSql = `${withClause} SELECT CAST(${qi(column)} AS VARCHAR) AS label, COUNT(*) AS count FROM ${targetAlias}${whereClause}${whereClause ? ' AND' : ' WHERE'} ${qi(column)} IS NOT NULL GROUP BY label ORDER BY count DESC LIMIT 12;`;
+  const binsSql = `${withClause} SELECT CAST(${qi(column)} AS VARCHAR) AS label, COUNT(*) AS count FROM ${relation}${whereClause}${whereClause ? ' AND' : ' WHERE'} ${qi(column)} IS NOT NULL GROUP BY label ORDER BY count DESC LIMIT 12;`;
   const binsResult = await duckdbService.query(binsSql);
   const bins = binsResult.toArray().map((row: any) => {
     const raw = rowToJson(row);

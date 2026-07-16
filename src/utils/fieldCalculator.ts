@@ -245,6 +245,62 @@ export const parseExpression = (text: string): { ast: ExpressionNode | null; ref
   }
 };
 
+const quoteSqlIdentifier = (value: string) => `"${value.replace(/"/g, '""')}"`;
+const quoteSqlLiteral = (value: string) => `'${value.replace(/'/g, "''")}'`;
+
+const expressionNodeToSql = (node: ExpressionNode): string => {
+  if (node.type === 'literal') {
+    if (node.value === null) return 'NULL';
+    if (typeof node.value === 'boolean') return node.value ? 'TRUE' : 'FALSE';
+    return typeof node.value === 'number' ? String(node.value) : quoteSqlLiteral(node.value);
+  }
+  if (node.type === 'field') {
+    return node.path.slice(1).reduce(
+      (expression, part) => `struct_extract(${expression}, ${quoteSqlLiteral(part)})`,
+      quoteSqlIdentifier(node.path[0]),
+    );
+  }
+  if (node.type === 'unary') {
+    const operand = expressionNodeToSql(node.operand);
+    return node.op === 'not' ? `(NOT (${operand}))` : `(-(${operand}))`;
+  }
+  if (node.type === 'logical') {
+    return `((${expressionNodeToSql(node.left)}) ${node.op.toUpperCase()} (${expressionNodeToSql(node.right)}))`;
+  }
+  if (node.type === 'binary') {
+    const operator = node.op === '==' ? '=' : node.op === '!=' ? '<>' : node.op;
+    const left = expressionNodeToSql(node.left);
+    const right = expressionNodeToSql(node.right);
+    if (operator === '/') return `(TRY_CAST(${left} AS DOUBLE) / NULLIF(TRY_CAST(${right} AS DOUBLE), 0))`;
+    if (operator === '%') return `(TRY_CAST(${left} AS DOUBLE) % NULLIF(TRY_CAST(${right} AS DOUBLE), 0))`;
+    return `((${left}) ${operator} (${right}))`;
+  }
+
+  if (node.type !== 'call') throw new Error('Unsupported expression node');
+  const args = node.args.map(expressionNodeToSql);
+  if (node.name === 'min') return `LEAST(${args.join(', ')})`;
+  if (node.name === 'max') return `GREATEST(${args.join(', ')})`;
+  if (node.name === 'if') return `(CASE WHEN ${args[0]} THEN ${args[1]} ELSE ${args[2]} END)`;
+  if (node.name === 'concat') return `CONCAT(${args.join(', ')})`;
+  if (node.name === 'pow') return `POW(${args.join(', ')})`;
+  return `${node.name.toUpperCase()}(${args.join(', ')})`;
+};
+
+export const compileComputedExpressionToSql = (expression: string) => {
+  const parsed = parseExpression(expression);
+  if (!parsed.ast || parsed.error) throw new Error(parsed.error || 'Invalid expression');
+  return expressionNodeToSql(parsed.ast);
+};
+
+/** Wrap a relation once per field so later fields can reference earlier computed fields. */
+export const buildComputedRelation = (baseRelation: string, fields: ComputedField[]) => fields.reduce(
+  (relation, field) => `(
+    SELECT *, ${compileComputedExpressionToSql(field.expression)} AS ${quoteSqlIdentifier(field.name)}
+    FROM ${relation}
+  )`,
+  baseRelation,
+);
+
 const numberOrNull = (value: unknown) => {
   if (typeof value === 'number') return Number.isFinite(value) ? value : null;
   if (typeof value === 'boolean') return value ? 1 : 0;
