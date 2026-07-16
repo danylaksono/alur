@@ -9,6 +9,8 @@ import { FEATURE_ID_PROPERTY } from '../../types/visualAnalytics';
 import type { VisualFilter } from '../../types/visualAnalytics';
 import { LegendControl } from './LegendControl';
 import { BasemapControl } from './BasemapControl';
+import { LocationSearchControl } from './LocationSearchControl';
+import type { GeocodingResult } from '../../services/geocodingService';
 import { mvtTileUrl, registerMvtProtocol, registerMvtTileSource, unregisterMvtTileSource } from '../../services/mvtTileService';
 import { boundsForLayer, mvtSourceForLayer } from '../../utils/layerSource';
 import { compileVisualFiltersWhereClause } from '../../utils/visualFilterSql';
@@ -101,6 +103,7 @@ export const MapView = () => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const popup = useRef<maplibregl.Popup | null>(null);
+  const locationMarker = useRef<maplibregl.Marker | null>(null);
   const renderedLayerIds = useRef<Set<string>>(new Set());
   const renderedSourceVersions = useRef<Map<string, string>>(new Map());
   const nodeLayerMap = useRef<Map<string, string>>(new Map());
@@ -178,6 +181,8 @@ export const MapView = () => {
 
     return () => {
       resizeObserver.disconnect();
+      locationMarker.current?.remove();
+      locationMarker.current = null;
       m.remove();
       map.current = null;
       popup.current = null;
@@ -610,9 +615,32 @@ export const MapView = () => {
     fitFocusedLayer();
   }, [layerFocusRequest]);
 
+  const focusSearchResult = (result: GeocodingResult) => {
+    const m = map.current;
+    if (!m) return;
+
+    locationMarker.current?.remove();
+    locationMarker.current = new maplibregl.Marker({ color: '#4f46e5' })
+      .setLngLat(result.center)
+      .addTo(m);
+
+    if (result.bounds) {
+      m.fitBounds(result.bounds, { padding: 64, duration: 700, maxZoom: 17 });
+      return;
+    }
+
+    m.flyTo({ center: result.center, zoom: Math.max(m.getZoom(), 14), duration: 700 });
+  };
+
+  const clearSearchResult = () => {
+    locationMarker.current?.remove();
+    locationMarker.current = null;
+  };
+
   return (
     <div className="w-full h-full relative">
       <div ref={mapContainer} className="w-full h-full" />
+      <LocationSearchControl onSelect={focusSearchResult} onClear={clearSearchResult} />
       <LegendControl legends={visibleLegends} />
       <BasemapControl />
     </div>

@@ -98,6 +98,7 @@ Map-first shell: the map fills the viewport; everything else lives in a collapsi
 All styles are compiled to native MapLibre expressions — no hand-written JSON.
 
 ### Interactive Analytics
+- **Place search** — locate a place or address with Nominatim/OpenStreetMap, then zoom to its bounds
 - **Hover / select** — features highlight via MapLibre feature-state, linked to the attribute table
 - **Legend filtering** — click legend items to isolate categories or value ranges
 - **Distribution brushing** — click histogram bins or category bars to filter the map

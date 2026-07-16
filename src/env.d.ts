@@ -1,5 +1,13 @@
 /// <reference types="vite/client" />
 
+interface ImportMetaEnv {
+  readonly VITE_GEOCODER_URL?: string;
+}
+
+interface ImportMeta {
+  readonly env: ImportMetaEnv;
+}
+
 declare module '@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm?url' {
   const src: string;
   export default src;
