@@ -1,7 +1,9 @@
 import { useState } from 'react';
+import { useReactFlow } from '@xyflow/react';
 import { Calculator, Database, Eye, Filter, Layers, Loader2, Palette, Plus, Search, Zap } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { buildWorkflowSQL } from '../../utils/workflowEngine';
+import { nextNodePosition } from '../../utils/nodePlacement';
 import { spatialFunctions } from '../../utils/spatialFunctions';
 import { materializeWorkflowMapLayer } from '../../services/layerMaterialization';
 import { cn } from '../../utils/cn';
@@ -44,6 +46,7 @@ export const NodePalette = () => {
   const addToast = useStore((s) => s.addToast);
   const [executing, setExecuting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const { fitView } = useReactFlow();
 
   const normalizedQuery = searchQuery.trim().toLowerCase();
   const matchedFunctions = normalizedQuery
@@ -58,13 +61,15 @@ export const NodePalette = () => {
     addNode({
       id: `${type}-${Date.now()}`,
       type,
-      position: { x: 100 + Math.random() * 80, y: 80 + Math.random() * 80 },
+      position: nextNodePosition(useStore.getState().nodes),
       data: {
         label: label || nodeLabels[type],
         type,
         config,
       },
     });
+    // Bring the whole graph (including the just-added node) into view.
+    window.setTimeout(() => fitView({ duration: 300, padding: 0.2, maxZoom: 1 }), 50);
   };
 
   const handleExecute = async () => {

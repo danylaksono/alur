@@ -13,20 +13,30 @@ export function useKeyboardShortcuts() {
 
       const {
         ui,
+        edges,
         selectedNodeId,
         removeNode,
         duplicateNode,
         setSelectedNodeId,
+        onEdgesChange,
         isManualSQL,
         setIsManualSQL,
         openDrawerTab,
       } = useStore.getState();
       const workflowVisible = ui.drawerMode !== 'collapsed' && ui.activeDrawerTab === 'workflow';
 
-      if ((e.key === 'Delete' || e.key === 'Backspace') && workflowVisible && selectedNodeId) {
-        removeNode(selectedNodeId);
-        setSelectedNodeId(null);
-        e.preventDefault();
+      if ((e.key === 'Delete' || e.key === 'Backspace') && workflowVisible) {
+        if (selectedNodeId) {
+          removeNode(selectedNodeId);
+          setSelectedNodeId(null);
+          e.preventDefault();
+        } else {
+          const selectedEdges = edges.filter((edge) => edge.selected);
+          if (selectedEdges.length) {
+            onEdgesChange(selectedEdges.map((edge) => ({ id: edge.id, type: 'remove' as const })));
+            e.preventDefault();
+          }
+        }
       }
 
       if ((e.ctrlKey || e.metaKey) && e.key === 'd' && workflowVisible && selectedNodeId) {

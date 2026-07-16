@@ -4,7 +4,7 @@ import { Database, Upload, FileJson, Loader2, MapPinned, Table2 } from 'lucide-r
 import { ingestFile } from '../../services/dataIngestion';
 import { FlowNodeShell, nodeHandleClass } from './FlowNodeShell';
 
-export const InputNode = ({ data, id }: any) => {
+export const InputNode = ({ data, id, selected }: any) => {
   const config = data.config || {};
   const [loading, setLoading] = useState(false);
   const fileLabel = config.fileName || config.tableName || 'Load data';
@@ -27,6 +27,7 @@ export const InputNode = ({ data, id }: any) => {
   return (
     <FlowNodeShell
       id={id}
+      selected={selected}
       tone="blue"
       icon={Database}
       label="Data Source"

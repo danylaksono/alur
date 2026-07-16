@@ -4,7 +4,7 @@ import { useStore } from '../../store/useStore';
 import { FlowNodeShell, fieldLabelClass, inputClass, nodeHandleClass } from './FlowNodeShell';
 import { cn } from '../../utils/cn';
 
-export const AttributeNode = ({ data, id }: any) => {
+export const AttributeNode = ({ data, id, selected }: any) => {
   const updateNode = useStore((s) => s.updateNode);
   const expression = data.config?.expression ?? 'population / area';
   const resultField = data.config?.resultField ?? 'new_value';
@@ -14,6 +14,7 @@ export const AttributeNode = ({ data, id }: any) => {
   return (
     <FlowNodeShell
         id={id}
+        selected={selected}
         tone="slate"
         icon={Calculator}
         label="Attribute Op"

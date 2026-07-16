@@ -5,7 +5,7 @@ import { useStore } from '../../store/useStore';
 import { cn } from '../../utils/cn';
 import { FlowNodeShell, fieldLabelClass, inputClass, nodeHandleClass } from './FlowNodeShell';
 
-export const FilterNode = ({ data, id }: any) => {
+export const FilterNode = ({ data, id, selected }: any) => {
   const updateNode = useStore((s) => s.updateNode);
   const edges = useStore((s) => s.edges);
   const nodeSchemas = useStore((s) => s.nodeSchemas);
@@ -28,6 +28,7 @@ export const FilterNode = ({ data, id }: any) => {
   return (
     <FlowNodeShell
         id={id}
+        selected={selected}
         tone="amber"
         icon={Filter}
         label="Filter"

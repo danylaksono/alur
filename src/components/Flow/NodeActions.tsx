@@ -4,19 +4,23 @@ import { useStore } from '../../store/useStore';
 import { buildUpToSQL } from '../../utils/workflowEngine';
 import { duckdbService } from '../../services/duckdb';
 import { materializeWorkflowMapLayer } from '../../services/layerMaterialization';
+import { cn } from '../../utils/cn';
 
 interface NodeActionsProps {
   id: string;
+  selected?: boolean;
   helperContent?: ReactNode;
 }
 
-export const NodeActions = ({ id, helperContent }: NodeActionsProps) => {
+const actionButtonClass = 'rounded-md p-1 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:opacity-40';
+
+export const NodeActions = ({ id, selected = false, helperContent }: NodeActionsProps) => {
   const removeNode = useStore((s) => s.removeNode);
   const duplicateNode = useStore((s) => s.duplicateNode);
   const nodeExecutionStates = useStore((s) => s.nodeExecutionStates);
   const setNodeExecutionState = useStore((s) => s.setNodeExecutionState);
   const addMapLayer = useStore((s) => s.addMapLayer);
-  const addChatMessage = useStore((s) => s.addChatMessage);
+  const addToast = useStore((s) => s.addToast);
   const [showHelper, setShowHelper] = useState(false);
   const [exporting, setExporting] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -28,7 +32,6 @@ export const NodeActions = ({ id, helperContent }: NodeActionsProps) => {
     setNodeExecutionState(id, { status: 'running' });
     try {
       const workflow = buildUpToSQL(nodes, edges, id);
-      addChatMessage('system', `▶️ Executing up to node: ${nodes.find((n) => n.id === id)?.data.label || id}`);
       const layer = await materializeWorkflowMapLayer({
         workflow,
         layerId: `exec-${id}`,
@@ -38,16 +41,15 @@ export const NodeActions = ({ id, helperContent }: NodeActionsProps) => {
         visualisationConfig: workflow.visualisationConfig,
       });
       if (!layer.featureCount) {
-        addChatMessage('system', '⚠️ Execution produced no features.');
+        addToast({ type: 'warning', message: 'Execution produced no features.' });
         setNodeExecutionState(id, { status: 'done', featureCount: 0 });
         return;
       }
       addMapLayer(layer);
       setNodeExecutionState(id, { status: 'done', featureCount: layer.featureCount });
-      addChatMessage('system', `✅ Step executed: ${layer.featureCount.toLocaleString()} features`);
     } catch (err: any) {
       setNodeExecutionState(id, { status: 'error', error: err.message });
-      addChatMessage('system', `❌ Step error: ${err.message}`);
+      addToast({ type: 'error', message: `Step error: ${err.message}` });
     }
   };
 
@@ -61,7 +63,7 @@ export const NodeActions = ({ id, helperContent }: NodeActionsProps) => {
         await duckdbService.materializeQueryAsTable(workflow.resultSql, tableName);
         const geojson = await duckdbService.getGeoJSONFromTable(tableName, 100000);
         if (!geojson || geojson.features.length === 0) {
-          addChatMessage('system', '⚠️ Nothing to export.');
+          addToast({ type: 'warning', message: 'Nothing to export.' });
           return;
         }
         const text = JSON.stringify(geojson, null, 2);
@@ -72,7 +74,7 @@ export const NodeActions = ({ id, helperContent }: NodeActionsProps) => {
         a.download = `node-${id}.geojson`;
         a.click();
         URL.revokeObjectURL(url);
-        addChatMessage('system', `📦 Exported ${geojson.features.length} features as GeoJSON`);
+        addToast({ type: 'success', message: `Exported ${geojson.features.length.toLocaleString()} features as GeoJSON` });
       } else {
         const { buffer, fileName } = await duckdbService.exportTable(workflow.resultSql, 'csv');
         const blob = new Blob([buffer as BlobPart], { type: 'text/csv' });
@@ -82,10 +84,10 @@ export const NodeActions = ({ id, helperContent }: NodeActionsProps) => {
         a.download = fileName;
         a.click();
         URL.revokeObjectURL(url);
-        addChatMessage('system', `📦 Exported as CSV`);
+        addToast({ type: 'success', message: 'Exported as CSV' });
       }
     } catch (err: any) {
-      addChatMessage('system', `❌ Export error: ${err.message}`);
+      addToast({ type: 'error', message: `Export error: ${err.message}` });
     } finally {
       setExporting(false);
     }
@@ -108,90 +110,100 @@ export const NodeActions = ({ id, helperContent }: NodeActionsProps) => {
   }, [showHelper]);
 
   return (
-    <div className="absolute top-3 right-3 flex items-center gap-1">
-      {/* Execution status badge */}
+    <>
+      {/* Persistent execution status — stays visible when the toolbar is hidden. */}
       {execState && execState.status !== 'idle' && (
-        <div
-          className={`
-            flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider cursor-pointer
-            ${execState.status === 'running' ? 'bg-amber-100 text-amber-700' : ''}
-            ${execState.status === 'done' ? 'bg-emerald-100 text-emerald-700' : ''}
-            ${execState.status === 'error' ? 'bg-red-100 text-red-700' : ''}
-          `}
-          onClick={resetExecution}
-          title="Click to reset"
-        >
-          {execState.status === 'running' && <><Loader2 className="w-2.5 h-2.5 animate-spin" /> run</>}
-          {execState.status === 'done' && <><CheckCircle className="w-2.5 h-2.5" /> {execState.featureCount?.toLocaleString()}</>}
-          {execState.status === 'error' && <><AlertCircle className="w-2.5 h-2.5" /> err</>}
-        </div>
-      )}
-
-      {/* Execute up to this node */}
-      <button
-        type="button"
-        onClick={handleExecute}
-        title="Execute up to this node"
-        disabled={execState?.status === 'running'}
-        className="rounded-md border border-slate-200 bg-white p-1 text-emerald-600 shadow-sm hover:bg-emerald-50 disabled:opacity-40"
-      >
-        <Play className="w-3.5 h-3.5" />
-      </button>
-
-      {/* Export node output */}
-      <div className="relative group">
         <button
           type="button"
-          onClick={() => handleExport('geojson')}
-          disabled={exporting}
-          title="Export node output as GeoJSON"
-          className="rounded-md border border-slate-200 bg-white p-1 text-slate-500 shadow-sm hover:bg-slate-50 disabled:opacity-40"
+          className={cn(
+            'nodrag absolute right-2 top-3 z-10 flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
+            execState.status === 'running' && 'bg-amber-100 text-amber-700',
+            execState.status === 'done' && 'bg-emerald-100 text-emerald-700',
+            execState.status === 'error' && 'bg-red-100 text-red-700',
+          )}
+          onClick={resetExecution}
+          title={execState.status === 'error' ? `${execState.error} (click to reset)` : 'Click to reset'}
         >
-          <Download className={exporting ? 'w-3.5 h-3.5 animate-spin' : 'w-3.5 h-3.5'} />
+          {execState.status === 'running' && <><Loader2 className="h-2.5 w-2.5 animate-spin" /> run</>}
+          {execState.status === 'done' && <><CheckCircle className="h-2.5 w-2.5" /> {execState.featureCount?.toLocaleString()}</>}
+          {execState.status === 'error' && <><AlertCircle className="h-2.5 w-2.5" /> err</>}
         </button>
-        <div className="absolute right-0 top-full mt-1 z-50 hidden group-hover:block">
+      )}
+
+      {/* Action toolbar — floats above the card, appears on hover or selection. */}
+      <div
+        className={cn(
+          'nodrag absolute bottom-full right-0 z-20 pb-1 transition-opacity',
+          selected ? 'opacity-100' : 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100'
+        )}
+      >
+        <div className="flex items-center gap-0.5 rounded-lg border border-slate-200 bg-white p-0.5 shadow-md">
           <button
-            onClick={() => handleExport('csv')}
-            className="whitespace-nowrap bg-white border border-slate-200 rounded-lg px-2 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 shadow-lg"
+            type="button"
+            onClick={handleExecute}
+            title="Run up to this node"
+            disabled={execState?.status === 'running'}
+            className={cn(actionButtonClass, 'text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700')}
           >
-            Export CSV
+            <Play className="h-3.5 w-3.5" />
+          </button>
+
+          <div className="group/export relative">
+            <button
+              type="button"
+              onClick={() => handleExport('geojson')}
+              disabled={exporting}
+              title="Export node output as GeoJSON"
+              className={actionButtonClass}
+            >
+              <Download className={exporting ? 'h-3.5 w-3.5 animate-spin' : 'h-3.5 w-3.5'} />
+            </button>
+            <div className="absolute right-0 top-full z-50 hidden pt-1 group-hover/export:block">
+              <button
+                onClick={() => handleExport('csv')}
+                className="whitespace-nowrap rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-600 shadow-lg hover:bg-slate-50"
+              >
+                Export CSV
+              </button>
+            </div>
+          </div>
+
+          {helperContent && (
+            <div className="relative" ref={popoverRef}>
+              <button
+                type="button"
+                onClick={() => setShowHelper((v) => !v)}
+                title="Show info"
+                className={actionButtonClass}
+              >
+                <Info className="h-3.5 w-3.5" />
+              </button>
+              {showHelper && (
+                <div className="absolute right-0 top-full z-50 mt-1 w-56 space-y-1 rounded-lg border border-slate-200 bg-white p-3 text-[11px] text-slate-600 shadow-xl">
+                  {helperContent}
+                </div>
+              )}
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={() => duplicateNode(id, `node-${Date.now()}`)}
+            title="Duplicate node"
+            className={actionButtonClass}
+          >
+            <Copy className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => removeNode(id)}
+            title="Delete node"
+            className={cn(actionButtonClass, 'text-rose-500 hover:bg-rose-50 hover:text-rose-600')}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
           </button>
         </div>
       </div>
-
-      {helperContent && (
-        <div className="relative" ref={popoverRef}>
-          <button
-            type="button"
-            onClick={() => setShowHelper((v) => !v)}
-            title="Show info"
-            className="rounded-md border border-slate-200 bg-white p-1 text-slate-400 shadow-sm hover:bg-blue-50 hover:text-blue-500 transition-colors"
-          >
-            <Info className="w-3.5 h-3.5" />
-          </button>
-          {showHelper && (
-            <div className="absolute right-0 top-full mt-1 z-50 w-56 rounded-xl border border-slate-200 bg-white p-3 shadow-xl text-[11px] text-slate-600 space-y-1">
-              {helperContent}
-            </div>
-          )}
-        </div>
-      )}
-      <button
-        type="button"
-        onClick={() => duplicateNode(id, `node-${Date.now()}`)}
-        title="Duplicate node"
-        className="rounded-md border border-slate-200 bg-white p-1 text-slate-500 shadow-sm hover:bg-slate-50"
-      >
-        <Copy className="w-3.5 h-3.5" />
-      </button>
-      <button
-        type="button"
-        onClick={() => removeNode(id)}
-        title="Delete node"
-        className="rounded-md border border-slate-200 bg-white p-1 text-rose-500 shadow-sm hover:bg-rose-50"
-      >
-        <Trash2 className="w-3.5 h-3.5" />
-      </button>
-    </div>
+    </>
   );
 };

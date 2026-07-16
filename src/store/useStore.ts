@@ -4,6 +4,7 @@ import {
   Connection,
   Edge,
   EdgeChange,
+  MarkerType,
   Node,
   NodeChange,
   addEdge,
@@ -373,7 +374,11 @@ export const useStore = create<AppState>()(persist((set, get) => ({
 
   onConnect: (connection) => {
     set({
-      edges: addEdge({ ...connection, type: 'smoothstep' }, get().edges),
+      edges: addEdge({
+        ...connection,
+        type: 'smoothstep',
+        markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16, color: '#94a3b8' },
+      }, get().edges),
     });
   },
 

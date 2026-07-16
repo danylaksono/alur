@@ -43,7 +43,9 @@ export function ToastContainer() {
   if (toasts.length === 0) return null;
 
   return (
-    <div className="fixed bottom-20 right-6 z-[9999] flex flex-col gap-2 pointer-events-none">
+    // Top-center, just below the header: keeps toasts off the drawer workspace
+    // (bottom), the map controls (top-right), and the left panel.
+    <div className="fixed left-1/2 top-14 z-[9999] flex -translate-x-1/2 flex-col items-center gap-2 pointer-events-none">
       {toasts.map((toast) => (
         <div key={toast.id} className="pointer-events-auto">
           <ToastItem toast={toast} />

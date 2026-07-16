@@ -7,7 +7,7 @@ import { cn } from '../../utils/cn';
 
 type VisualisationKind = 'choropleth' | 'categorical' | 'graduated_symbol' | 'heatmap' | 'label' | 'dot_density';
 
-export const VisualisationNode = ({ data, id }: any) => {
+export const VisualisationNode = ({ data, id, selected }: any) => {
   const updateNode = useStore((s) => s.updateNode);
   const kind: VisualisationKind = data.config?.kind ?? 'choropleth';
   const field = data.config?.field ?? '';
@@ -20,6 +20,7 @@ export const VisualisationNode = ({ data, id }: any) => {
   return (
     <FlowNodeShell
       id={id}
+      selected={selected}
       tone="purple"
       icon={Palette}
       label="Visualisation"

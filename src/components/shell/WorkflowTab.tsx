@@ -1,4 +1,4 @@
-import { ReactFlow, Controls, Background } from '@xyflow/react';
+import { ReactFlow, ReactFlowProvider, Controls, Background, ConnectionLineType } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useStore } from '../../store/useStore';
 import { InputNode } from '../Flow/InputNode';
@@ -31,6 +31,7 @@ export const WorkflowTab = () => {
   const setSelectedLayerId = useStore((s) => s.setSelectedLayerId);
 
   return (
+    <ReactFlowProvider>
     <div className="flex h-full min-h-0">
       <NodePalette />
       <div className="min-w-0 flex-1">
@@ -58,6 +59,15 @@ export const WorkflowTab = () => {
             }}
             nodeTypes={nodeTypes}
             fitView
+            fitViewOptions={{ maxZoom: 1, padding: 0.25 }}
+            minZoom={0.25}
+            connectionLineType={ConnectionLineType.SmoothStep}
+            connectionRadius={36}
+            snapToGrid
+            snapGrid={[12, 12]}
+            // Deletion is owned by useKeyboardShortcuts (scoped to drawer visibility);
+            // React Flow's global delete key would fire even when the canvas is hidden.
+            deleteKeyCode={null}
             className="h-full bg-background"
           >
             <Background gap={24} size={1} />
@@ -66,5 +76,6 @@ export const WorkflowTab = () => {
         </ErrorBoundary>
       </div>
     </div>
+    </ReactFlowProvider>
   );
 };

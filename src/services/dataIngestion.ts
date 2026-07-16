@@ -1,5 +1,6 @@
 import { duckdbService } from './duckdb';
 import { useStore } from '../store/useStore';
+import { nextNodePosition } from '../utils/nodePlacement';
 
 const escapeSqlString = (value: string) => value.replace(/'/g, "''");
 
@@ -35,7 +36,7 @@ export const ingestFile = async (
     addNode({
       id: nodeId,
       type: 'input',
-      position: options.position ?? { x: 100, y: 100 },
+      position: options.position ?? nextNodePosition(useStore.getState().nodes),
       data: { label: 'Data Source', type: 'input', config: {} },
     });
   }

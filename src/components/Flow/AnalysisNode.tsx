@@ -9,7 +9,7 @@ import { TypeaheadSelect } from './TypeaheadSelect';
 
 const EPSG_PATTERN = /^EPSG:\d{1,6}$/i;
 
-export const AnalysisNode = ({ data, id }: any) => {
+export const AnalysisNode = ({ data, id, selected }: any) => {
   const updateNode = useStore((s) => s.updateNode);
   const operation = data.config?.operation || 'ST_Buffer';
   const distance = data.config?.distance ?? 100;
@@ -55,6 +55,7 @@ export const AnalysisNode = ({ data, id }: any) => {
   return (
     <FlowNodeShell
       id={id}
+      selected={selected}
       tone="purple"
       icon={Zap}
       label="Spatial Op"
@@ -129,18 +130,26 @@ export const AnalysisNode = ({ data, id }: any) => {
             {errors.map((err, i) => <div key={i}>{err}</div>)}
           </div>
         )}
-      <div className="absolute -left-1.5 top-1/2 -translate-y-1/2 flex flex-col gap-6">
-        <div className="relative">
-          <Handle type="target" id="input-0" position={Position.Left} className={nodeHandleClass('purple')} />
-          {requiredInputCount > 1 && <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 uppercase">A</span>}
-        </div>
-        {requiredInputCount > 1 && (
-          <div className="relative">
-            <Handle type="target" id="input-1" position={Position.Left} className={nodeHandleClass('purple')} />
-            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 uppercase">B</span>
-          </div>
-        )}
-      </div>
+      <Handle
+        type="target"
+        id="input-0"
+        position={Position.Left}
+        className={nodeHandleClass('purple')}
+        style={requiredInputCount > 1 ? { top: '38%' } : undefined}
+      />
+      {requiredInputCount > 1 && (
+        <>
+          <Handle
+            type="target"
+            id="input-1"
+            position={Position.Left}
+            className={nodeHandleClass('purple')}
+            style={{ top: '62%' }}
+          />
+          <span className="pointer-events-none absolute left-1.5 top-[38%] -translate-y-1/2 text-[10px] font-bold uppercase text-slate-300">A</span>
+          <span className="pointer-events-none absolute left-1.5 top-[62%] -translate-y-1/2 text-[10px] font-bold uppercase text-slate-300">B</span>
+        </>
+      )}
       <Handle type="source" position={Position.Right} className={nodeHandleClass('purple')} />
     </FlowNodeShell>
   );

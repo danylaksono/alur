@@ -9,7 +9,7 @@ import { materializeWorkflowMapLayer } from '../../services/layerMaterialization
 type OutputMode = 'visualize' | 'export';
 type ExportFormat = 'geojson' | 'csv' | 'json' | 'parquet';
 
-export const OutputNode = ({ data, id }: any) => {
+export const OutputNode = ({ data, id, selected }: any) => {
   const setSelectedNodeId = useStore((s) => s.setSelectedNodeId);
   const addMapLayer = useStore((s) => s.addMapLayer);
   const addChatMessage = useStore((s) => s.addChatMessage);
@@ -95,6 +95,7 @@ export const OutputNode = ({ data, id }: any) => {
   return (
     <FlowNodeShell
       id={id}
+      selected={selected}
       tone="emerald"
       icon={isExportMode ? FileArchive : Eye}
       label={isExportMode ? 'Export Output' : 'Map Output'}

@@ -7,7 +7,7 @@ import { cn } from '../../utils/cn';
 import { FlowNodeShell, fieldLabelClass, inputClass, nodeHandleClass } from './FlowNodeShell';
 import { TypeaheadSelect } from './TypeaheadSelect';
 
-export const AggregateNode = ({ data, id }: any) => {
+export const AggregateNode = ({ data, id, selected }: any) => {
   const updateNode = useStore((s) => s.updateNode);
   const edges = useStore((s) => s.edges);
   const nodeSchemas = useStore((s) => s.nodeSchemas);
@@ -49,6 +49,7 @@ export const AggregateNode = ({ data, id }: any) => {
   return (
     <FlowNodeShell
       id={id}
+      selected={selected}
       tone="orange"
       icon={Layers}
       label="Spatial Aggregate"
