@@ -258,3 +258,49 @@ describe('buildUpToSQL', () => {
     expect(() => buildUpToSQL(nodes, [], 'nonexistent')).toThrow('does not exist');
   });
 });
+
+describe('join node', () => {
+  const joinNodes = (config: Record<string, unknown>): { nodes: GISNode[]; edges: Edge[] } => ({
+    nodes: [
+      makeNode({ id: 'left', data: { label: 'Left', type: 'input', config: { tableName: 'points' } } }),
+      makeNode({ id: 'right', position: { x: 0, y: 200 }, data: { label: 'Right', type: 'input', config: { tableName: 'polygons' } } }),
+      makeNode({ id: 'jn', position: { x: 300, y: 100 }, data: { label: 'Join', type: 'join', config } }),
+    ],
+    edges: [
+      { id: 'e1', source: 'left', target: 'jn', targetHandle: 'input-0', type: 'smoothstep' },
+      { id: 'e2', source: 'right', target: 'jn', targetHandle: 'input-1', type: 'smoothstep' },
+    ],
+  });
+
+  it('compiles a spatial join with renamed right-side columns', () => {
+    const { nodes, edges } = joinNodes({ mode: 'spatial', predicate: 'ST_Intersects', joinType: 'left' });
+    const result = buildWorkflowSQL(nodes, edges);
+    expect(result.sql).toContain('LEFT JOIN');
+    expect(result.sql).toContain(`COLUMNS('(.*)') AS 'r_\\1'`);
+    expect(result.sql).toContain('ST_Intersects(a."geometry", r."r_geometry")');
+    expect(result.sql).toContain('EXCLUDE ("r_geometry")');
+    expect(result.geomColumn).toBe('geometry');
+  });
+
+  it('compiles an attribute join on key columns', () => {
+    const { nodes, edges } = joinNodes({ mode: 'attribute', joinType: 'inner', leftKey: 'ward_code', rightKey: 'code' });
+    const result = buildWorkflowSQL(nodes, edges);
+    expect(result.sql).toContain('JOIN');
+    expect(result.sql).not.toContain('LEFT JOIN');
+    expect(result.sql).toContain('a."ward_code" = r."r_code"');
+  });
+
+  it('compiles a within-distance join with the configured distance', () => {
+    const { nodes, edges } = joinNodes({ mode: 'spatial', predicate: 'ST_DWithin', distance: 250 });
+    const result = buildWorkflowSQL(nodes, edges);
+    expect(result.sql).toContain('ST_DWithin(a."geometry", r."r_geometry", 250)');
+  });
+
+  it('throws without two inputs or missing attribute keys', () => {
+    const { nodes, edges } = joinNodes({ mode: 'attribute' });
+    expect(() => buildWorkflowSQL(nodes, edges)).toThrow('needs both key fields');
+
+    const single = joinNodes({ mode: 'spatial' });
+    expect(() => buildWorkflowSQL(single.nodes, [single.edges[0]])).toThrow('requires 2 input connections');
+  });
+});

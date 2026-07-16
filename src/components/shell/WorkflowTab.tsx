@@ -6,6 +6,7 @@ import { AnalysisNode } from '../Flow/AnalysisNode';
 import { AttributeNode } from '../Flow/AttributeNode';
 import { AggregateNode } from '../Flow/AggregateNode';
 import { FilterNode } from '../Flow/FilterNode';
+import { JoinNode } from '../Flow/JoinNode';
 import { OutputNode } from '../Flow/OutputNode';
 import { VisualisationNode } from '../Flow/VisualisationNode';
 import { ErrorBoundary } from '../ErrorBoundary';
@@ -17,6 +18,7 @@ const nodeTypes = {
   attribute: AttributeNode,
   aggregate: AggregateNode,
   filter: FilterNode,
+  join: JoinNode,
   visualisation: VisualisationNode,
   output: OutputNode,
 };

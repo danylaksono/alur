@@ -40,8 +40,36 @@ export const CATEGORICAL_PALETTE = [
   '#0f766e',
 ];
 
+/**
+ * 3×3 bivariate palettes, row-major: rows = field Y classes (low→high),
+ * columns = field X classes (low→high). After Joshua Stevens' bivariate sets.
+ */
+export const BIVARIATE_PALETTES: Palette[] = [
+  {
+    id: 'teal-purple',
+    name: 'Teal · Purple',
+    colors: [
+      '#e8e8e8', '#ace4e4', '#5ac8c8',
+      '#dfb0d6', '#a5add3', '#5698b9',
+      '#be64ac', '#8c62aa', '#3b4994',
+    ],
+  },
+  {
+    id: 'blue-red',
+    name: 'Blue · Red',
+    colors: [
+      '#e8e8e8', '#b0d5df', '#64acbe',
+      '#e4acac', '#ad9ea5', '#627f8c',
+      '#c85a5a', '#985356', '#574249',
+    ],
+  },
+];
+
 export const getPalette = (id: string, fallback = SEQUENTIAL_PALETTES[0]) =>
   SEQUENTIAL_PALETTES.find((palette) => palette.id === id) || fallback;
+
+export const getBivariatePalette = (id: string, fallback = BIVARIATE_PALETTES[0]) =>
+  BIVARIATE_PALETTES.find((palette) => palette.id === id) || fallback;
 
 export const fitPaletteToClassCount = (palette: string[], classCount: number) => {
   if (classCount <= palette.length) return palette.slice(0, classCount);

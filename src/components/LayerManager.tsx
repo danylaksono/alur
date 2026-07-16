@@ -25,6 +25,7 @@ export const LayerManager = ({ onEditStyle }: { onEditStyle?: (layerId: string) 
   const nodes = useStore((s) => s.nodes);
   const selectedLayerId = useStore((s) => s.selectedLayerId);
   const visualAnalytics = useStore((s) => s.visualAnalytics);
+  const restylingLayerIds = useStore((s) => s.restylingLayerIds);
   const selectLayer = useStore((s) => s.selectLayer);
   const focusLayer = useStore((s) => s.focusLayer);
   const toggleMapLayerVisibility = useStore((s) => s.toggleMapLayerVisibility);
@@ -131,6 +132,12 @@ export const LayerManager = ({ onEditStyle }: { onEditStyle?: (layerId: string) 
                         </span>
                       </span>
                     </button>
+                    {restylingLayerIds[layer.id] && (
+                      <span
+                        className="h-3 w-3 shrink-0 animate-spin rounded-full border border-slate-400 border-t-transparent"
+                        title="Rendering layer…"
+                      />
+                    )}
                     <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500">
                       {layer.visualisation?.kind || layer.featureCount.toLocaleString()}
                     </span>

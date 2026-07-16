@@ -92,7 +92,25 @@ class DuckDBService {
     private spatialLoaded = false;
     private h3Loaded = false;
 
+    private initPromise: Promise<void> | null = null;
+
+    /**
+     * Idempotent + concurrency-safe: React StrictMode double-mounts effects, and
+     * two overlapping init() calls used to create TWO DuckDB workers with
+     * registrations and queries split between them ("No files found" on ~50%
+     * of uploads). A single shared promise guarantees one worker.
+     */
     async init() {
+        if (!this.initPromise) {
+            this.initPromise = this.doInit().catch((err) => {
+                this.initPromise = null;
+                throw err;
+            });
+        }
+        return this.initPromise;
+    }
+
+    private async doInit() {
         if (this.initialized) return;
 
         const bundle = await duckdb.selectBundle(MANUAL_BUNDLES);
@@ -112,6 +130,12 @@ class DuckDBService {
         }
 
         try {
+            // NOTE: h3 lives in the community repo; `INSTALL h3 FROM community` does
+            // load it, but in duckdb-wasm 1.28 a loaded community extension breaks
+            // registerFileHandle/registerFileBuffer for the rest of the session
+            // ("No files found that match the pattern" on every upload). Keep the
+            // core-repo install (a harmless no-op today) until upstream fixes that;
+            // hexbin styling uses hexbinService's pure-SQL/JS binning instead.
             await this.conn.query(`INSTALL h3; LOAD h3;`);
             this.h3Loaded = true;
         } catch {

@@ -28,7 +28,7 @@ const toRows = (layer: { id: string; geojson: GeoJSON.FeatureCollection }) =>
 const normalizeRows = (rows: any[]) =>
   rows.map((row) => (typeof row?.toJSON === 'function' ? row.toJSON() : row));
 
-const analyticsTableForLayer = async (layer: AnalyticsLayer) => {
+export const analyticsTableForLayer = async (layer: AnalyticsLayer) => {
   if (layer.source?.kind === 'duckdb-table' || layer.source?.kind === 'duckdb-query') {
     // The map renders from this table and promotes __ymn_mvt_id as its feature ID.
     // Querying it here keeps table row identity exactly aligned with MapLibre.

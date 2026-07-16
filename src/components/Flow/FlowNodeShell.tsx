@@ -3,10 +3,11 @@ import { type LucideIcon } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import { NodeActions } from './NodeActions';
 
-type NodeTone = 'blue' | 'purple' | 'slate' | 'orange' | 'amber' | 'emerald';
+type NodeTone = 'blue' | 'purple' | 'slate' | 'orange' | 'amber' | 'emerald' | 'cyan';
 
 const toneStyles: Record<NodeTone, { bar: string; icon: string; handle: string }> = {
   blue: { bar: 'bg-blue-400', icon: 'text-blue-600 bg-blue-50', handle: '!bg-blue-500' },
+  cyan: { bar: 'bg-cyan-400', icon: 'text-cyan-600 bg-cyan-50', handle: '!bg-cyan-500' },
   purple: { bar: 'bg-purple-400', icon: 'text-purple-600 bg-purple-50', handle: '!bg-purple-500' },
   slate: { bar: 'bg-slate-400', icon: 'text-slate-600 bg-slate-100', handle: '!bg-slate-500' },
   orange: { bar: 'bg-orange-400', icon: 'text-orange-600 bg-orange-50', handle: '!bg-orange-500' },

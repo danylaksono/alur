@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useReactFlow } from '@xyflow/react';
-import { Calculator, Database, Eye, Filter, Layers, Loader2, Palette, Plus, Search, Zap } from 'lucide-react';
+import { Calculator, Database, Eye, Filter, GitMerge, Layers, Loader2, Palette, Plus, Search, Zap } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { buildWorkflowSQL } from '../../utils/workflowEngine';
 import { nextNodePosition } from '../../utils/nodePlacement';
@@ -15,9 +15,10 @@ const colorStyles: Record<string, { hoverBg: string; hoverBorder: string; iconBg
   orange: { hoverBg: 'hover:bg-orange-50', hoverBorder: 'hover:border-orange-200', iconBg: 'bg-orange-50', iconHoverBg: 'group-hover:bg-orange-100' },
   amber: { hoverBg: 'hover:bg-amber-50', hoverBorder: 'hover:border-amber-200', iconBg: 'bg-amber-50', iconHoverBg: 'group-hover:bg-amber-100' },
   emerald: { hoverBg: 'hover:bg-emerald-50', hoverBorder: 'hover:border-emerald-200', iconBg: 'bg-emerald-50', iconHoverBg: 'group-hover:bg-emerald-100' },
+  cyan: { hoverBg: 'hover:bg-cyan-50', hoverBorder: 'hover:border-cyan-200', iconBg: 'bg-cyan-50', iconHoverBg: 'group-hover:bg-cyan-100' },
 };
 
-type NodeType = 'input' | 'analysis' | 'attribute' | 'filter' | 'aggregate' | 'visualisation' | 'output';
+type NodeType = 'input' | 'analysis' | 'attribute' | 'filter' | 'aggregate' | 'join' | 'visualisation' | 'output';
 
 const nodeCards: Array<{ type: NodeType; icon: typeof Database; title: string; desc: string; color: string; config?: Record<string, unknown> }> = [
   { type: 'input', icon: Database, title: 'Data Input', desc: 'Load Parquet or CSV', color: 'blue' },
@@ -25,6 +26,7 @@ const nodeCards: Array<{ type: NodeType; icon: typeof Database; title: string; d
   { type: 'attribute', icon: Calculator, title: 'Attribute Calc', desc: 'Add computed columns', color: 'slate' },
   { type: 'filter', icon: Filter, title: 'Filter', desc: 'SQL WHERE conditions', color: 'amber' },
   { type: 'aggregate', icon: Layers, title: 'Aggregate', desc: 'GROUP BY, dissolve', color: 'orange' },
+  { type: 'join', icon: GitMerge, title: 'Join', desc: 'Attribute or spatial join', color: 'cyan' },
   { type: 'visualisation', icon: Palette, title: 'Visualisation', desc: 'Attach a reusable map style', color: 'purple', config: { kind: 'choropleth', method: 'quantile', classCount: 5, paletteId: 'teal' } },
   { type: 'output', icon: Eye, title: 'Layer Output', desc: 'Visualize or export the result', color: 'emerald', config: { outputMode: 'visualize' } },
 ];
@@ -35,6 +37,7 @@ const nodeLabels: Record<NodeType, string> = {
   attribute: 'Attribute Op',
   filter: 'Filter',
   aggregate: 'Aggregate',
+  join: 'Join',
   visualisation: 'Visualisation',
   output: 'Layer Output',
 };

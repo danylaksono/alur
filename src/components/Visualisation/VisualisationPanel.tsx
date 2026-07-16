@@ -9,14 +9,21 @@ import {
   buildHeatmapVisualisation,
   buildLabelVisualisation,
   buildDotDensityVisualisation,
+  buildExtrusionVisualisation,
+  buildGraduatedLineVisualisation,
+  buildHexbinVisualisation,
+  buildBivariateVisualisation,
   buildLegend,
+  profileGeoJsonField,
   type FieldProfile,
 } from '../../utils/classification';
+import type { HexbinAggregate, VisualisationKind } from '../../types/visualisation';
 import { geometryKindForLayer } from '../../utils/mapStyleCompiler';
-import { getPalette, SEQUENTIAL_PALETTES } from '../../utils/palettes';
+import { getPalette, getBivariatePalette, BIVARIATE_PALETTES, SEQUENTIAL_PALETTES } from '../../utils/palettes';
 import { cn } from '../../utils/cn';
 import { queryLayerFieldProfile, queryLayerTemporalRange, type TemporalRange } from '../../services/visualAnalyticsService';
 import { generateDotDensityGeoJSON } from '../../services/dotDensityService';
+import { generateHexbinGeoJSON } from '../../services/hexbinService';
 import { TemporalSlider } from './TemporalSlider';
 
 const excludedFields = new Set(['geojson', 'geometry', 'geom']);
@@ -132,16 +139,25 @@ export const VisualisationPanel = ({
   const removeMapLayer = useStore((s) => s.removeMapLayer);
   const visualAnalytics = useStore((s) => s.visualAnalytics);
   const setLayerFilters = useStore((s) => s.setLayerFilters);
+  const addToast = useStore((s) => s.addToast);
+  const isRestyling = useStore((s) => Boolean(selectedLayer && s.restylingLayerIds[selectedLayer.id]));
 
   const fields = useMemo(() => fieldNamesForLayer(selectedLayer), [selectedLayer?.id, selectedLayer?.source]);
   const temporalCandidates = useMemo(() => temporalFieldsForLayer(selectedLayer), [selectedLayer?.id, selectedLayer?.source]);
   const fieldsKey = fields.join('|');
   const geometryKind = useMemo(() => selectedLayer ? geometryKindForLayer(selectedLayer) : null, [selectedLayer]);
   const [field, setField] = useState('');
-  const [kind, setKind] = useState<'simple' | 'choropleth' | 'categorical' | 'graduated_symbol' | 'heatmap' | 'label' | 'dot_density'>('simple');
+  const [kind, setKind] = useState<VisualisationKind>('simple');
   const [method, setMethod] = useState<'equal_interval' | 'quantile'>('quantile');
   const [classCount, setClassCount] = useState(5);
   const [paletteId, setPaletteId] = useState(SEQUENTIAL_PALETTES[0].id);
+  const [heightMultiplier, setHeightMultiplier] = useState(1);
+  const [fieldY, setFieldY] = useState('');
+  const [profileY, setProfileY] = useState<FieldProfile | null>(null);
+  const [bivariatePaletteId, setBivariatePaletteId] = useState(BIVARIATE_PALETTES[0].id);
+  const [hexCellSize, setHexCellSize] = useState(500);
+  const [hexAggregate, setHexAggregate] = useState<HexbinAggregate>('count');
+  const [hexbinGenerating, setHexbinGenerating] = useState(false);
   const [temporalField, setTemporalField] = useState('');
   const [temporalStart, setTemporalStart] = useState('');
   const [temporalEnd, setTemporalEnd] = useState('');
@@ -176,12 +192,25 @@ export const VisualisationPanel = ({
       return;
     }
 
-    if (vis?.kind === 'choropleth' || vis?.kind === 'categorical' || vis?.kind === 'graduated_symbol' || vis?.kind === 'heatmap' || vis?.kind === 'label' || vis?.kind === 'dot_density') {
+    if (vis) {
       setKind(vis.kind);
-      setField('field' in vis && vis.field ? vis.field : fields[0] || '');
+      if (vis.kind === 'bivariate') {
+        setField(vis.fieldX);
+        setFieldY(vis.fieldY);
+      } else {
+        setField('field' in vis && vis.field ? vis.field : fields[0] || '');
+      }
       if (vis.kind === 'choropleth') {
         setMethod(vis.method === 'manual' ? 'quantile' : vis.method);
         setClassCount(vis.classCount);
+      }
+      if (vis.kind === 'extrusion') {
+        setClassCount(vis.classCount);
+        setHeightMultiplier(vis.heightMultiplier);
+      }
+      if (vis.kind === 'hexbin') {
+        setHexCellSize(vis.cellSize);
+        setHexAggregate(vis.aggregate);
       }
       return;
     }
@@ -206,6 +235,23 @@ export const VisualisationPanel = ({
       });
     return () => { cancelled = true; };
   }, [selectedLayer?.id, selectedLayer?.source, field]);
+
+  // Second-axis profile for bivariate styling.
+  useEffect(() => {
+    if (!selectedLayer || kind !== 'bivariate' || !fieldY) {
+      setProfileY(null);
+      return;
+    }
+    let cancelled = false;
+    queryLayerFieldProfile({ layer: selectedLayer, column: fieldY })
+      .then((result) => {
+        if (!cancelled) setProfileY(result);
+      })
+      .catch(() => {
+        if (!cancelled) setProfileY(null);
+      });
+    return () => { cancelled = true; };
+  }, [selectedLayer?.id, selectedLayer?.source, kind, fieldY]);
   const hasActiveStyle = Boolean(selectedLayer?.visualisation || selectedLayer?.legend);
 
   const canApply = Boolean(
@@ -216,7 +262,11 @@ export const VisualisationPanel = ({
       (kind === 'graduated_symbol' && geometryKind === 'point' && profile?.kind === 'numeric') ||
       (kind === 'heatmap' && geometryKind === 'point') ||
       (kind === 'label' && field) ||
-      (kind === 'dot_density' && geometryKind === 'polygon' && Boolean(selectedLayer.geojson) && profile?.kind === 'numeric')),
+      (kind === 'dot_density' && geometryKind === 'polygon' && Boolean(selectedLayer.geojson) && profile?.kind === 'numeric') ||
+      (kind === 'extrusion' && geometryKind === 'polygon' && profile?.kind === 'numeric') ||
+      (kind === 'graduated_line' && geometryKind === 'line' && profile?.kind === 'numeric') ||
+      (kind === 'hexbin' && geometryKind === 'point' && (hexAggregate === 'count' || profile?.kind === 'numeric')) ||
+      (kind === 'bivariate' && profile?.kind === 'numeric' && profileY?.kind === 'numeric')),
   );
 
   const [dotDensityGenerating, setDotDensityGenerating] = useState(false);
@@ -296,7 +346,70 @@ export const VisualisationPanel = ({
       const visualisation = buildLabelVisualisation({ field });
       updateLayerVisualisation(selectedLayer.id, visualisation, buildLegend(visualisation));
     }
-  }, [selectedLayer?.id, hasActiveStyle, field, kind, method, classCount, paletteId, canApply, profile, updateLayerVisualisation, clearLayerVisualisation]);
+
+    if (kind === 'extrusion' && profile.kind === 'numeric') {
+      const visualisation = buildExtrusionVisualisation({
+        field,
+        profile,
+        classCount,
+        palette: getPalette(paletteId).colors,
+        heightMultiplier,
+      });
+      updateLayerVisualisation(selectedLayer.id, visualisation, buildLegend(visualisation));
+    }
+
+    if (kind === 'graduated_line' && profile.kind === 'numeric') {
+      const visualisation = buildGraduatedLineVisualisation({ field, profile });
+      updateLayerVisualisation(selectedLayer.id, visualisation, buildLegend(visualisation));
+    }
+
+    if (kind === 'bivariate' && profile.kind === 'numeric' && profileY?.kind === 'numeric') {
+      const visualisation = buildBivariateVisualisation({
+        fieldX: field,
+        fieldY,
+        profileX: profile,
+        profileY,
+        palette: getBivariatePalette(bivariatePaletteId).colors,
+      });
+      updateLayerVisualisation(selectedLayer.id, visualisation, buildLegend(visualisation));
+    }
+
+    if (kind === 'hexbin') {
+      const visualisation = buildHexbinVisualisation({ field, aggregate: hexAggregate, cellSize: hexCellSize });
+      updateLayerVisualisation(selectedLayer.id, visualisation, buildLegend(visualisation));
+
+      const hexLayerId = `${selectedLayer.id}-hexbin`;
+      const existingHexLayer = mapLayers.find((l) => l.id === hexLayerId);
+      if (existingHexLayer) return;
+
+      setHexbinGenerating(true);
+      generateHexbinGeoJSON(selectedLayer, { cellSize: visualisation.cellSize, aggregate: hexAggregate, field: visualisation.field })
+        .then((hexGeojson) => {
+          if (!hexGeojson.features.length) return;
+          const valueProfile = profileGeoJsonField(hexGeojson.features, 'value');
+          const hexVis = valueProfile.kind === 'numeric'
+            ? buildChoroplethVisualisation({ field: 'value', profile: valueProfile, method: 'quantile', classCount: 5, palette: getPalette(paletteId).colors })
+            : undefined;
+          addMapLayer({
+            id: hexLayerId,
+            name: `${selectedLayer.name} (hexbin)`,
+            geojson: hexGeojson,
+            visible: selectedLayer.visible,
+            sourceNodeId: selectedLayer.sourceNodeId,
+            sourceKind: 'h3',
+            opacity: 0.75,
+            visualisation: hexVis,
+            legend: hexVis ? buildLegend(hexVis) : undefined,
+          });
+          updateMapLayer(selectedLayer.id, { hexbinLayerId: hexLayerId });
+        })
+        .catch((err: any) => {
+          console.error('Hexbin generation failed:', err);
+          addToast({ type: 'error', message: `Hexbin failed: ${err?.message || err}` });
+        })
+        .finally(() => setHexbinGenerating(false));
+    }
+  }, [selectedLayer?.id, hasActiveStyle, field, fieldY, kind, method, classCount, paletteId, bivariatePaletteId, heightMultiplier, hexAggregate, hexCellSize, canApply, profile, profileY, updateLayerVisualisation, clearLayerVisualisation]);
 
   const activeFilters = selectedLayer ? visualAnalytics.layers[selectedLayer.id]?.filters || [] : [];
   const activeFilterKeys = new Set(activeFilters.map(visualFilterKey));
@@ -342,6 +455,12 @@ export const VisualisationPanel = ({
             <span className="truncate normal-case text-xs font-semibold text-slate-700">
               {selectedLayer ? `Style · ${selectedLayer.name}` : 'Visualise'}
             </span>
+            {selectedLayer && isRestyling && (
+              <span
+                className="h-3 w-3 shrink-0 animate-spin rounded-full border border-slate-400 border-t-transparent"
+                title="Rendering layer…"
+              />
+            )}
           </h3>
           {selectedLayer?.visualisation && (
             <button
@@ -349,7 +468,10 @@ export const VisualisationPanel = ({
               onClick={() => {
                 if (!selectedLayer) return;
                 if (selectedLayer.dotDensityLayerId) removeMapLayer(selectedLayer.dotDensityLayerId);
-                if (selectedLayer.dotDensityLayerId) updateMapLayer(selectedLayer.id, { dotDensityLayerId: undefined });
+                if (selectedLayer.hexbinLayerId) removeMapLayer(selectedLayer.hexbinLayerId);
+                if (selectedLayer.dotDensityLayerId || selectedLayer.hexbinLayerId) {
+                  updateMapLayer(selectedLayer.id, { dotDensityLayerId: undefined, hexbinLayerId: undefined });
+                }
                 clearLayerVisualisation(selectedLayer.id);
               }}
               className="rounded-md border border-slate-200 bg-white p-1.5 text-slate-500 hover:bg-slate-50"
@@ -388,14 +510,18 @@ export const VisualisationPanel = ({
                   <option value="simple">Raw geometry</option>
                   <option value="choropleth">Choropleth</option>
                   <option value="categorical">Categories</option>
+                  <option value="bivariate">Bivariate</option>
                   {geometryKind === 'point' && <option value="graduated_symbol">Symbols</option>}
                   {geometryKind === 'point' && <option value="heatmap">Heatmap</option>}
+                  {geometryKind === 'point' && <option value="hexbin">Hexbin</option>}
+                  {geometryKind === 'polygon' && <option value="extrusion">3D extrusion</option>}
                   {geometryKind === 'polygon' && selectedLayer.geojson && <option value="dot_density">Dot density</option>}
+                  {geometryKind === 'line' && <option value="graduated_line">Line width</option>}
                   <option value="label">Labels</option>
                 </select>
               </label>
               <label className="space-y-1">
-                <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Field</span>
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{kind === 'bivariate' ? 'Field X' : 'Field'}</span>
                 <select
                   value={field}
                   onChange={(event) => setField(event.target.value)}
@@ -408,7 +534,7 @@ export const VisualisationPanel = ({
               </label>
             </div>
 
-            {kind !== 'simple' && (kind === 'choropleth' || kind === 'heatmap') && (
+            {(kind === 'choropleth' || kind === 'heatmap' || kind === 'extrusion' || kind === 'hexbin') && (
               <div className="grid grid-cols-3 gap-2">
                 {kind === 'choropleth' && <label className="space-y-1">
                   <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Method</span>
@@ -421,7 +547,7 @@ export const VisualisationPanel = ({
                     <option value="equal_interval">Equal interval</option>
                   </select>
                 </label>}
-                {kind === 'choropleth' && <label className="space-y-1">
+                {(kind === 'choropleth' || kind === 'extrusion') && <label className="space-y-1">
                   <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Classes</span>
                   <input
                     type="number"
@@ -431,6 +557,44 @@ export const VisualisationPanel = ({
                     onChange={(event) => setClassCount(Number(event.target.value))}
                     className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
                   />
+                </label>}
+                {kind === 'extrusion' && <label className="space-y-1">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Height ×</span>
+                  <input
+                    type="number"
+                    min={0.01}
+                    step={0.5}
+                    value={heightMultiplier}
+                    onChange={(event) => setHeightMultiplier(Number(event.target.value) || 1)}
+                    className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                  />
+                </label>}
+                {kind === 'hexbin' && <label className="space-y-1">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Cell size</span>
+                  <select
+                    value={hexCellSize}
+                    onChange={(event) => setHexCellSize(Number(event.target.value))}
+                    className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                  >
+                    <option value={5000}>5 km</option>
+                    <option value={2000}>2 km</option>
+                    <option value={1000}>1 km</option>
+                    <option value={500}>500 m</option>
+                    <option value={250}>250 m</option>
+                    <option value={100}>100 m</option>
+                  </select>
+                </label>}
+                {kind === 'hexbin' && <label className="space-y-1">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Aggregate</span>
+                  <select
+                    value={hexAggregate}
+                    onChange={(event) => setHexAggregate(event.target.value as HexbinAggregate)}
+                    className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                  >
+                    <option value="count">Count</option>
+                    <option value="sum">Sum of field</option>
+                    <option value="avg">Mean of field</option>
+                  </select>
                 </label>}
                 <label className="space-y-1">
                   <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Palette</span>
@@ -445,6 +609,96 @@ export const VisualisationPanel = ({
                   </select>
                 </label>
               </div>
+            )}
+
+            {kind === 'bivariate' && (
+              <div className="grid grid-cols-[1fr_1fr_auto] items-end gap-2">
+                <label className="space-y-1">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Field Y</span>
+                  <select
+                    value={fieldY}
+                    onChange={(event) => setFieldY(event.target.value)}
+                    className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                  >
+                    <option value="">Choose field…</option>
+                    {fields.filter((name) => name !== field).map((name) => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="space-y-1">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Palette</span>
+                  <select
+                    value={bivariatePaletteId}
+                    onChange={(event) => setBivariatePaletteId(event.target.value)}
+                    className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                  >
+                    {BIVARIATE_PALETTES.map((palette) => (
+                      <option key={palette.id} value={palette.id}>{palette.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <div
+                  className="grid shrink-0 grid-cols-3 gap-px rounded border border-slate-200 p-px"
+                  title="Palette preview: X →, Y ↑"
+                >
+                  {[2, 1, 0].flatMap((row) =>
+                    [0, 1, 2].map((column) => (
+                      <span
+                        key={`${row}-${column}`}
+                        className="h-2.5 w-2.5"
+                        style={{ backgroundColor: getBivariatePalette(bivariatePaletteId).colors[row * 3 + column] }}
+                      />
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+
+            {kind === 'hexbin' && (
+              <button
+                type="button"
+                disabled={hexbinGenerating || !canApply}
+                onClick={() => {
+                  if (!selectedLayer) return;
+                  const hexLayerId = `${selectedLayer.id}-hexbin`;
+                  const existing = mapLayers.find((l) => l.id === hexLayerId);
+                  if (existing) removeMapLayer(hexLayerId);
+                  setHexbinGenerating(true);
+                  generateHexbinGeoJSON(selectedLayer, {
+                    cellSize: hexCellSize,
+                    aggregate: hexAggregate,
+                    field: hexAggregate === 'count' ? undefined : field,
+                  })
+                    .then((hexGeojson) => {
+                      if (!hexGeojson.features.length) return;
+                      const valueProfile = profileGeoJsonField(hexGeojson.features, 'value');
+                      const hexVis = valueProfile.kind === 'numeric'
+                        ? buildChoroplethVisualisation({ field: 'value', profile: valueProfile, method: 'quantile', classCount: 5, palette: getPalette(paletteId).colors })
+                        : undefined;
+                      addMapLayer({
+                        id: hexLayerId,
+                        name: `${selectedLayer.name} (hexbin)`,
+                        geojson: hexGeojson,
+                        visible: selectedLayer.visible,
+                        sourceNodeId: selectedLayer.sourceNodeId,
+                        sourceKind: 'h3',
+                        opacity: 0.75,
+                        visualisation: hexVis,
+                        legend: hexVis ? buildLegend(hexVis) : undefined,
+                      });
+                      updateMapLayer(selectedLayer.id, { hexbinLayerId: hexLayerId });
+                    })
+                    .catch((err: any) => {
+                      console.error('Hexbin generation failed:', err);
+                      addToast({ type: 'error', message: `Hexbin failed: ${err?.message || err}` });
+                    })
+                    .finally(() => setHexbinGenerating(false));
+                }}
+                className="flex h-7 w-full items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-2 text-[11px] font-semibold uppercase tracking-wide text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+              >
+                {hexbinGenerating ? 'Generating…' : 'Regenerate hexbins'}
+              </button>
             )}
 
             {kind !== 'simple' && kind === 'dot_density' && (
@@ -597,9 +851,15 @@ export const VisualisationPanel = ({
                       ? 'Heatmaps require point layers.'
                       : kind === 'label'
                         ? 'Choose a text field.'
-                        : kind === 'dot_density'
+                        : kind === 'dot_density' || kind === 'extrusion'
                           ? 'Pick a numeric field on a polygon layer.'
-                          : 'Choose a categorical field.'}
+                          : kind === 'graduated_line'
+                            ? 'Pick a numeric field on a line layer.'
+                            : kind === 'hexbin'
+                              ? 'Hexbins require a point layer (and a numeric field for sum/mean).'
+                              : kind === 'bivariate'
+                                ? 'Pick two numeric fields (X and Y).'
+                                : 'Choose a categorical field.'}
                 </div>
               )}
             </div>}

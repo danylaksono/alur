@@ -13,6 +13,10 @@ const legendKindLabel: Record<LegendSpec['kind'], string> = {
   heatmap: 'Heatmap',
   label: 'Labels',
   dot_density: 'Dots',
+  extrusion: '3D',
+  graduated_line: 'Width',
+  hexbin: 'Hexbin',
+  bivariate: 'Bivariate',
 };
 
 export const LegendControl = ({
@@ -33,7 +37,9 @@ export const LegendControl = ({
         {legends.slice(0, 4).map(({ layerId, layerName, legend }) => {
           const filters = visualAnalytics.layers[layerId]?.filters || [];
           const activeKeys = new Set(filters.map(visualFilterKey));
-          const isFilterable = legend.kind === 'choropleth' || legend.kind === 'categorical';
+          const isFilterable = legend.kind === 'choropleth' || legend.kind === 'categorical' || legend.kind === 'extrusion';
+          const isBivariate = legend.kind === 'bivariate';
+          const gridItems = isBivariate ? legend.items.filter((item) => item.row !== undefined && item.column !== undefined) : [];
 
           return (
             <div key={layerId} className="space-y-1.5">
@@ -57,6 +63,32 @@ export const LegendControl = ({
                   </span>
                 </div>
               </div>
+              {isBivariate ? (
+                <div className="flex items-end gap-2 px-1 py-0.5">
+                  <div>
+                    {/* Rows top→bottom = high→low Y; columns left→right = low→high X. */}
+                    <div className="grid w-fit grid-cols-3 gap-px">
+                      {[2, 1, 0].flatMap((gridRow) =>
+                        [0, 1, 2].map((gridColumn) => {
+                          const item = gridItems.find((entry) => entry.row === gridRow && entry.column === gridColumn);
+                          return (
+                            <span
+                              key={`${gridRow}-${gridColumn}`}
+                              className="h-4 w-4"
+                              style={{ backgroundColor: item?.color || '#e2e8f0' }}
+                              title={item?.label}
+                            />
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                  <div className="min-w-0 text-[10px] leading-tight text-slate-500">
+                    <div className="truncate" title={legend.title}>{legend.title}</div>
+                    <div className="mt-0.5 text-slate-400">low → high per axis</div>
+                  </div>
+                </div>
+              ) : (
               <div className="space-y-0.5">
                 {legend.items.slice(0, MAX_ITEMS).map((item) => {
                   const itemFilter = buildLegendItemFilter(legend, item);
@@ -105,6 +137,7 @@ export const LegendControl = ({
                   </div>
                 )}
               </div>
+              )}
             </div>
           );
         })}

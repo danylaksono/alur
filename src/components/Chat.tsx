@@ -146,7 +146,7 @@ export const Chat = () => {
               type: args.type,
               position: args.position || { x: 300, y: 150 },
               data: {
-                label: args.label || (args.type === 'analysis' ? 'Spatial Op' : args.type === 'attribute' ? 'Attribute Op' : args.type === 'input' ? 'Data Source' : args.type === 'visualisation' ? 'Visualisation' : 'Map Output'),
+                label: args.label || (args.type === 'analysis' ? 'Spatial Op' : args.type === 'attribute' ? 'Attribute Op' : args.type === 'input' ? 'Data Source' : args.type === 'visualisation' ? 'Visualisation' : args.type === 'join' ? 'Join' : 'Map Output'),
                 type: args.type,
                 config: args.config || {},
               },
@@ -233,14 +233,14 @@ export const Chat = () => {
               }
               const h3Sql = `
                 WITH h3_cells AS (
-                  SELECT h3_lat_lng_to_cell(latitude, longitude, ${h3Resolution}) AS cell,
+                  SELECT h3_latlng_to_cell(latitude, longitude, ${h3Resolution}) AS cell,
                          COUNT(*) AS point_count
                   FROM "${h3SourceTable}"
                   WHERE latitude IS NOT NULL AND longitude IS NOT NULL
                   GROUP BY cell
                 )
                 SELECT cell, point_count,
-                       ST_AsGeoJSON(ST_SetSRID(h3_cell_to_boundary_geometry(cell), 4326)) AS geojson
+                       ST_AsGeoJSON(ST_GeomFromText(h3_cell_to_boundary_wkt(cell))) AS geojson
                 FROM h3_cells
               `;
               const fc = await duckdbService.getGeoJSON(h3Sql);

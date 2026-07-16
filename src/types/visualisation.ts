@@ -13,7 +13,11 @@ export type VisualisationKind =
   | 'graduated_symbol'
   | 'heatmap'
   | 'label'
-  | 'dot_density';
+  | 'dot_density'
+  | 'extrusion'
+  | 'graduated_line'
+  | 'hexbin'
+  | 'bivariate';
 
 export type LegendItem = {
   label: string;
@@ -21,6 +25,9 @@ export type LegendItem = {
   min?: number;
   max?: number;
   value?: string;
+  /** Bivariate grid position (0-2), row-major. */
+  row?: number;
+  column?: number;
 };
 
 export type LegendSpec = {
@@ -99,6 +106,55 @@ export type DotDensityVisualisation = {
   opacity: number;
 };
 
+export type ExtrusionVisualisation = {
+  kind: 'extrusion';
+  field: string;
+  method: Extract<ClassificationMethod, 'equal_interval' | 'quantile' | 'manual'>;
+  classCount: number;
+  breaks: number[];
+  palette: string[];
+  nullColor: string;
+  heightMultiplier: number;
+  opacity: number;
+};
+
+export type GraduatedLineVisualisation = {
+  kind: 'graduated_line';
+  field: string;
+  minValue: number;
+  maxValue: number;
+  minWidth: number;
+  maxWidth: number;
+  color: string;
+  opacity: number;
+};
+
+export type HexbinAggregate = 'count' | 'sum' | 'avg';
+
+export type HexbinVisualisation = {
+  kind: 'hexbin';
+  /** Field to aggregate; unused when aggregate is 'count'. */
+  field?: string;
+  aggregate: HexbinAggregate;
+  /** Hexagon radius (center→vertex) in meters. */
+  cellSize: number;
+};
+
+export type BivariateVisualisation = {
+  kind: 'bivariate';
+  fieldX: string;
+  fieldY: string;
+  /** 2 inner breaks per axis (3 classes each). */
+  breaksX: number[];
+  breaksY: number[];
+  /** 9 colors, row-major: rows = Y classes (low→high), columns = X classes (low→high). */
+  palette: string[];
+  nullColor: string;
+  opacity: number;
+  outlineColor: string;
+  outlineWidth: number;
+};
+
 export type LayerVisualisation =
   | SimpleVisualisation
   | ChoroplethVisualisation
@@ -106,4 +162,8 @@ export type LayerVisualisation =
   | GraduatedSymbolVisualisation
   | HeatmapVisualisation
   | LabelVisualisation
-  | DotDensityVisualisation;
+  | DotDensityVisualisation
+  | ExtrusionVisualisation
+  | GraduatedLineVisualisation
+  | HexbinVisualisation
+  | BivariateVisualisation;

@@ -6,10 +6,10 @@ export const llmToolDefinitions = [
       type: 'object',
       properties: {
         id: { type: 'string', description: 'Unique identifier for the node (optional).' },
-        type: { 
-          type: 'string', 
-          enum: ['input', 'analysis', 'attribute', 'aggregate', 'filter', 'visualisation', 'output'],
-          description: 'The type of node to create.' 
+        type: {
+          type: 'string',
+          enum: ['input', 'analysis', 'attribute', 'aggregate', 'filter', 'join', 'visualisation', 'output'],
+          description: 'The type of node to create. "join" joins two inputs (A=left keeps geometry, B=right attributes get an r_ prefix); connect A to input-0 and B to input-1.'
         },
         label: { type: 'string', description: 'Human-readable label for the node.' },
         position: {
@@ -31,6 +31,11 @@ export const llmToolDefinitions = [
             resultField: { type: 'string', description: 'For attribute nodes: the name of the new field.' },
             groupBy: { type: 'string', description: 'For aggregate nodes: the column name to group by.' },
             condition: { type: 'string', description: 'For filter nodes: the SQL WHERE condition (e.g. need > 10).' },
+            mode: { type: 'string', enum: ['spatial', 'attribute'], description: 'For join nodes: spatial predicate join or attribute key join.' },
+            joinType: { type: 'string', enum: ['left', 'inner'], description: 'For join nodes: left join keeps unmatched A rows.' },
+            predicate: { type: 'string', enum: ['ST_Intersects', 'ST_Within', 'ST_Contains', 'ST_DWithin'], description: 'For spatial join nodes: the predicate.' },
+            leftKey: { type: 'string', description: 'For attribute join nodes: key column on input A.' },
+            rightKey: { type: 'string', description: 'For attribute join nodes: key column on input B.' },
             kind: { type: 'string', enum: ['choropleth', 'categorical', 'graduated_symbol', 'heatmap', 'label', 'dot_density'], description: 'For visualisation nodes: style type.' },
             field: { type: 'string', description: 'For visualisation nodes: field to style by.' },
             method: { type: 'string', enum: ['quantile', 'equal_interval'], description: 'For choropleth visualisation nodes: classification method.' },

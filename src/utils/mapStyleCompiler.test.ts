@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MapLayer } from '../store/useStore';
-import { compileCategoricalColorExpression, compileChoroplethColorExpression, compileLayerStyle } from './mapStyleCompiler';
+import { compileBivariateColorExpression, compileCategoricalColorExpression, compileChoroplethColorExpression, compileLayerStyle } from './mapStyleCompiler';
 
 const layer = (geometryType: GeoJSON.Geometry['type'], patch: Partial<MapLayer> = {}): MapLayer => ({
   id: 'layer-a',
@@ -91,5 +91,69 @@ describe('map style compiler', () => {
 
     expect(compiled.type).toBe('fill');
     expect(JSON.stringify(compiled.paint['fill-color'])).toContain('"step"');
+  });
+
+  it('compiles polygon extrusion with data-driven height and classed color', () => {
+    const compiled = compileLayerStyle(layer('Polygon', {
+      visualisation: {
+        kind: 'extrusion',
+        field: 'need',
+        method: 'quantile',
+        classCount: 3,
+        breaks: [10, 20],
+        palette: ['#fee2e2', '#ef4444', '#7f1d1d'],
+        nullColor: '#e2e8f0',
+        heightMultiplier: 5,
+        opacity: 0.85,
+      },
+    }));
+
+    expect(compiled.type).toBe('fill-extrusion');
+    expect(JSON.stringify(compiled.paint['fill-extrusion-height'])).toContain('"need"');
+    expect(JSON.stringify(compiled.paint['fill-extrusion-height'])).toContain('5');
+    expect(JSON.stringify(compiled.paint['fill-extrusion-color'])).toContain('"step"');
+  });
+
+  it('compiles graduated line width as an interpolate expression on line layers', () => {
+    const compiled = compileLayerStyle(layer('LineString', {
+      visualisation: {
+        kind: 'graduated_line',
+        field: 'need',
+        minValue: 0,
+        maxValue: 100,
+        minWidth: 1,
+        maxWidth: 8,
+        color: '#2563eb',
+        opacity: 0.85,
+      },
+    }));
+
+    expect(compiled.type).toBe('line');
+    const width = JSON.stringify(compiled.paint['line-width']);
+    expect(width).toContain('"interpolate"');
+    expect(width).toContain('"need"');
+  });
+
+  it('compiles bivariate color as nested steps over both fields', () => {
+    const expression = compileBivariateColorExpression({
+      kind: 'bivariate',
+      fieldX: 'need',
+      fieldY: 'income',
+      breaksX: [10, 20],
+      breaksY: [1, 2],
+      palette: ['#e8e8e8', '#ace4e4', '#5ac8c8', '#dfb0d6', '#a5add3', '#5698b9', '#be64ac', '#8c62aa', '#3b4994'],
+      nullColor: '#e2e8f0',
+      opacity: 0.78,
+      outlineColor: '#334155',
+      outlineWidth: 0.5,
+    });
+
+    const json = JSON.stringify(expression);
+    expect(json).toContain('"need"');
+    expect(json).toContain('"income"');
+    // corner colors of the 3x3 matrix must both be reachable
+    expect(json).toContain('#e8e8e8');
+    expect(json).toContain('#3b4994');
+    expect(json).toContain('#e2e8f0');
   });
 });

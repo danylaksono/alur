@@ -5,7 +5,13 @@ import type {
   HeatmapVisualisation,
   LabelVisualisation,
   DotDensityVisualisation,
+  ExtrusionVisualisation,
+  GraduatedLineVisualisation,
+  HexbinVisualisation,
+  HexbinAggregate,
+  BivariateVisualisation,
   ClassificationMethod,
+  LayerVisualisation,
   LegendSpec,
 } from '../types/visualisation';
 import { CATEGORICAL_PALETTE, fitPaletteToClassCount } from './palettes';
@@ -238,8 +244,106 @@ export const buildDotDensityVisualisation = ({
   opacity: 0.65,
 });
 
+export const buildExtrusionVisualisation = ({
+  field,
+  profile,
+  classCount,
+  palette,
+  heightMultiplier,
+}: {
+  field: string;
+  profile: NumericProfile;
+  classCount: number;
+  palette: string[];
+  heightMultiplier: number;
+}): ExtrusionVisualisation => {
+  const resolvedClassCount = Math.max(2, Math.min(9, classCount));
+  const breaks = classifyNumericValues(profile.values, 'quantile', resolvedClassCount);
+  const paletteSize = Math.max(2, breaks.length + 1);
+  return {
+    kind: 'extrusion',
+    field,
+    method: 'quantile',
+    classCount: paletteSize,
+    breaks,
+    palette: fitPaletteToClassCount(palette, paletteSize),
+    nullColor: '#e2e8f0',
+    heightMultiplier,
+    opacity: 0.85,
+  };
+};
+
+export const buildGraduatedLineVisualisation = ({
+  field,
+  profile,
+}: {
+  field: string;
+  profile: NumericProfile;
+}): GraduatedLineVisualisation => ({
+  kind: 'graduated_line',
+  field,
+  minValue: profile.min,
+  maxValue: profile.max,
+  minWidth: 1,
+  maxWidth: 8,
+  color: '#2563eb',
+  opacity: 0.85,
+});
+
+export const buildHexbinVisualisation = ({
+  field,
+  aggregate,
+  cellSize,
+}: {
+  field?: string;
+  aggregate: HexbinAggregate;
+  cellSize: number;
+}): HexbinVisualisation => ({
+  kind: 'hexbin',
+  field: aggregate === 'count' ? undefined : field,
+  aggregate,
+  cellSize: Math.max(50, Math.min(20000, Math.round(cellSize))),
+});
+
+export const buildBivariateVisualisation = ({
+  fieldX,
+  fieldY,
+  profileX,
+  profileY,
+  palette,
+}: {
+  fieldX: string;
+  fieldY: string;
+  profileX: NumericProfile;
+  profileY: NumericProfile;
+  palette: string[];
+}): BivariateVisualisation => ({
+  kind: 'bivariate',
+  fieldX,
+  fieldY,
+  breaksX: classifyNumericValues(profileX.values, 'quantile', 3),
+  breaksY: classifyNumericValues(profileY.values, 'quantile', 3),
+  palette,
+  nullColor: '#e2e8f0',
+  opacity: 0.78,
+  outlineColor: '#334155',
+  outlineWidth: 0.5,
+});
+
+const classBreakItems = (breaks: number[], palette: string[]) =>
+  palette.map((color, index) => {
+    const low = index === 0 ? undefined : breaks[index - 1];
+    const high = breaks[index];
+    const label = index === 0
+      ? `< ${numberFormatter.format(high ?? 0)}`
+      : high === undefined
+        ? `>= ${numberFormatter.format(low ?? 0)}`
+        : `${numberFormatter.format(low ?? 0)}-${numberFormatter.format(high)}`;
+    return { label, min: low, max: high, color };
+  });
+
 export const buildLegend = (
-  visualisation: ChoroplethVisualisation | CategoricalVisualisation | GraduatedSymbolVisualisation | HeatmapVisualisation | LabelVisualisation | DotDensityVisualisation,
+  visualisation: Exclude<LayerVisualisation, { kind: 'simple' }>,
 ): LegendSpec => {
   if (visualisation.kind === 'label') {
     return {
@@ -295,21 +399,54 @@ export const buildLegend = (
     };
   }
 
-  const items = visualisation.palette.map((color, index) => {
-    const low = index === 0 ? undefined : visualisation.breaks[index - 1];
-    const high = visualisation.breaks[index];
-    const label = index === 0
-      ? `< ${numberFormatter.format(high ?? 0)}`
-      : high === undefined
-        ? `>= ${numberFormatter.format(low ?? 0)}`
-        : `${numberFormatter.format(low ?? 0)}-${numberFormatter.format(high)}`;
+  if (visualisation.kind === 'graduated_line') {
+    return {
+      title: visualisation.field,
+      kind: 'graduated_line',
+      items: [
+        { label: `${numberFormatter.format(visualisation.minValue)} (${visualisation.minWidth}px)`, color: visualisation.color },
+        { label: `${numberFormatter.format(visualisation.maxValue)} (${visualisation.maxWidth}px)`, color: visualisation.color },
+      ],
+    };
+  }
 
-    return { label, min: low, max: high, color };
-  });
+  if (visualisation.kind === 'hexbin') {
+    const metric = visualisation.aggregate === 'count'
+      ? 'count'
+      : `${visualisation.aggregate}(${visualisation.field ?? ''})`;
+    const sizeLabel = visualisation.cellSize >= 1000
+      ? `${(visualisation.cellSize / 1000).toLocaleString()} km`
+      : `${visualisation.cellSize.toLocaleString()} m`;
+    return {
+      title: 'Hexbin',
+      kind: 'simple',
+      items: [{ label: `hex ${sizeLabel} · ${metric}`, color: '#0f766e' }],
+    };
+  }
 
+  if (visualisation.kind === 'bivariate') {
+    const classLabels = ['low', 'mid', 'high'];
+    const items = visualisation.palette.map((color, index) => {
+      const row = Math.floor(index / 3);
+      const column = index % 3;
+      return {
+        label: `${visualisation.fieldX} ${classLabels[column]} · ${visualisation.fieldY} ${classLabels[row]}`,
+        color,
+        row,
+        column,
+      };
+    });
+    return {
+      title: `${visualisation.fieldX} → · ${visualisation.fieldY} ↑`,
+      kind: 'bivariate',
+      items: [...items, { label: 'No data', color: visualisation.nullColor }],
+    };
+  }
+
+  // choropleth + extrusion share the classed-breaks legend shape.
   return {
     title: visualisation.field,
-    kind: 'choropleth',
-    items: [...items, { label: 'No data', color: visualisation.nullColor }],
+    kind: visualisation.kind,
+    items: [...classBreakItems(visualisation.breaks, visualisation.palette), { label: 'No data', color: visualisation.nullColor }],
   };
 };

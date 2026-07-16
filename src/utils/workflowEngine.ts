@@ -69,6 +69,8 @@ const GEOMETRY_RETURNING_FUNCTIONS = new Set([
   'ST_Union',
 ]);
 
+export const JOIN_PREDICATES = new Set(['ST_Intersects', 'ST_Within', 'ST_Contains', 'ST_DWithin']);
+
 const BOOLEAN_SPATIAL_PREDICATES = new Set([
   'ST_Contains',
   'ST_ContainsProperly',
@@ -280,6 +282,46 @@ export function buildWorkflowSQL(nodes: GISNode[], edges: Edge[], options?: { li
         }
         lastAlias = alias;
       }
+    } else if (type === 'join') {
+      if (parentAliases.length < 2) {
+        throw new Error(`Join node "${node.id}" requires 2 input connections (A = left, B = right).`);
+      }
+      const sourceA = parentAliases[0];
+      const sourceB = parentAliases[1];
+      const metaA = nodeMetadata.get(sourceA)!;
+      const metaB = nodeMetadata.get(sourceB)!;
+      const joinKeyword = config?.joinType === 'inner' ? 'JOIN' : 'LEFT JOIN';
+      const mode = config?.mode || 'spatial';
+
+      // Every right-side column gets an r_ prefix (DuckDB COLUMNS regex rename)
+      // so B's attributes survive the join without colliding with A's.
+      const renamedRight = `(SELECT COLUMNS('(.*)') AS 'r_\\1' FROM ${sourceB})`;
+      const rightGeom = `r.${qi(`r_${metaB.geom}`)}`;
+
+      let onClause = '';
+      if (mode === 'attribute') {
+        const leftKey = config?.leftKey;
+        const rightKey = config?.rightKey;
+        if (!leftKey || !rightKey) {
+          throw new Error(`Join node "${node.id}" needs both key fields for an attribute join.`);
+        }
+        onClause = `a.${qi(leftKey)} = r.${qi(`r_${rightKey}`)}`;
+      } else {
+        const predicate = config?.predicate || 'ST_Intersects';
+        if (!JOIN_PREDICATES.has(predicate)) {
+          throw new Error(`Unsupported join predicate "${predicate}".`);
+        }
+        onClause = predicate === 'ST_DWithin'
+          ? `ST_DWithin(a.${qi(metaA.geom)}, ${rightGeom}, ${Number(config?.distance) || 100})`
+          : `${predicate}(a.${qi(metaA.geom)}, ${rightGeom})`;
+      }
+
+      // Keep A's geometry; drop B's renamed geometry from the projection.
+      ctes.push(
+        `${alias} AS (\n  SELECT a.*, r.* EXCLUDE (${qi(`r_${metaB.geom}`)})\n  FROM ${sourceA} a\n  ${joinKeyword} ${renamedRight} r\n    ON ${onClause}\n)`
+      );
+      nodeMetadata.set(alias, metaA);
+      lastAlias = alias;
     } else if (type === 'aggregate') {
       const source = parentAliases[0] || lastAlias;
       if (!source) throw new Error(`Aggregate node "${node.id}" has no source.`);

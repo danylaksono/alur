@@ -174,7 +174,7 @@ export const spatialFunctions: SpatialFunctionMetadata[] = [
     "name": "ST_Crosses",
     "summary": "Returns true if geom1 \"crosses\" geom2",
     "category": "Scalar",
-    "requiredInputCount": 1
+    "requiredInputCount": 2
   },
   {
     "name": "ST_DWithin",
@@ -186,13 +186,13 @@ export const spatialFunctions: SpatialFunctionMetadata[] = [
     "name": "ST_DWithin_GEOS",
     "summary": "Returns if two geometries are within a target distance of each-other",
     "category": "Scalar",
-    "requiredInputCount": 1
+    "requiredInputCount": 2
   },
   {
     "name": "ST_DWithin_Spheroid",
     "summary": "Returns if two POINT_2D's are within a target distance in meters, using an ellipsoidal model of the earths surface",
     "category": "Scalar",
-    "requiredInputCount": 1
+    "requiredInputCount": 2
   },
   {
     "name": "ST_Difference",
@@ -228,13 +228,13 @@ export const spatialFunctions: SpatialFunctionMetadata[] = [
     "name": "ST_Distance_Sphere",
     "summary": "Returns the haversine (great circle) distance between two geometries.",
     "category": "Scalar",
-    "requiredInputCount": 1
+    "requiredInputCount": 2
   },
   {
     "name": "ST_Distance_Spheroid",
     "summary": "Returns the distance between two geometries in meters using an ellipsoidal model of the earths surface",
     "category": "Scalar",
-    "requiredInputCount": 1
+    "requiredInputCount": 2
   },
   {
     "name": "ST_Dump",
@@ -258,7 +258,7 @@ export const spatialFunctions: SpatialFunctionMetadata[] = [
     "name": "ST_Equals",
     "summary": "Returns true if the geometries are \"equal\"",
     "category": "Scalar",
-    "requiredInputCount": 1
+    "requiredInputCount": 2
   },
   {
     "name": "ST_Extent",

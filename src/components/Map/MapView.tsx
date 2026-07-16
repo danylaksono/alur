@@ -105,6 +105,7 @@ export const MapView = () => {
   const renderedSourceVersions = useRef<Map<string, string>>(new Map());
   const nodeLayerMap = useRef<Map<string, string>>(new Map());
   const previousFeatureState = useRef<Map<string, { hoveredFeatureId?: string; highlightedFeatureIds: Set<string>; selectedFeatureIds: Set<string> }>>(new Map());
+  const styleReady = useRef(false);
   type LayerEventName = 'click' | 'mousemove' | 'mouseleave';
   const layerEventHandlers = useRef<Map<string, Array<{ event: LayerEventName; mapLayerId: string; fn: (...args: any[]) => void }>>>(new Map());
 
@@ -141,7 +142,14 @@ export const MapView = () => {
 	      zoom: 1.5,
 	    });
     m.addControl(new maplibregl.NavigationControl(), 'top-right');
+    // Fires on the initial style load and after every setStyle — unlike
+    // isStyleLoaded(), it is not perturbed by ongoing tile loads.
+    m.on('style.load', () => { styleReady.current = true; });
     map.current = m;
+    if (import.meta.env.DEV) {
+      // Debug handle for driving/inspecting the map in dev tools and E2E runs.
+      (window as unknown as Record<string, unknown>).__ymnMap = m;
+    }
 
     popup.current = new maplibregl.Popup({
       closeButton: true,
@@ -153,6 +161,20 @@ export const MapView = () => {
       requestAnimationFrame(() => map.current?.resize());
     });
     resizeObserver.observe(mapContainer.current);
+
+    // Per-layer restyle indicator: mark while a layer's source loads tiles,
+    // clear everything once the map settles. setLayerRestyling suppresses
+    // no-op writes, so these chatty events don't spam the store.
+    m.on('sourcedataloading', (e: maplibregl.MapSourceDataEvent) => {
+      const sourceId = (e as { sourceId?: string }).sourceId;
+      if (sourceId?.startsWith('input-source-')) {
+        useStore.getState().setLayerRestyling(sourceId.slice('input-source-'.length), true);
+      }
+    });
+    m.on('idle', () => {
+      const { restylingLayerIds, setLayerRestyling } = useStore.getState();
+      Object.keys(restylingLayerIds).forEach((layerId) => setLayerRestyling(layerId, false));
+    });
 
     return () => {
       resizeObserver.disconnect();
@@ -174,6 +196,7 @@ export const MapView = () => {
     renderedSourceVersions.current.clear();
     nodeLayerMap.current.clear();
     popup.current?.remove();
+    styleReady.current = false;
     m.setStyle(nextStyleUrl);
   }, [selectedBasemapId]);
 
@@ -197,7 +220,10 @@ export const MapView = () => {
     };
 
     const syncLayers = () => {
-      if (!m.isStyleLoaded()) { m.once('load', syncLayers); return; }
+      // Gate on style readiness, not isStyleLoaded(): the latter is false
+      // whenever any tile is still loading, which on DuckDB MVT layers is
+      // most of the time — deferring syncs indefinitely.
+      if (!styleReady.current) { m.once('style.load', syncLayers); return; }
 
       // Remove stale layers
       const currentIds = new Set(mapLayers.map((l) => l.id));
@@ -261,6 +287,8 @@ export const MapView = () => {
           existingSourceVersion !== undefined &&
           existingSourceVersion !== sourceVersion
         ) {
+          // Tiles are about to regenerate — surface a per-layer restyling state.
+          useStore.getState().setLayerRestyling(layer.id, true);
           removeRenderedMapLayers();
           m.removeSource(sourceId);
         }
@@ -409,6 +437,12 @@ export const MapView = () => {
             ...optionalLayerProps({ layout: compiled.layout as any }),
           } as any);
 
+          // 3D extrusion is invisible from straight above — tilt once, then
+          // leave the camera to the user.
+          if (compiled.type === 'fill-extrusion' && m.getPitch() === 0) {
+            m.easeTo({ pitch: 50, duration: 800 });
+          }
+
           if (compiled.label) {
             if (m.getLayer(labelLayerId)) m.removeLayer(labelLayerId);
             m.addLayer({
@@ -520,6 +554,11 @@ export const MapView = () => {
         selected: isSelected,
         inactive: isInactive,
       });
+
+      // A visualisation change can also change the layer TYPE (e.g. fill →
+      // fill-extrusion). Setting the new type's paint keys on the old layer
+      // throws inside MapLibre — skip; the sync effect rebuilds the layer.
+      if (m.getLayer(layerId)?.type !== compiled.type) return;
 
       Object.entries(compiled.paint).forEach(([key, value]) => {
         m.setPaintProperty(layerId, key, value as any);

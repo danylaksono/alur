@@ -48,12 +48,13 @@ export type MapLayer = {
   clusterRadius?: number;
   clusterMaxZoom?: number;
   dotDensityLayerId?: string;
+  hexbinLayerId?: string;
 };
 
 export type GISNode = Node & {
   data: {
     label: string;
-    type: 'input' | 'analysis' | 'attribute' | 'aggregate' | 'filter' | 'visualisation' | 'output';
+    type: 'input' | 'analysis' | 'attribute' | 'aggregate' | 'filter' | 'join' | 'visualisation' | 'output';
     config: any;
   }
 };
@@ -111,6 +112,8 @@ interface AppState {
   toasts: Toast[];
   ui: UIState;
   settings: SettingsState;
+  /** Layers whose map source/tiles are currently re-rendering after a style or filter change. */
+  restylingLayerIds: Record<string, true>;
 
   setActiveRailTab: (tab: RailTab) => void;
   togglePanelCollapsed: () => void;
@@ -143,7 +146,8 @@ interface AppState {
   addMapLayer: (layer: NewMapLayer) => void;
   removeMapLayer: (layerId: string) => void;
   toggleMapLayerVisibility: (layerId: string) => void;
-  updateMapLayer: (layerId: string, patch: Partial<Pick<MapLayer, 'visible' | 'opacity' | 'color' | 'name' | 'clusterRadius' | 'clusterMaxZoom' | 'dotDensityLayerId'>>) => void;
+  updateMapLayer: (layerId: string, patch: Partial<Pick<MapLayer, 'visible' | 'opacity' | 'color' | 'name' | 'clusterRadius' | 'clusterMaxZoom' | 'dotDensityLayerId' | 'hexbinLayerId'>>) => void;
+  setLayerRestyling: (layerId: string, restyling: boolean) => void;
   updateLayerVisualisation: (layerId: string, visualisation: LayerVisualisation, legend?: LegendSpec) => void;
   clearLayerVisualisation: (layerId: string) => void;
   reorderMapLayer: (layerId: string, targetIndex: number) => void;
@@ -257,6 +261,16 @@ export const useStore = create<AppState>()(persist((set, get) => ({
   toasts: [],
   ui: initialUIState,
   settings: initialSettings,
+  restylingLayerIds: {},
+
+  setLayerRestyling: (layerId, restyling) => set((state) => {
+    const isRestyling = Boolean(state.restylingLayerIds[layerId]);
+    if (isRestyling === restyling) return state;
+    if (restyling) {
+      return { restylingLayerIds: { ...state.restylingLayerIds, [layerId]: true as const } };
+    }
+    return { restylingLayerIds: removeRecordKeys(state.restylingLayerIds, new Set([layerId])) };
+  }),
 
   setActiveRailTab: (tab) => set((state) => ({
     ui: { ...state.ui, activeRailTab: tab, isPanelCollapsed: false },
@@ -340,6 +354,7 @@ export const useStore = create<AppState>()(persist((set, get) => ({
     nodeSchemas: {},
     nodeExecutionStates: {},
     visualAnalytics: { layers: {}, charts: [] },
+    restylingLayerIds: {},
   }),
 
   onNodesChange: (changes) => {
@@ -468,14 +483,15 @@ export const useStore = create<AppState>()(persist((set, get) => ({
   removeMapLayer: (layerId) => set((state) => {
     const layer = state.mapLayers.find((item) => item.id === layerId);
     const dotDensityLayerId = layer?.dotDensityLayerId;
+    const hexbinLayerId = layer?.hexbinLayerId;
     const keysToRemove = new Set([layerId]);
     if (dotDensityLayerId) keysToRemove.add(dotDensityLayerId);
+    if (hexbinLayerId) keysToRemove.add(hexbinLayerId);
     return {
       mapLayers: state.mapLayers
-        .filter((item) => item.id !== layerId)
-        .filter((item) => item.id !== dotDensityLayerId)
-        .map((item) => item.dotDensityLayerId === layerId
-          ? { ...item, dotDensityLayerId: undefined, visualisation: undefined, legend: undefined }
+        .filter((item) => !keysToRemove.has(item.id))
+        .map((item) => item.dotDensityLayerId === layerId || item.hexbinLayerId === layerId
+          ? { ...item, dotDensityLayerId: undefined, hexbinLayerId: undefined, visualisation: undefined, legend: undefined }
           : item),
       visualAnalytics: {
         layers: removeRecordKeys(state.visualAnalytics.layers, keysToRemove),
@@ -684,3 +700,8 @@ export const useStore = create<AppState>()(persist((set, get) => ({
   partialize: (state) => ({ settings: state.settings }) as AppState,
   storage: createJSONStorage(() => (typeof window === 'undefined' ? noopStorage : window.localStorage)),
 }));
+
+if (typeof window !== 'undefined' && import.meta.env?.DEV) {
+  // Debug handle for dev tools and E2E runs.
+  (window as unknown as Record<string, unknown>).__ymnStore = useStore;
+}

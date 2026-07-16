@@ -34,7 +34,24 @@ Playwright is not a project dep — install it in a scratch dir (`npm i playwrig
   selection shows the `Selection — <layer>` overlay top-left.
 - Test fixtures: `data_sample/*.parquet` (not bundled into the app; local only).
 
+## Debug handles (dev builds only)
+
+`window.__ymnMap` (the MapLibre instance) and `window.__ymnStore` (the zustand store) are
+exposed in dev. Use them from `page.evaluate` to assert layer types, paint, pitch, and
+store state directly instead of scraping the DOM.
+
 ## Gotchas
+
+- **Check the dev server port.** Multiple Vite instances pile up on 5173-517x (user's
+  editor + zombie background tasks). Read the background task's output file for the
+  actual port — driving a stale instance produces bizarre failures (broken DuckDB
+  worker cache, old code).
+- Text probes on panel labels must be case-insensitive: many labels render through
+  CSS `uppercase`, and `innerText` reflects the transformed text.
+- Field profiles on 100k+ row layers take 30s+; wait for the per-layer restyle spinner
+  (`getByTitle('Rendering layer…')`) to detach rather than using fixed sleeps.
+- Do NOT `INSTALL h3 FROM community` in duckdb-wasm: a loaded community extension
+  breaks registerFileHandle/registerFileBuffer for the whole session.
 
 - The smoke test uses `renderToString` — zustand SSR renders *initial* state, so `setState`
   before render has no effect there. Don't copy that pattern for runtime verification.

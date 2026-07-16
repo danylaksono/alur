@@ -55,6 +55,7 @@ Your goal is to help users build complex spatial workflows using DuckDB-Wasm Spa
 - "analysis": Spatial operations (ST_Buffer, ST_Intersection, ST_Transform, etc.).
 - "aggregate": Spatial aggregations (ST_Union_Agg, ST_Envelope_Agg). Supports "groupBy".
 - "filter": Filter rows using SQL. Requires "condition" (e.g., "need > 10").
+- "join": Join two inputs. A (input-0) keeps its rows and geometry; B's (input-1) attributes are appended with an "r_" prefix. Config: mode ("spatial" with predicate ST_Intersects/ST_Within/ST_Contains/ST_DWithin + distance, or "attribute" with leftKey/rightKey), joinType ("left"|"inner").
 - "attribute": Column calculations. Requires "expression" and "resultField".
 - "output": Mark the final result. Use config.outputMode="visualize" to add it to the map, or config.outputMode="export" with exportFormat ("geojson", "csv", "json", "parquet") to download it.
 

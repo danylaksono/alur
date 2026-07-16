@@ -3,7 +3,7 @@ import type { GeometryKind, LayerVisualisation, LabelVisualisation } from '../ty
 import { geometryKindForSource } from './layerSource';
 
 export type CompiledMapLayerStyle = {
-  type: 'circle' | 'line' | 'fill' | 'heatmap';
+  type: 'circle' | 'line' | 'fill' | 'heatmap' | 'fill-extrusion';
   paint: Record<string, unknown>;
   layout?: Record<string, unknown>;
   label?: CompiledLabelLayer;
@@ -69,6 +69,36 @@ export const compileChoroplethColorExpression = (visualisation: Extract<LayerVis
 
   expression.push(step);
   return expression;
+};
+
+const classedStepExpression = (field: string, breaks: number[], palette: string[]) => {
+  const step: unknown[] = ['step', ['to-number', ['get', field]], palette[0]];
+  breaks.forEach((breakValue, index) => {
+    step.push(breakValue, palette[Math.min(index + 1, palette.length - 1)]);
+  });
+  return step;
+};
+
+export const compileBivariateColorExpression = (visualisation: Extract<LayerVisualisation, { kind: 'bivariate' }>) => {
+  const { fieldX, fieldY, breaksX, breaksY, palette, nullColor } = visualisation;
+  // For each Y class (row), a step over X picks one of that row's 3 colors.
+  const rowExpression = (row: number) =>
+    classedStepExpression(fieldX, breaksX, palette.slice(row * 3, row * 3 + 3));
+  const yStep: unknown[] = ['step', ['to-number', ['get', fieldY]], rowExpression(0)];
+  breaksY.forEach((breakValue, index) => {
+    yStep.push(breakValue, rowExpression(Math.min(index + 1, 2)));
+  });
+
+  return [
+    'case',
+    [
+      'any',
+      ['==', ['get', fieldX], null], ['!', ['has', fieldX]],
+      ['==', ['get', fieldY], null], ['!', ['has', fieldY]],
+    ],
+    nullColor,
+    yStep,
+  ];
 };
 
 export const compileCategoricalColorExpression = (visualisation: Extract<LayerVisualisation, { kind: 'categorical' }>) => {
@@ -149,6 +179,28 @@ export const compileLayerStyle = (
     };
   }
 
+  if (visualisation?.kind === 'extrusion' && geometryKind === 'polygon') {
+    return {
+      type: 'fill-extrusion',
+      paint: {
+        'fill-extrusion-color': withInteractionColor([
+          'case',
+          ['any', ['==', ['get', visualisation.field], null], ['!', ['has', visualisation.field]]],
+          visualisation.nullColor,
+          classedStepExpression(visualisation.field, visualisation.breaks, visualisation.palette),
+        ]),
+        'fill-extrusion-height': [
+          'max', 0,
+          ['*', ['to-number', ['get', visualisation.field], 0], visualisation.heightMultiplier],
+        ],
+        'fill-extrusion-base': 0,
+        'fill-extrusion-opacity': inactive
+          ? Math.min(0.2, visualisation.opacity * 0.4)
+          : visualisation.opacity,
+      },
+    };
+  }
+
   const paint: Record<string, unknown> = {};
   const type = defaultType(geometryKind);
 
@@ -178,6 +230,30 @@ export const compileLayerStyle = (
     paint[opacityPaintKey(geometryKind)] = inactive
       ? Math.min(0.2, visualisation.opacity * 0.4)
       : visualisation.opacity;
+    return { type, paint };
+  }
+
+  if (visualisation?.kind === 'bivariate') {
+    paint[colorPaintKey(geometryKind)] = withInteractionColor(compileBivariateColorExpression(visualisation));
+    paint[opacityPaintKey(geometryKind)] = inactive
+      ? Math.min(0.2, visualisation.opacity * 0.4)
+      : visualisation.opacity;
+    if (geometryKind === 'polygon') paint['fill-outline-color'] = selected ? '#020617' : visualisation.outlineColor;
+    return { type, paint };
+  }
+
+  if (visualisation?.kind === 'graduated_line' && geometryKind === 'line') {
+    paint['line-width'] = [
+      'interpolate',
+      ['linear'],
+      ['to-number', ['get', visualisation.field]],
+      visualisation.minValue,
+      selected ? visualisation.minWidth + 1 : visualisation.minWidth,
+      visualisation.maxValue,
+      selected ? visualisation.maxWidth + 1 : visualisation.maxWidth,
+    ];
+    paint['line-color'] = withInteractionColor(visualisation.color);
+    paint['line-opacity'] = inactive ? Math.min(0.2, visualisation.opacity * 0.4) : visualisation.opacity;
     return { type, paint };
   }
 
