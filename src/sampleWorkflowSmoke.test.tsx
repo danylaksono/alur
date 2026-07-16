@@ -120,7 +120,8 @@ describe('sample GIS workflow smoke test', () => {
     expect(shellHtml).toContain('Add data');
     expect(shellHtml).toContain('New project');
     expect(shellHtml).toContain('Map Layers');
-    expect(shellHtml).toContain('Visualise');
+    // The style editor is gated behind a per-layer action; the list view shows by default.
+    expect(shellHtml).toContain('Add an input node or run a workflow');
     expect(shellHtml).toContain('Basemap');
     expect(shellHtml).toContain('Workflow');
     expect(shellHtml).toContain('Table');

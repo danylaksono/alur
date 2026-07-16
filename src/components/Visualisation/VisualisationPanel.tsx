@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BarChart3, Eraser, Palette } from 'lucide-react';
+import { BarChart3, ChevronLeft, Eraser, Palette } from 'lucide-react';
 import { useStore, type MapLayer } from '../../store/useStore';
+import { toggleFilterIn, visualFilterKey } from '../../utils/legendFilter';
 import {
   buildCategoricalVisualisation,
   buildChoroplethVisualisation,
@@ -103,8 +104,26 @@ const DistributionPreview = ({
   );
 };
 
-export const VisualisationPanel = () => {
-  const selectedLayerId = useStore((s) => s.selectedLayerId);
+const TEMPORAL_TYPE_PATTERN = /date|timestamp|time/i;
+const TEMPORAL_NAME_PATTERN = /(date|time|year|month|_at$|_on$)/i;
+
+const temporalFieldsForLayer = (layer: MapLayer | null) => {
+  if (!layer) return [];
+  return layer.source.fields
+    .filter((field) =>
+      TEMPORAL_TYPE_PATTERN.test(field.type) || TEMPORAL_NAME_PATTERN.test(field.name)
+    )
+    .map((field) => field.name)
+    .filter((name) => !excludedFields.has(name.toLowerCase()) && !name.toLowerCase().startsWith('__ymn_'));
+};
+
+export const VisualisationPanel = ({
+  layer: selectedLayer,
+  onBack,
+}: {
+  layer: MapLayer | null;
+  onBack?: () => void;
+}) => {
   const mapLayers = useStore((s) => s.mapLayers);
   const updateLayerVisualisation = useStore((s) => s.updateLayerVisualisation);
   const clearLayerVisualisation = useStore((s) => s.clearLayerVisualisation);
@@ -113,13 +132,9 @@ export const VisualisationPanel = () => {
   const removeMapLayer = useStore((s) => s.removeMapLayer);
   const visualAnalytics = useStore((s) => s.visualAnalytics);
   const setLayerFilters = useStore((s) => s.setLayerFilters);
-  const clearLayerFilters = useStore((s) => s.clearLayerFilters);
 
-  const selectedLayer = useMemo(
-    () => mapLayers.find((layer) => layer.id === selectedLayerId) || null,
-    [mapLayers, selectedLayerId],
-  );
   const fields = useMemo(() => fieldNamesForLayer(selectedLayer), [selectedLayer?.id, selectedLayer?.source]);
+  const temporalCandidates = useMemo(() => temporalFieldsForLayer(selectedLayer), [selectedLayer?.id, selectedLayer?.source]);
   const fieldsKey = fields.join('|');
   const geometryKind = useMemo(() => selectedLayer ? geometryKindForLayer(selectedLayer) : null, [selectedLayer]);
   const [field, setField] = useState('');
@@ -157,7 +172,7 @@ export const VisualisationPanel = () => {
     if (vis?.kind === 'simple') {
       setKind('simple');
       setField(fields[0] || '');
-      setTemporalField(fields[0] || '');
+      setTemporalField(temporalCandidates[0] || '');
       return;
     }
 
@@ -173,7 +188,7 @@ export const VisualisationPanel = () => {
 
     setKind('simple');
     setField(fields[0] || '');
-    setTemporalField(fields[0] || '');
+    setTemporalField(temporalCandidates[0] || '');
   }, [selectedLayer?.id, fieldsKey]);
 
   useEffect(() => {
@@ -283,53 +298,15 @@ export const VisualisationPanel = () => {
     }
   }, [selectedLayer?.id, hasActiveStyle, field, kind, method, classCount, paletteId, canApply, profile, updateLayerVisualisation, clearLayerVisualisation]);
 
-  const activeLegend = selectedLayer?.legend;
   const activeFilters = selectedLayer ? visualAnalytics.layers[selectedLayer.id]?.filters || [] : [];
-  const activeFilterKeys = new Set(activeFilters.map((filter) => {
-    if (filter.kind === 'category') return `${filter.field}:category:${filter.values.join('|')}`;
-    if (filter.kind === 'temporal') return `${filter.field}:temporal:${filter.start ?? ''}:${filter.end ?? ''}`;
-    return `${filter.field}:range:${filter.min ?? ''}:${filter.max ?? ''}`;
-  }));
-
-  const toggleLegendFilter = (item: { label: string; value?: string; min?: number; max?: number }) => {
-    if (!selectedLayer || !activeLegend) return;
-    const existingFilters = visualAnalytics.layers[selectedLayer.id]?.filters || [];
-    const nextFilter = item.label === 'No data' && activeLegend.kind === 'categorical'
-      ? { kind: 'category' as const, field: activeLegend.title, values: [], includeNull: true }
-      : item.value !== undefined
-      ? { kind: 'category' as const, field: activeLegend.title, values: [item.value], includeNull: item.label === 'No data' }
-      : { kind: 'range' as const, field: activeLegend.title, min: item.min, max: item.max, includeNull: item.label === 'No data' };
-    const nextKey = nextFilter.kind === 'category'
-      ? `${nextFilter.field}:category:${nextFilter.values.join('|')}`
-      : `${nextFilter.field}:range:${nextFilter.min ?? ''}:${nextFilter.max ?? ''}`;
-    const withoutSame = existingFilters.filter((filter) => {
-      const key = filter.kind === 'category'
-        ? `${filter.field}:category:${filter.values.join('|')}`
-        : filter.kind === 'temporal'
-          ? `${filter.field}:temporal:${filter.start ?? ''}:${filter.end ?? ''}`
-        : `${filter.field}:range:${filter.min ?? ''}:${filter.max ?? ''}`;
-      return key !== nextKey;
-    });
-    setLayerFilters(selectedLayer.id, withoutSame.length === existingFilters.length ? [...existingFilters, nextFilter] : withoutSame);
-  };
+  const activeFilterKeys = new Set(activeFilters.map(visualFilterKey));
 
   const toggleDistributionFilter = (
     nextFilter: { kind: 'category'; field: string; values: string[] } | { kind: 'range'; field: string; min: number; max: number },
   ) => {
     if (!selectedLayer) return;
     const existingFilters = visualAnalytics.layers[selectedLayer.id]?.filters || [];
-    const nextKey = nextFilter.kind === 'category'
-      ? `${nextFilter.field}:category:${nextFilter.values.join('|')}`
-      : `${nextFilter.field}:range:${nextFilter.min ?? ''}:${nextFilter.max ?? ''}`;
-    const withoutSame = existingFilters.filter((filter) => {
-      const key = filter.kind === 'category'
-        ? `${filter.field}:category:${filter.values.join('|')}`
-        : filter.kind === 'temporal'
-          ? `${filter.field}:temporal:${filter.start ?? ''}:${filter.end ?? ''}`
-        : `${filter.field}:range:${filter.min ?? ''}:${filter.max ?? ''}`;
-      return key !== nextKey;
-    });
-    setLayerFilters(selectedLayer.id, withoutSame.length === existingFilters.length ? [...existingFilters, nextFilter] : withoutSame);
+    setLayerFilters(selectedLayer.id, toggleFilterIn(existingFilters, nextFilter));
   };
 
   const applyTemporalFilter = () => {
@@ -347,11 +324,24 @@ export const VisualisationPanel = () => {
 
   return (
     <section className="flex min-h-0 flex-col bg-white">
-      <div className="border-b bg-slate-50 px-4 py-3">
-        <div className="flex items-center justify-between">
-          <h3 className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-            <Palette className="h-3.5 w-3.5" />
-            Visualise
+      <div className="border-b bg-slate-50 px-3 py-2.5">
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="flex min-w-0 items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            {onBack ? (
+              <button
+                type="button"
+                onClick={onBack}
+                className="rounded-md p-1 text-slate-500 transition-colors hover:bg-slate-200/60 hover:text-slate-700"
+                title="Back to layers"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+              </button>
+            ) : (
+              <Palette className="h-3.5 w-3.5" />
+            )}
+            <span className="truncate normal-case text-xs font-semibold text-slate-700">
+              {selectedLayer ? `Style · ${selectedLayer.name}` : 'Visualise'}
+            </span>
           </h3>
           {selectedLayer?.visualisation && (
             <button
@@ -614,6 +604,8 @@ export const VisualisationPanel = () => {
               )}
             </div>}
 
+            {/* Only offered when the layer actually has date/time-like fields. */}
+            {temporalCandidates.length > 0 && (
             <div className="rounded-lg border border-slate-200 bg-white p-3">
               <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Temporal Filter</div>
               <select
@@ -623,7 +615,7 @@ export const VisualisationPanel = () => {
                 }}
                 className="mb-2 h-8 w-full min-w-0 rounded-md border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
               >
-                {fields.map((name) => (
+                {temporalCandidates.map((name) => (
                   <option key={name} value={name}>{name}</option>
                 ))}
               </select>
@@ -667,44 +659,6 @@ export const VisualisationPanel = () => {
                 </>
               )}
             </div>
-
-            {activeLegend && (
-              <div className="rounded-lg border border-slate-200 bg-white p-3">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <div className="truncate text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                    Legend · {activeLegend.title}
-                  </div>
-                  {activeFilters.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => selectedLayer && clearLayerFilters(selectedLayer.id)}
-                      className="rounded border border-slate-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-slate-500"
-                    >
-                      Clear
-                    </button>
-                  )}
-                </div>
-                <div className="space-y-1.5">
-                  {activeLegend.items.slice(0, 8).map((item) => (
-                    <button
-                      type="button"
-                      key={`${item.label}-${item.color}`}
-                      onClick={() => toggleLegendFilter(item)}
-                      className={cn(
-                        'flex w-full items-center gap-2 rounded px-1 py-0.5 text-left text-[11px]',
-                        activeFilterKeys.has(item.value !== undefined
-                          ? `${activeLegend.title}:category:${item.value}`
-                          : `${activeLegend.title}:range:${item.min ?? ''}:${item.max ?? ''}`)
-                          ? 'bg-orange-50 text-orange-700 ring-1 ring-orange-200'
-                          : 'hover:bg-slate-50'
-                      )}
-                    >
-                      <span className="h-3 w-3 rounded-sm border border-slate-200" style={{ backgroundColor: item.color }} />
-                      <span className="min-w-0 flex-1 truncate text-slate-600">{item.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
             )}
           </div>
         )}

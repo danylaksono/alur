@@ -8,6 +8,7 @@ import { featureIdFromMapFeature } from '../../utils/featureIdentity';
 import { FEATURE_ID_PROPERTY } from '../../types/visualAnalytics';
 import type { VisualFilter } from '../../types/visualAnalytics';
 import { LegendControl } from './LegendControl';
+import { BasemapControl } from './BasemapControl';
 import { mvtTileUrl, registerMvtProtocol, registerMvtTileSource, unregisterMvtTileSource } from '../../services/mvtTileService';
 import { boundsForLayer, mvtSourceForLayer } from '../../utils/layerSource';
 import { compileVisualFiltersWhereClause } from '../../utils/visualFilterSql';
@@ -570,6 +571,7 @@ export const MapView = () => {
     <div className="w-full h-full relative">
       <div ref={mapContainer} className="w-full h-full" />
       <LegendControl legends={visibleLegends} />
+      <BasemapControl />
     </div>
   );
 };

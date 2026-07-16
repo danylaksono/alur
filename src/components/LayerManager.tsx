@@ -1,8 +1,7 @@
 import { useState } from 'react';
-import { Download, Eye, EyeOff, Focus, GripVertical, Trash2, Layers } from 'lucide-react';
+import { Download, Eye, EyeOff, Focus, GripVertical, Palette, Trash2, Layers } from 'lucide-react';
 import { useStore, type MapLayer } from '../store/useStore';
 import { cn } from '../utils/cn';
-import { BASEMAPS } from '../utils/basemaps';
 import { downloadMapStyleExport } from '../utils/mapStyleExport';
 
 const KIND_LABEL: Record<NonNullable<MapLayer['sourceKind']>, string> = {
@@ -20,10 +19,9 @@ const fallbackColor = (index: number) => {
   return colors[index % colors.length];
 };
 
-export const LayerManager = () => {
+export const LayerManager = ({ onEditStyle }: { onEditStyle?: (layerId: string) => void }) => {
   const [draggedLayerId, setDraggedLayerId] = useState<string | null>(null);
   const mapLayers = useStore((s) => s.mapLayers);
-  const selectedBasemapId = useStore((s) => s.selectedBasemapId);
   const nodes = useStore((s) => s.nodes);
   const selectedLayerId = useStore((s) => s.selectedLayerId);
   const visualAnalytics = useStore((s) => s.visualAnalytics);
@@ -35,7 +33,6 @@ export const LayerManager = () => {
   const removeMapLayer = useStore((s) => s.removeMapLayer);
   const clearFeatureSelection = useStore((s) => s.clearFeatureSelection);
   const clearLayerFilters = useStore((s) => s.clearLayerFilters);
-  const setSelectedBasemapId = useStore((s) => s.setSelectedBasemapId);
   const styledLayerCount = mapLayers.filter((layer) => layer.visualisation || layer.legend || layer.color).length;
 
   const sourceName = (layer: MapLayer) => {
@@ -51,40 +48,24 @@ export const LayerManager = () => {
             <Layers className="h-3.5 w-3.5" />
             Map Layers
           </h3>
-          <span className="rounded-md bg-white px-2 py-1 text-[11px] font-bold text-slate-500 ring-1 ring-slate-200">
-            {mapLayers.length}
-          </span>
-        </div>
-      </div>
-
-      <div className="min-h-0 flex-1 overflow-y-auto p-3">
-        <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px]">
-          <div className="flex items-center gap-2">
-            <span>Basemap</span>
-            <select
-              value={selectedBasemapId}
-              onChange={(event) => setSelectedBasemapId(event.target.value as typeof selectedBasemapId)}
-              className="min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
-              title={BASEMAPS.find((basemap) => basemap.id === selectedBasemapId)?.description}
-            >
-              {BASEMAPS.map((basemap) => (
-                <option key={basemap.id} value={basemap.id}>
-                  {basemap.name}
-                </option>
-              ))}
-            </select>
+          <div className="flex items-center gap-1.5">
             <button
               type="button"
               onClick={() => downloadMapStyleExport(mapLayers)}
               disabled={styledLayerCount === 0}
-              className="rounded-md border border-slate-200 bg-white p-1.5 text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              className="rounded-md p-1 text-slate-500 transition-colors hover:bg-slate-200/60 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
               title="Export map style JSON"
             >
               <Download className="h-3.5 w-3.5" />
             </button>
+            <span className="rounded-md bg-white px-2 py-1 text-[11px] font-bold text-slate-500 ring-1 ring-slate-200">
+              {mapLayers.length}
+            </span>
           </div>
         </div>
+      </div>
 
+      <div className="min-h-0 flex-1 overflow-y-auto p-3">
         {mapLayers.length === 0 ? (
           <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-5 text-center text-[11px] text-slate-500">
             Add an input node or run a workflow to create map layers.
@@ -156,6 +137,21 @@ export const LayerManager = () => {
                   </div>
 
                   <div className="mt-1.5 flex items-center gap-0.5 pl-5">
+                    {onEditStyle && (
+                      <button
+                        type="button"
+                        onClick={() => onEditStyle(layer.id)}
+                        className={cn(
+                          'rounded p-1 transition-colors',
+                          layer.visualisation
+                            ? 'text-indigo-600 hover:bg-indigo-50'
+                            : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
+                        )}
+                        title={layer.visualisation ? `Edit style (${layer.visualisation.kind})` : 'Style layer'}
+                      >
+                        <Palette className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => toggleMapLayerVisibility(layer.id)}
