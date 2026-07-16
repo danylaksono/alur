@@ -458,7 +458,7 @@ export const MapView = () => {
     mapLayers.forEach((layer) => {
       const sourceId = `input-source-${layer.id}`;
       if (!m.getSource(sourceId)) return;
-      if (mvtSourceForLayer(layer)) return;
+      const vectorSourceLayer = mvtSourceForLayer(layer)?.layerName;
 
       const previous = previousFeatureState.current.get(layer.id) || { highlightedFeatureIds: new Set<string>(), selectedFeatureIds: new Set<string>() };
       const current = visualAnalytics.layers[layer.id] || { selectedFeatureIds: [] };
@@ -468,7 +468,11 @@ export const MapView = () => {
       const setState = (featureId: string | undefined, state: Record<string, boolean>) => {
         if (!featureId) return;
         try {
-          m.setFeatureState({ source: sourceId, id: featureId }, state);
+          m.setFeatureState({
+            source: sourceId,
+            ...(vectorSourceLayer ? { sourceLayer: vectorSourceLayer } : {}),
+            id: vectorSourceLayer && /^\d+$/.test(featureId) ? Number(featureId) : featureId,
+          }, state);
         } catch {
           // The source can be between style reloads; the next sync will apply the state.
         }
@@ -551,7 +555,7 @@ export const MapView = () => {
     const fitFocusedLayer = () => {
       const layer = useStore.getState().mapLayers.find((item) => item.id === layerFocusRequest.layerId);
       if (!layer) return;
-      const bounds = boundsForLayer(layer) || (layer.geojson ? getLayerBounds(layer.geojson) : null);
+      const bounds = layerFocusRequest.bounds || boundsForLayer(layer) || (layer.geojson ? getLayerBounds(layer.geojson) : null);
       if (bounds) {
         m.fitBounds(bounds, { padding: 50, duration: 600, maxZoom: 16 });
       }

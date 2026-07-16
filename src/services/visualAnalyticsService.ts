@@ -29,9 +29,60 @@ const normalizeRows = (rows: any[]) =>
 
 const analyticsTableForLayer = async (layer: AnalyticsLayer) => {
   if (layer.source?.kind === 'duckdb-table' || layer.source?.kind === 'duckdb-query') {
-    return layer.source.tableName;
+    // The map renders from this table and promotes __ymn_mvt_id as its feature ID.
+    // Querying it here keeps table row identity exactly aligned with MapLibre.
+    return layer.source.tileSource?.tableName || layer.source.tableName;
   }
   return registerLayerForAnalytics({ id: layer.id, geojson: layer.geojson || { type: 'FeatureCollection', features: [] } });
+};
+
+const geometryCoordinates = (geometry: GeoJSON.Geometry | null): number[][] => {
+  if (!geometry) return [];
+  if (geometry.type === 'GeometryCollection') return geometry.geometries.flatMap(geometryCoordinates);
+  const flatten = (value: unknown): number[][] => {
+    if (!Array.isArray(value)) return [];
+    if (value.length >= 2 && typeof value[0] === 'number' && typeof value[1] === 'number') {
+      return [[Number(value[0]), Number(value[1])]];
+    }
+    return value.flatMap(flatten);
+  };
+  return flatten(geometry.coordinates);
+};
+
+export const queryLayerSelectionBounds = async (
+  layer: AnalyticsLayer,
+  featureIds: string[],
+): Promise<[[number, number], [number, number]] | null> => {
+  const selected = new Set(featureIds.map(String));
+  if (!selected.size) return null;
+
+  if (!layer.source || layer.source.kind === 'legacy-geojson') {
+    const coordinates = (layer.geojson?.features || [])
+      .filter((feature) => selected.has(String(feature.properties?.[FEATURE_ID_PROPERTY] ?? feature.id ?? '')))
+      .flatMap((feature) => geometryCoordinates(feature.geometry));
+    if (!coordinates.length) return null;
+    const xs = coordinates.map(([x]) => x);
+    const ys = coordinates.map(([, y]) => y);
+    return [[Math.min(...xs), Math.min(...ys)], [Math.max(...xs), Math.max(...ys)]];
+  }
+
+  const values = [...selected].slice(0, 5000).map((id) => `'${id.replace(/'/g, "''")}'`).join(', ');
+  const tableName = layer.source.tileSource.tableName;
+  const result = await duckdbService.query(`
+    WITH extent AS (
+      SELECT ST_Extent_Agg(ST_Transform(__ymn_tile_geom, 'EPSG:3857', 'EPSG:4326', true)) AS bbox
+      FROM "${tableName.replace(/"/g, '""')}"
+      WHERE CAST(__ymn_mvt_id AS VARCHAR) IN (${values})
+    )
+    SELECT ST_XMin(bbox) AS min_x, ST_YMin(bbox) AS min_y,
+           ST_XMax(bbox) AS max_x, ST_YMax(bbox) AS max_y
+    FROM extent WHERE bbox IS NOT NULL;
+  `);
+  const raw = result.toArray()[0];
+  const row = typeof raw?.toJSON === 'function' ? raw.toJSON() : raw;
+  const bounds = [Number(row?.min_x), Number(row?.min_y), Number(row?.max_x), Number(row?.max_y)];
+  if (!bounds.every(Number.isFinite)) return null;
+  return [[bounds[0], bounds[1]], [bounds[2], bounds[3]]];
 };
 
 const analyticsFieldsForLayer = (layer: Pick<AnalyticsLayer, 'source' | 'geojson'>) => {

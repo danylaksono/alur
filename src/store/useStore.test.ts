@@ -143,6 +143,18 @@ describe('layer state', () => {
     expect(useStore.getState().visualAnalytics.layers.areas.selectedFeatureIds).toEqual([]);
   });
 
+  it('sets multi-row selection atomically and focuses explicit bounds', () => {
+    const store = useStore.getState();
+    store.addMapLayer({ id: 'areas', name: 'Areas', geojson: fc(3), sourceKind: 'manual' });
+
+    store.setFeatureSelection('areas', ['1', '2', '2', '3']);
+    expect(useStore.getState().visualAnalytics.layers.areas.selectedFeatureIds).toEqual(['1', '2', '3']);
+
+    const bounds: [[number, number], [number, number]] = [[-1, 50], [1, 52]];
+    store.focusLayerBounds('areas', bounds);
+    expect(useStore.getState().layerFocusRequest).toMatchObject({ layerId: 'areas', bounds });
+  });
+
   it('removes visual analytics state when a layer is removed', () => {
     const store = useStore.getState();
     store.addMapLayer({ id: 'areas', name: 'Areas', geojson: fc(1), sourceKind: 'manual' });

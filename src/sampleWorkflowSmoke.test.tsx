@@ -114,7 +114,17 @@ describe('sample GIS workflow smoke test', () => {
     // Note: SSR renders zustand's *initial* state, so each surface is rendered
     // directly and asserted on its default-visible content.
     const toolNames = llmToolDefinitions.map((tool) => tool.name);
-    expect(toolNames).toEqual(expect.arrayContaining(['add_node', 'connect_nodes', 'run_spatial_query', 'add_visualisation_node']));
+    expect(toolNames).toEqual(expect.arrayContaining([
+      'add_node',
+      'connect_nodes',
+      'run_spatial_query',
+      'add_visualisation_node',
+      'filter_layer_rows',
+      'select_layer_features',
+      'clear_layer_filters',
+      'clear_layer_selection',
+      'zoom_to_selection',
+    ]));
 
     const shellHtml = renderToString(<App />);
     expect(shellHtml).toContain('Add data');

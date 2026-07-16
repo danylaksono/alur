@@ -5,6 +5,8 @@ import {
   __visualAnalyticsCacheSizeForTests,
   clearLayerAnalyticsCache,
   queryLayerChart,
+  queryLayerRows,
+  queryLayerSelectionBounds,
   registerLayerForAnalytics,
   visualChartFilterKey,
 } from './visualAnalyticsService';
@@ -149,6 +151,34 @@ describe('visual analytics cache helpers', () => {
     expect(query.mock.calls[2][0]).toContain('STRING_AGG(CAST("__ymn_mvt_id" AS VARCHAR)');
     expect(query.mock.calls[2][0]).not.toContain('FROM "rooftop_pv"');
     expect(result.data[0].featureIds).toEqual(['7']);
+  });
+
+  it('queries DuckDB table rows from the rendered MVT table so selection ids match', async () => {
+    const query = vi.spyOn(duckdbService, 'query')
+      .mockResolvedValueOnce({ toArray: () => [{ row_count: 1 }] } as any)
+      .mockResolvedValueOnce({ toArray: () => [{ __ymn_mvt_id: 7, name: 'Selected row' }] } as any);
+    const source = {
+      kind: 'duckdb-table' as const,
+      tableName: 'source_table',
+      geometryColumn: 'geometry',
+      crs: 'EPSG:4326',
+      geometryKind: 'point' as const,
+      featureIdColumn: '__ymn_mvt_id',
+      fields: [{ name: 'name', type: 'VARCHAR' }],
+      tileSource: { tableName: '__ymn_mvt_source_table', layerName: 'features', geometryKind: 'point' as const, propertyColumns: ['name'] },
+      renderVersion: 1,
+    };
+
+    const result = await queryLayerRows({ layer: { id: 'points', source }, filters: [], search: '', sortBy: null, sortDirection: 'asc', pageIndex: 0, pageSize: 50 });
+
+    expect(query.mock.calls[0][0]).toContain('FROM "__ymn_mvt_source_table"');
+    expect(query.mock.calls[1][0]).toContain('FROM "__ymn_mvt_source_table"');
+    expect(result.rows[0].__ymn_mvt_id).toBe(7);
+  });
+
+  it('calculates bounds for selected legacy features', async () => {
+    const bounds = await queryLayerSelectionBounds(layer('areas'), ['b']);
+    expect(bounds).toEqual([[1, 1], [1, 1]]);
   });
 
   it('builds stable chart filter keys for linked brushing', () => {

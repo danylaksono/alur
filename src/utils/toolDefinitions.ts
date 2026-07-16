@@ -183,5 +183,65 @@ export const llmToolDefinitions = [
       },
       required: ['field']
     }
+  },
+  {
+    name: 'filter_layer_rows',
+    description: 'Filter the selected layer and its attribute table by a categorical value or numeric range. Filters remain synchronized between table, charts, and map.',
+    parameters: {
+      type: 'object',
+      properties: {
+        layerId: { type: 'string', description: 'Target layer ID. If omitted, use the selected layer.' },
+        field: { type: 'string', description: 'Field to filter.' },
+        kind: { type: 'string', enum: ['category', 'range'], description: 'Filter kind.' },
+        values: { type: 'array', items: { type: 'string' }, description: 'Accepted values for a category filter.' },
+        min: { type: 'number', description: 'Inclusive numeric minimum.' },
+        max: { type: 'number', description: 'Inclusive numeric maximum.' },
+        mode: { type: 'string', enum: ['add', 'replace'], description: 'Add to current filters or replace them. Defaults to add.' }
+      },
+      required: ['field', 'kind']
+    }
+  },
+  {
+    name: 'select_layer_features',
+    description: 'Select one or more map/table rows by their feature IDs. Supports replacing, adding, or removing from the current multi-selection.',
+    parameters: {
+      type: 'object',
+      properties: {
+        layerId: { type: 'string', description: 'Target layer ID. If omitted, use the selected layer.' },
+        featureIds: { type: 'array', items: { type: 'string' }, description: 'Feature IDs to select.' },
+        mode: { type: 'string', enum: ['replace', 'add', 'remove'], description: 'Selection update mode. Defaults to replace.' }
+      },
+      required: ['featureIds']
+    }
+  },
+  {
+    name: 'clear_layer_filters',
+    description: 'Clear all active filters from a map layer and its attribute table.',
+    parameters: {
+      type: 'object',
+      properties: {
+        layerId: { type: 'string', description: 'Target layer ID. If omitted, use the selected layer.' }
+      }
+    }
+  },
+  {
+    name: 'clear_layer_selection',
+    description: 'Clear selected rows/features from a map layer and its attribute table.',
+    parameters: {
+      type: 'object',
+      properties: {
+        layerId: { type: 'string', description: 'Target layer ID. If omitted, use the selected layer.' }
+      }
+    }
+  },
+  {
+    name: 'zoom_to_selection',
+    description: 'Zoom the map to the currently selected table rows/features for a layer.',
+    parameters: {
+      type: 'object',
+      properties: {
+        layerId: { type: 'string', description: 'Target layer ID. If omitted, use the selected layer.' }
+      }
+    }
   }
 ];

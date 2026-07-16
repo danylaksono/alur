@@ -3,6 +3,8 @@ import { duckdbService } from './duckdb';
 import { buildWorkflowSQL, cteAlias } from '../utils/workflowEngine';
 import type { GISNode } from '../store/useStore';
 import type { ColumnProfile } from '../components/DataTable';
+import type { VisualFilter } from '../types/visualAnalytics';
+import { compileVisualFiltersWhereClause } from '../utils/visualFilterSql';
 
 export const qi = (name: string) => `"${name.replace(/"/g, '""')}"`;
 export const escapeSql = (value: string) => value.replace(/'/g, "''");
@@ -25,13 +27,21 @@ export const isNumericType = (type: string) =>
 
 const rowToJson = (row: any) => (typeof row?.toJSON === 'function' ? row.toJSON() : row);
 
-const searchWhereClause = (schema: any[] | undefined, search: string) => {
+const searchPredicate = (schema: any[] | undefined, search: string) => {
   const normalizedSearch = search.trim();
   const columns = searchableColumnNames(schema);
   if (!normalizedSearch || !columns.length) return '';
-  return ` WHERE ${columns
+  return columns
     .map((name) => `CAST(${qi(name)} AS VARCHAR) ILIKE '%${escapeSql(normalizedSearch)}%'`)
-    .join(' OR ')}`;
+    .join(' OR ');
+};
+
+const combinedWhereClause = (schema: any[] | undefined, search: string, filters: VisualFilter[] = []) => {
+  const predicates = [
+    compileVisualFiltersWhereClause(filters).replace(/^WHERE\s+/, ''),
+    searchPredicate(schema, search),
+  ].filter(Boolean);
+  return predicates.length ? ` WHERE (${predicates.join(') AND (')})` : '';
 };
 
 export const buildNodeSelectSql = (nodes: GISNode[], edges: Edge[], nodeId: string) => {
@@ -49,6 +59,7 @@ export const queryNodePreviewRows = async ({
   sortDirection,
   pageIndex,
   pageSize,
+  filters = [],
 }: {
   nodes: GISNode[];
   edges: Edge[];
@@ -59,10 +70,11 @@ export const queryNodePreviewRows = async ({
   sortDirection: 'asc' | 'desc';
   pageIndex: number;
   pageSize: number;
+  filters?: VisualFilter[];
 }) => {
   const { withClause } = buildWorkflowSQL(nodes, edges);
   const targetAlias = cteAlias(nodeId);
-  const whereClause = searchWhereClause(schema, search);
+  const whereClause = combinedWhereClause(schema, search, filters);
   const sortClause = sortBy
     ? ` ORDER BY ${qi(sortBy)} ${sortDirection.toUpperCase()} NULLS LAST`
     : '';
@@ -88,6 +100,7 @@ export const queryNodeColumnProfile = async ({
   schema,
   search,
   column,
+  filters = [],
 }: {
   nodes: GISNode[];
   edges: Edge[];
@@ -95,11 +108,12 @@ export const queryNodeColumnProfile = async ({
   schema: any[] | undefined;
   search: string;
   column: string;
+  filters?: VisualFilter[];
 }): Promise<ColumnProfile> => {
   const { withClause } = buildWorkflowSQL(nodes, edges);
   const targetAlias = cteAlias(nodeId);
   const type = columnType(schema, column);
-  const whereClause = searchWhereClause(schema, search);
+  const whereClause = combinedWhereClause(schema, search, filters);
 
   const totalSql = `${withClause} SELECT COUNT(*) AS total, SUM(CASE WHEN ${qi(column)} IS NULL THEN 1 ELSE 0 END) AS null_count FROM ${targetAlias}${whereClause};`;
   const totalResult = await duckdbService.query(totalSql);

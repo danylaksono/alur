@@ -15,7 +15,8 @@ import {
   profileGeoJsonField,
 } from '../utils/classification';
 import { getPalette } from '../utils/palettes';
-import { queryLayerFieldProfile } from '../services/visualAnalyticsService';
+import { queryLayerFieldProfile, queryLayerSelectionBounds } from '../services/visualAnalyticsService';
+import type { VisualFilter } from '../types/visualAnalytics';
 
 export const Chat = () => {
   const {
@@ -28,9 +29,15 @@ export const Chat = () => {
     duplicateNode,
     addMapLayer,
     updateLayerVisualisation,
+    setLayerFilters,
+    clearLayerFilters,
+    setFeatureSelection,
+    clearFeatureSelection,
+    focusLayerBounds,
     mapLayers,
     selectedLayerId,
-    nodeSchemas
+    nodeSchemas,
+    visualAnalytics,
   } = useStore();
   const settings = useStore((s) => s.settings);
   const setSettingsOpen = useStore((s) => s.setSettingsOpen);
@@ -60,7 +67,17 @@ export const Chat = () => {
         ...chatMessages,
         {
           role: 'system' as const,
-          content: `Current Workspace Metadata (Node Schemas): ${JSON.stringify(nodeSchemas)}`
+          content: `Current workspace metadata: ${JSON.stringify({
+            nodeSchemas,
+            selectedLayerId,
+            layers: mapLayers.map((layer) => ({
+              id: layer.id,
+              name: layer.name,
+              fields: layer.source.fields.map((field) => field.name),
+              selectedFeatureIds: visualAnalytics.layers[layer.id]?.selectedFeatureIds || [],
+              filters: visualAnalytics.layers[layer.id]?.filters || [],
+            })),
+          })}`
         }
       ];
 
@@ -318,6 +335,84 @@ export const Chat = () => {
             }
 
             addChatMessage('assistant', `Field "${field}" is not compatible with ${kind}.`, { kind: 'tool_result', summary: 'Style failed' });
+            break;
+          }
+          case 'filter_layer_rows': {
+            const layerId = args.layerId || args.layer_id || selectedLayerId;
+            const layer = mapLayers.find((item) => item.id === layerId);
+            if (!layer) {
+              addChatMessage('assistant', 'No target layer found for filtering.', { kind: 'tool_result', summary: 'Filter failed' });
+              break;
+            }
+            if (args.kind === 'category' && !(args.values || []).length) {
+              addChatMessage('assistant', 'A category filter needs at least one value.', { kind: 'tool_result', summary: 'Filter skipped' });
+              break;
+            }
+            if (args.kind === 'range' && args.min === undefined && args.max === undefined) {
+              addChatMessage('assistant', 'A range filter needs a minimum or maximum.', { kind: 'tool_result', summary: 'Filter skipped' });
+              break;
+            }
+            const filter: VisualFilter = args.kind === 'range'
+              ? { kind: 'range', field: args.field, min: args.min, max: args.max }
+              : { kind: 'category', field: args.field, values: (args.values || []).map(String) };
+            const current = visualAnalytics.layers[layer.id]?.filters || [];
+            setLayerFilters(layer.id, args.mode === 'replace' ? [filter] : [...current, filter]);
+            addChatMessage('assistant', `Filtered "${layer.name}" by ${args.field}.`, { kind: 'tool_result', summary: `${args.kind} filter applied` });
+            break;
+          }
+          case 'select_layer_features': {
+            const layerId = args.layerId || args.layer_id || selectedLayerId;
+            const layer = mapLayers.find((item) => item.id === layerId);
+            if (!layer) {
+              addChatMessage('assistant', 'No target layer found for selection.', { kind: 'tool_result', summary: 'Selection failed' });
+              break;
+            }
+            const requested = (args.featureIds || args.feature_ids || []).map(String);
+            const current = visualAnalytics.layers[layer.id]?.selectedFeatureIds || [];
+            const next = args.mode === 'add'
+              ? [...new Set([...current, ...requested])]
+              : args.mode === 'remove'
+                ? current.filter((id) => !requested.includes(id))
+                : requested;
+            setFeatureSelection(layer.id, next);
+            addChatMessage('assistant', `Selected ${next.length} feature${next.length === 1 ? '' : 's'} in "${layer.name}".`, { kind: 'tool_result', summary: `${next.length} selected` });
+            break;
+          }
+          case 'clear_layer_filters': {
+            const layerId = args.layerId || args.layer_id || selectedLayerId;
+            if (!layerId || !mapLayers.some((item) => item.id === layerId)) {
+              addChatMessage('assistant', 'No target layer found for filtering.', { kind: 'tool_result', summary: 'Clear failed' });
+              break;
+            }
+            clearLayerFilters(layerId);
+            addChatMessage('assistant', 'Cleared the layer filters.', { kind: 'tool_result', summary: 'Filters cleared' });
+            break;
+          }
+          case 'clear_layer_selection': {
+            const layerId = args.layerId || args.layer_id || selectedLayerId;
+            if (!layerId || !mapLayers.some((item) => item.id === layerId)) {
+              addChatMessage('assistant', 'No target layer found for selection.', { kind: 'tool_result', summary: 'Clear failed' });
+              break;
+            }
+            clearFeatureSelection(layerId);
+            addChatMessage('assistant', 'Cleared the layer selection.', { kind: 'tool_result', summary: 'Selection cleared' });
+            break;
+          }
+          case 'zoom_to_selection': {
+            const layerId = args.layerId || args.layer_id || selectedLayerId;
+            const layer = mapLayers.find((item) => item.id === layerId);
+            const featureIds = layer ? visualAnalytics.layers[layer.id]?.selectedFeatureIds || [] : [];
+            if (!layer || !featureIds.length) {
+              addChatMessage('assistant', 'Select at least one feature before zooming.', { kind: 'tool_result', summary: 'Zoom skipped' });
+              break;
+            }
+            const bounds = await queryLayerSelectionBounds(layer, featureIds);
+            if (!bounds) {
+              addChatMessage('assistant', 'The selected features do not have zoomable geometry.', { kind: 'tool_result', summary: 'Zoom failed' });
+              break;
+            }
+            focusLayerBounds(layer.id, bounds);
+            addChatMessage('assistant', `Zoomed to ${featureIds.length} selected feature${featureIds.length === 1 ? '' : 's'}.`, { kind: 'tool_result', summary: 'Map focused on selection' });
             break;
           }
           default: {

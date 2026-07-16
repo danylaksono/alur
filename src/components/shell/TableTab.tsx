@@ -1,16 +1,27 @@
-import { Download } from 'lucide-react';
+import { Download, FunctionSquare } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { useStore } from '../../store/useStore';
 import { duckdbService } from '../../services/duckdb';
 import { buildNodeSelectSql } from '../../services/workflowPreviewService';
 import { DataTable } from '../DataTable';
 import { ErrorBoundary } from '../ErrorBoundary';
 import type { useAttributeTable } from '../../hooks/useAttributeTable';
+import { FieldCalculatorDialog } from '../FieldCalculatorDialog';
 
 export const TableTab = ({ table }: { table: ReturnType<typeof useAttributeTable> }) => {
   const nodes = useStore((s) => s.nodes);
   const edges = useStore((s) => s.edges);
   const selectedNodeId = useStore((s) => s.selectedNodeId);
   const addToast = useStore((s) => s.addToast);
+  const [isCalculatorOpen, setCalculatorOpen] = useState(false);
+  const availableColumns = useMemo(() => {
+    const computed = new Set(table.computedFields.map((field) => field.name));
+    const names = new Set<string>();
+    table.data.slice(0, 20).forEach((row) => Object.keys(row).forEach((key) => {
+      if (!computed.has(key) && !['geojson', 'geometry', 'geom', 'wkb_geometry', '__ymn_tile_geom', '_ymn_feature_id', '__ymn_mvt_id'].includes(key.toLowerCase())) names.add(key);
+    }));
+    return [...names];
+  }, [table.computedFields, table.data]);
 
   const handleExport = async (format: 'parquet' | 'csv' | 'json' = 'csv') => {
     try {
@@ -37,6 +48,17 @@ export const TableTab = ({ table }: { table: ReturnType<typeof useAttributeTable
           {table.sourceLabel}
         </span>
         <div className="flex items-center gap-2">
+          {table.data.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setCalculatorOpen(true)}
+              className="flex items-center gap-1.5 rounded border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-600 transition-colors hover:bg-slate-100"
+              title="Add a calculated field"
+            >
+              <FunctionSquare className="h-3 w-3" /> Calculate
+              {table.computedFields.length > 0 && <span className="rounded bg-violet-50 px-1 text-[9px] text-violet-600">{table.computedFields.length}</span>}
+            </button>
+          )}
           {selectedNodeId && (
             <button
               onClick={() => handleExport('csv')}
@@ -61,24 +83,42 @@ export const TableTab = ({ table }: { table: ReturnType<typeof useAttributeTable
             search={table.search}
             sortBy={table.sortBy}
             sortDirection={table.sortDirection}
-            columnProfile={table.columnProfile}
-            isProfileLoading={table.isProfileLoading}
+            columnProfiles={table.columnProfiles}
+            profileLoadingColumns={table.profileLoadingColumns}
+            computedFields={table.computedFields}
             selectedFeatureIds={table.selectedFeatureIds}
+            featureIdColumn={table.selectedLayer?.source.kind === 'duckdb-table' || table.selectedLayer?.source.kind === 'duckdb-query'
+              ? table.selectedLayer.source.featureIdColumn
+              : '_ymn_feature_id'}
             onClearSelection={table.selectedLayer ? table.onClearSelection : undefined}
+            onToggleSelection={table.selectedLayer ? table.onToggleSelection : undefined}
+            onSetSelection={table.selectedLayer ? table.onSetSelection : undefined}
+            onZoomSelection={table.selectedLayer ? table.onZoomSelection : undefined}
+            isZoomingSelection={table.isZoomingSelection}
             filters={table.filters}
             activeFilterKeys={table.activeFilterKeys}
-            onRemoveFilter={table.selectedLayer ? table.onRemoveFilter : undefined}
-            onClearFilters={table.selectedLayer ? table.onClearFilters : undefined}
-            onApplyProfileFilter={table.selectedLayer ? table.onApplyProfileFilter : undefined}
+            onRemoveFilter={table.selectedLayer || table.selectedNode ? table.onRemoveFilter : undefined}
+            onClearFilters={table.selectedLayer || table.selectedNode ? table.onClearFilters : undefined}
+            onApplyProfileFilter={table.selectedLayer || table.selectedNode ? table.onApplyProfileFilter : undefined}
             onSearchChange={table.onSearchChange}
             onSortChange={table.onSortChange}
             onProfileColumn={table.onProfileColumn}
-            onClearProfile={table.onClearProfile}
             onPageChange={table.onPageChange}
             onPageSizeChange={table.onPageSizeChange}
           />
         </ErrorBoundary>
       </div>
+      {isCalculatorOpen && (
+        <FieldCalculatorDialog
+          fields={table.computedFields}
+          availableColumns={availableColumns}
+          sampleRows={table.data}
+          onAdd={table.onAddComputedField}
+          onUpdate={table.onUpdateComputedField}
+          onDelete={table.onDeleteComputedField}
+          onClose={() => setCalculatorOpen(false)}
+        />
+      )}
     </div>
   );
 };

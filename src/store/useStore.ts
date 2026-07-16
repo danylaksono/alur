@@ -17,6 +17,7 @@ import { ensureFeatureIds } from '../utils/featureIdentity';
 import type { VisualAnalyticsState, VisualChartSpec, VisualFilter } from '../types/visualAnalytics';
 import type { MvtTileSource } from '../services/duckdb';
 import type { LayerSource } from '../types/layers';
+import type { LayerBounds } from '../types/layers';
 
 export type NodeExecutionState = {
   status: 'idle' | 'running' | 'done' | 'error';
@@ -103,7 +104,7 @@ interface AppState {
   isManualSQL: boolean;
   selectedNodeId: string | null;
   selectedLayerId: string | null;
-  layerFocusRequest: { layerId: string; requestedAt: number } | null;
+  layerFocusRequest: { layerId: string; requestedAt: number; bounds?: LayerBounds } | null;
   nodeSchemas: Record<string, any[]>;
   nodeExecutionStates: Record<string, NodeExecutionState>;
   visualAnalytics: VisualAnalyticsState;
@@ -127,6 +128,7 @@ interface AppState {
   setSelectedLayerId: (id: string | null) => void;
   selectLayer: (layerId: string | null) => void;
   focusLayer: (layerId: string) => void;
+  focusLayerBounds: (layerId: string, bounds: LayerBounds) => void;
   setNodeSchema: (id: string, schema: any[]) => void;
   setNodeExecutionState: (id: string, state: NodeExecutionState) => void;
   resetNodeExecutionStates: () => void;
@@ -148,6 +150,7 @@ interface AppState {
   setHoveredFeature: (layerId: string, featureId: string | null) => void;
   setHighlightedFeatures: (layerId: string, featureIds: string[]) => void;
   toggleSelectedFeature: (layerId: string, featureId: string) => void;
+  setFeatureSelection: (layerId: string, featureIds: string[]) => void;
   clearFeatureSelection: (layerId: string) => void;
   setLayerFilters: (layerId: string, filters: VisualFilter[]) => void;
   clearLayerFilters: (layerId: string) => void;
@@ -303,6 +306,14 @@ export const useStore = create<AppState>()(persist((set, get) => ({
       selectedLayerId: layerId,
       selectedNodeId: layer?.sourceNodeId ?? state.selectedNodeId,
       layerFocusRequest: { layerId, requestedAt: Date.now() },
+    };
+  }),
+  focusLayerBounds: (layerId, bounds) => set((state) => {
+    const layer = state.mapLayers.find((item) => item.id === layerId);
+    return {
+      selectedLayerId: layerId,
+      selectedNodeId: layer?.sourceNodeId ?? state.selectedNodeId,
+      layerFocusRequest: { layerId, bounds, requestedAt: Date.now() },
     };
   }),
   setNodeSchema: (id, schema) => set((state) => ({
@@ -561,6 +572,23 @@ export const useStore = create<AppState>()(persist((set, get) => ({
           [layerId]: {
             ...current,
             selectedFeatureIds: [...selected],
+          },
+        },
+      },
+    };
+  }),
+
+  setFeatureSelection: (layerId, featureIds) => set((state) => {
+    const current = state.visualAnalytics.layers[layerId] || { selectedFeatureIds: [], filters: [] };
+    const selectedFeatureIds = [...new Set(featureIds.map(String).filter(Boolean))];
+    return {
+      visualAnalytics: {
+        ...state.visualAnalytics,
+        layers: {
+          ...state.visualAnalytics.layers,
+          [layerId]: {
+            ...current,
+            selectedFeatureIds,
           },
         },
       },
