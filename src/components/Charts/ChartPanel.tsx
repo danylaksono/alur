@@ -2,8 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { BarChart3, Donut, Loader2, Plus, Trash2, X } from 'lucide-react';
 import { useStore, type MapLayer } from '../../store/useStore';
 import {
+  describeChartTable,
+  listChartTables,
   queryLayerChart,
   queryLayerScatter,
+  queryTableChart,
+  queryTableScatter,
   visualChartFilterKey,
 } from '../../services/visualAnalyticsService';
 import { CATEGORICAL_PALETTE, SEQUENTIAL_PALETTES } from '../../utils/palettes';
@@ -45,10 +49,18 @@ const isNumericType = (type: string) =>
   ['tinyint', 'smallint', 'integer', 'bigint', 'hugeint', 'utinyint', 'usmallint', 'uinteger', 'ubigint', 'float', 'double', 'decimal', 'real']
     .some((item) => type.toLowerCase().includes(item));
 
-const fieldsForLayer = (layer: MapLayer | undefined) =>
-  (layer?.source.fields || [])
-    .filter((field) => !EXCLUDED_FIELDS.has(field.name.toLowerCase()))
+type ChartField = { name: string; type: string };
+
+const filterChartFields = (fields: ChartField[]) =>
+  fields
+    .filter((field) => {
+      const lower = field.name.toLowerCase();
+      return !EXCLUDED_FIELDS.has(lower) && !lower.startsWith('__ymn_');
+    })
     .sort((a, b) => a.name.localeCompare(b.name));
+
+const fieldsForLayer = (layer: MapLayer | undefined) =>
+  filterChartFields(layer?.source.fields || []);
 
 const numericFieldsForLayer = (layer: MapLayer | undefined) => {
   const fields = fieldsForLayer(layer);
@@ -581,6 +593,7 @@ const ChartCard = ({
   chart,
   layer,
   layers,
+  tables,
   filters,
   onUpdate,
   onRemove,
@@ -595,6 +608,7 @@ const ChartCard = ({
   chart: VisualChartSpec;
   layer: MapLayer | undefined;
   layers: MapLayer[];
+  tables: string[];
   filters: VisualFilter[];
   onUpdate: (patch: Partial<Omit<VisualChartSpec, 'id'>>) => void;
   onRemove: () => void;
@@ -608,10 +622,38 @@ const ChartCard = ({
 }) => {
   const [result, setResult] = useState<VisualChartResult | null>(null);
   const [scatter, setScatter] = useState<VisualScatterResult | null>(null);
+  const [tableFields, setTableFields] = useState<ChartField[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const numericFields = numericFieldsForLayer(layer);
+  const isTableChart = Boolean(chart.tableName);
+  const availableFields = isTableChart ? tableFields : fieldsForLayer(layer);
+  const typedNumericFields = availableFields.filter((field) => isNumericType(field.type));
+  const numericFields = typedNumericFields.length ? typedNumericFields : availableFields;
   const filtersKey = JSON.stringify(filters);
+
+  useEffect(() => {
+    if (!chart.tableName) {
+      setTableFields([]);
+      return;
+    }
+    let cancelled = false;
+    describeChartTable(chart.tableName)
+      .then((fields) => { if (!cancelled) setTableFields(filterChartFields(fields)); })
+      .catch(() => { if (!cancelled) setTableFields([]); });
+    return () => { cancelled = true; };
+  }, [chart.tableName]);
+
+  // A freshly table-bound chart has no fields yet — pick sensible defaults
+  // once the table schema arrives (or when the schema no longer has the field).
+  useEffect(() => {
+    if (!isTableChart || !tableFields.length) return;
+    if (chart.dimensionField && tableFields.some((field) => field.name === chart.dimensionField)) return;
+    const numerics = tableFields.filter((field) => isNumericType(field.type));
+    onUpdate({
+      dimensionField: tableFields[0].name,
+      measureField: (numerics[0] || tableFields[0]).name,
+    });
+  }, [isTableChart, tableFields, chart.dimensionField]);
   const activeKeys = useMemo(
     () => new Set((result?.data || []).filter((datum) => isDatumActive(datum, filters)).map((datum) => datum.key)),
     [result, filtersKey],
@@ -636,7 +678,7 @@ const ChartCard = ({
   useEffect(() => {
     let cancelled = false;
     const run = async () => {
-      if (!layer || !chart.dimensionField) {
+      if ((!isTableChart && !layer) || !chart.dimensionField) {
         setResult(null);
         setScatter(null);
         return;
@@ -645,13 +687,17 @@ const ChartCard = ({
         setIsLoading(true);
         setError(null);
         if (chart.type === 'scatter') {
-          const nextScatter = await queryLayerScatter({ layer, filters, chart });
+          const nextScatter = isTableChart
+            ? await queryTableScatter({ tableName: chart.tableName!, chart })
+            : await queryLayerScatter({ layer: layer!, filters, chart });
           if (!cancelled) {
             setScatter(nextScatter);
             setResult(null);
           }
         } else {
-          const nextResult = await queryLayerChart({ layer, filters, chart });
+          const nextResult = isTableChart
+            ? await queryTableChart({ tableName: chart.tableName!, chart })
+            : await queryLayerChart({ layer: layer!, filters, chart });
           if (!cancelled) {
             setResult(nextResult);
             setScatter(null);
@@ -670,9 +716,7 @@ const ChartCard = ({
 
     run();
     return () => { cancelled = true; };
-  }, [layer?.id, layer?.styleVersion, filtersKey, chart.type, chart.dimensionField, chart.measureField, chart.aggregation, chart.paletteId, chart.maxCategories]);
-
-  const selectedLayerFields = fieldsForLayer(layer);
+  }, [layer?.id, layer?.styleVersion, chart.tableName, filtersKey, chart.type, chart.dimensionField, chart.measureField, chart.aggregation, chart.paletteId, chart.maxCategories]);
 
   return (
     <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
@@ -684,7 +728,7 @@ const ChartCard = ({
             className="w-full truncate bg-transparent text-[11px] font-semibold uppercase tracking-wide text-slate-700 outline-none"
           />
           <div className="truncate text-[11px] text-slate-400">
-            {layer?.name || 'Missing layer'}
+            {isTableChart ? `table · ${chart.tableName}` : layer?.name || 'Missing layer'}
           </div>
         </div>
         <button
@@ -699,23 +743,46 @@ const ChartCard = ({
 
       <div className="grid grid-cols-2 gap-2 border-b p-3">
         <label className="space-y-1">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Layer</span>
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Source</span>
           <select
-            value={chart.layerId}
+            value={isTableChart ? `table:${chart.tableName}` : `layer:${chart.layerId}`}
             onChange={(event) => {
-              const nextLayer = layers.find((item) => item.id === event.target.value);
-              const nextFields = fieldsForLayer(nextLayer);
-              onUpdate({
-                layerId: event.target.value,
-                dimensionField: nextFields[0]?.name || '',
-                measureField: numericFieldsForLayer(nextLayer)[0]?.name,
-              });
+              const value = event.target.value;
+              if (value.startsWith('layer:')) {
+                const layerId = value.slice('layer:'.length);
+                const nextLayer = layers.find((item) => item.id === layerId);
+                const nextFields = fieldsForLayer(nextLayer);
+                onUpdate({
+                  layerId,
+                  tableName: undefined,
+                  dimensionField: nextFields[0]?.name || '',
+                  measureField: numericFieldsForLayer(nextLayer)[0]?.name,
+                });
+              } else {
+                // Fields load async; the schema effect fills the defaults in.
+                onUpdate({
+                  tableName: value.slice('table:'.length),
+                  dimensionField: '',
+                  measureField: undefined,
+                });
+              }
             }}
             className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] outline-none focus:border-slate-400"
           >
-            {layers.map((item) => (
-              <option key={item.id} value={item.id}>{item.name}</option>
-            ))}
+            {layers.length > 0 && (
+              <optgroup label="Layers (linked)">
+                {layers.map((item) => (
+                  <option key={item.id} value={`layer:${item.id}`}>{item.name}</option>
+                ))}
+              </optgroup>
+            )}
+            {tables.length > 0 && (
+              <optgroup label="DuckDB tables">
+                {tables.map((name) => (
+                  <option key={name} value={`table:${name}`}>{name}</option>
+                ))}
+              </optgroup>
+            )}
           </select>
         </label>
 
@@ -749,7 +816,7 @@ const ChartCard = ({
             onChange={(event) => onUpdate({ dimensionField: event.target.value })}
             className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] outline-none focus:border-slate-400"
           >
-            {selectedLayerFields.map((field) => (
+            {availableFields.map((field) => (
               <option key={field.name} value={field.name}>{field.name}</option>
             ))}
           </select>
@@ -819,10 +886,10 @@ const ChartCard = ({
           ) : (
             <div className="space-y-3">
               <div className="flex items-center justify-between text-[11px] text-slate-400">
-                <span>{scatter.filteredRows.toLocaleString()} active rows</span>
+                <span>{isTableChart ? `${scatter.totalRows.toLocaleString()} rows` : `${scatter.filteredRows.toLocaleString()} active rows`}</span>
                 <span>
                   {scatter.sampled && <span className="text-slate-300">sampled · </span>}
-                  {scatter.totalRows.toLocaleString()} total
+                  {!isTableChart && `${scatter.totalRows.toLocaleString()} total`}
                 </span>
               </div>
               <ScatterChart
@@ -841,8 +908,8 @@ const ChartCard = ({
         ) : (
           <div className="space-y-3">
             <div className="flex items-center justify-between text-[11px] text-slate-400">
-              <span>{result.filteredRows.toLocaleString()} active rows</span>
-              <span>{result.totalRows.toLocaleString()} total</span>
+              <span>{isTableChart ? `${result.totalRows.toLocaleString()} rows` : `${result.filteredRows.toLocaleString()} active rows`}</span>
+              <span>{!isTableChart && `${result.totalRows.toLocaleString()} total`}</span>
             </div>
             {chart.type === 'histogram' ? (
               <Histogram
@@ -894,20 +961,47 @@ export const ChartPanel = () => {
   const selectedLayer = mapLayers.find((layer) => layer.id === selectedLayerId) || mapLayers[0];
   const charts = visualAnalytics.charts;
   const hasChartableLayer = mapLayers.some((layer) => fieldsForLayer(layer).length > 0);
+  const [tables, setTables] = useState<string[]>([]);
+
+  // Workflow runs and SQL executions materialize new DuckDB tables; refresh
+  // the source list whenever the panel (re)mounts or the workspace changes.
+  useEffect(() => {
+    let cancelled = false;
+    listChartTables()
+      .then((names) => { if (!cancelled) setTables(names); })
+      .catch(() => { if (!cancelled) setTables([]); });
+    return () => { cancelled = true; };
+  }, [mapLayers, charts.length]);
 
   const handleAddChart = () => {
-    if (!selectedLayer) return;
-    const nextChart = defaultChartForLayer(selectedLayer);
-    if (!nextChart) {
-      addToast({ type: 'warning', message: 'Selected layer has no chartable fields' });
+    if (selectedLayer) {
+      const nextChart = defaultChartForLayer(selectedLayer);
+      if (nextChart) {
+        addChart(nextChart);
+        return;
+      }
+    }
+    if (tables.length) {
+      addChart({
+        id: `chart-${Date.now()}`,
+        title: `${tables[0]} distribution`,
+        layerId: '',
+        tableName: tables[0],
+        type: 'bar',
+        dimensionField: '',
+        aggregation: 'count',
+        paletteId: 'categorical',
+        maxCategories: 8,
+      });
       return;
     }
-    addChart(nextChart);
+    addToast({ type: 'warning', message: 'No chartable layers or tables available' });
   };
 
   const layerFilters = (layerId: string) => visualAnalytics.layers[layerId]?.filters || [];
 
   const toggleFilter = (chart: VisualChartSpec, datum: VisualChartDatum) => {
+    if (chart.tableName) return; // table charts are unlinked views
     const currentFilters = layerFilters(chart.layerId);
 
     if (datum.filter.kind === 'category') {
@@ -945,6 +1039,7 @@ export const ChartPanel = () => {
   };
 
   const setRangeFilter = (chart: VisualChartSpec, min: number, max: number) => {
+    if (chart.tableName) return;
     const rest = layerFilters(chart.layerId).filter(
       (filter) => !(filter.kind === 'range' && filter.field === chart.dimensionField),
     );
@@ -952,6 +1047,7 @@ export const ChartPanel = () => {
   };
 
   const clearRangeFilter = (chart: VisualChartSpec) => {
+    if (chart.tableName) return;
     setLayerFilters(
       chart.layerId,
       layerFilters(chart.layerId).filter(
@@ -964,6 +1060,7 @@ export const ChartPanel = () => {
     new Set([chart.dimensionField, chart.measureField].filter((field): field is string => Boolean(field)));
 
   const setScatterBrush = (chart: VisualChartSpec, brush: Brush2D) => {
+    if (chart.tableName) return;
     const axes = scatterAxisFields(chart);
     const rest = layerFilters(chart.layerId).filter(
       (filter) => !(filter.kind === 'range' && axes.has(filter.field)),
@@ -979,6 +1076,7 @@ export const ChartPanel = () => {
   };
 
   const clearScatterBrush = (chart: VisualChartSpec) => {
+    if (chart.tableName) return;
     const axes = scatterAxisFields(chart);
     setLayerFilters(
       chart.layerId,
@@ -1002,7 +1100,7 @@ export const ChartPanel = () => {
           <button
             type="button"
             onClick={handleAddChart}
-            disabled={!hasChartableLayer}
+            disabled={!hasChartableLayer && !tables.length}
             className="flex h-8 items-center gap-1.5 rounded-md bg-slate-900 px-3 text-[11px] font-semibold uppercase tracking-wider text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
             <Plus className="h-3.5 w-3.5" />
@@ -1012,7 +1110,7 @@ export const ChartPanel = () => {
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
-        {!mapLayers.length ? (
+        {!mapLayers.length && !tables.length ? (
           <div className="flex h-full items-center justify-center px-6 text-center text-[11px] text-slate-400">
             Add or run a layer before creating charts.
           </div>
@@ -1027,13 +1125,14 @@ export const ChartPanel = () => {
           <div className="space-y-3">
             {charts.map((chart) => {
               const layer = mapLayers.find((item) => item.id === chart.layerId);
-              const filters = visualAnalytics.layers[chart.layerId]?.filters || [];
+              const filters = chart.tableName ? [] : visualAnalytics.layers[chart.layerId]?.filters || [];
               return (
                 <ChartCard
                   key={chart.id}
                   chart={chart}
                   layer={layer}
                   layers={mapLayers}
+                  tables={tables}
                   filters={filters}
                   onUpdate={(patch) => updateChart(chart.id, patch)}
                   onRemove={() => removeChart(chart.id)}
@@ -1042,8 +1141,8 @@ export const ChartPanel = () => {
                   onClearRange={() => clearRangeFilter(chart)}
                   onBrush2D={(brush) => setScatterBrush(chart, brush)}
                   onClear2D={() => clearScatterBrush(chart)}
-                  onHoverDatum={(datum) => setHighlightedFeatures(chart.layerId, datum.featureIds)}
-                  onLeaveDatum={() => setHighlightedFeatures(chart.layerId, [])}
+                  onHoverDatum={(datum) => { if (!chart.tableName) setHighlightedFeatures(chart.layerId, datum.featureIds); }}
+                  onLeaveDatum={() => { if (!chart.tableName) setHighlightedFeatures(chart.layerId, []); }}
                 />
               );
             })}

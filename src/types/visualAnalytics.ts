@@ -20,6 +20,12 @@ export type VisualChartSpec = {
   id: string;
   title: string;
   layerId: string;
+  /**
+   * When set, the chart reads this DuckDB table directly (workflow output or
+   * SQL result). Table charts are unlinked: layerId is ignored, no visual
+   * filters apply, and marks don't emit filters or highlights.
+   */
+  tableName?: string;
   type: VisualChartType;
   dimensionField: string;
   measureField?: string;

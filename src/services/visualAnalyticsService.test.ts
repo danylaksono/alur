@@ -8,6 +8,8 @@ import {
   queryLayerRows,
   queryLayerScatter,
   queryLayerSelectionBounds,
+  queryTableChart,
+  listChartTables,
   registerLayerForAnalytics,
   visualChartFilterKey,
 } from './visualAnalyticsService';
@@ -314,6 +316,52 @@ describe('visual analytics cache helpers', () => {
 
     expect(String(query.mock.calls[3][0])).toContain('USING SAMPLE reservoir(12000 ROWS) REPEATABLE');
     expect(result.sampled).toBe(true);
+  });
+
+  it('charts an arbitrary DuckDB table without filters or feature ids', async () => {
+    const query = vi.spyOn(duckdbService, 'query')
+      .mockResolvedValueOnce({ toArray: () => [{ row_count: 4 }] } as any)
+      .mockResolvedValueOnce({ toArray: () => [{ row_count: 4 }] } as any)
+      .mockResolvedValueOnce({
+        toArray: () => [
+          { label: 'A', total_count: 3, total_value: 3, count_value: 3, aggregate_value: 3, feature_ids: null },
+        ],
+      } as any);
+
+    const result = await queryTableChart({
+      tableName: 'ymn_manual_123',
+      chart: {
+        id: 'chart-6',
+        title: 'Manual result',
+        layerId: '',
+        tableName: 'ymn_manual_123',
+        type: 'bar',
+        dimensionField: 'category',
+        aggregation: 'count',
+        paletteId: 'categorical',
+        maxCategories: 8,
+      },
+    });
+
+    const groupSql = String(query.mock.calls[2][0]);
+    expect(groupSql).toContain('FROM "ymn_manual_123"');
+    expect(groupSql).toContain('CAST(NULL AS VARCHAR)');
+    expect(groupSql).not.toContain('FILTER (WHERE');
+    expect(result.totalRows).toBe(4);
+    expect(result.data[0]).toMatchObject({ label: 'A', value: 3, featureIds: [] });
+  });
+
+  it('lists chartable tables and hides internal ones', async () => {
+    vi.spyOn(duckdbService, 'query').mockResolvedValueOnce({
+      toArray: () => [
+        { table_name: '__ymn_mvt_pv' },
+        { table_name: 'need_london' },
+        { table_name: 'visual_layer_areas' },
+        { table_name: 'ymn_manual_99' },
+      ],
+    } as any);
+
+    await expect(listChartTables()).resolves.toEqual(['need_london', 'ymn_manual_99']);
   });
 
   it('calculates bounds for selected legacy features', async () => {

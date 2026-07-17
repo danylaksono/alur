@@ -467,7 +467,32 @@ export const queryLayerChart = async ({
   chart: VisualChartSpec;
 }): Promise<VisualChartResult> => {
   const { tableName, featureIdExpression } = await chartTableForLayer(layer, chart);
-  const table = `"${tableName}"`;
+  return runChartQuery({ tableName, featureIdExpression, filters, chart });
+};
+
+/** Chart an arbitrary DuckDB table (workflow output, SQL result). Unlinked:
+ *  no layer filters apply and no feature ids flow back. */
+export const queryTableChart = async ({
+  tableName,
+  chart,
+}: {
+  tableName: string;
+  chart: VisualChartSpec;
+}): Promise<VisualChartResult> =>
+  runChartQuery({ tableName, featureIdExpression: 'NULL', filters: [], chart });
+
+const runChartQuery = async ({
+  tableName,
+  featureIdExpression,
+  filters,
+  chart,
+}: {
+  tableName: string;
+  featureIdExpression: string;
+  filters: VisualFilter[];
+  chart: VisualChartSpec;
+}): Promise<VisualChartResult> => {
+  const table = `"${tableName.replace(/"/g, '""')}"`;
   const whereClause = compileVisualFiltersWhereClause(filters);
   const field = quoteIdentifier(chart.dimensionField);
 
@@ -603,12 +628,34 @@ export const queryLayerScatter = async ({
   filters: VisualFilter[];
   chart: VisualChartSpec;
 }): Promise<VisualScatterResult> => {
+  // Force the measure field into the required-column check regardless of aggregation.
+  const { tableName } = await chartTableForLayer(layer, { ...chart, aggregation: 'avg' });
+  return runScatterQuery({ tableName, filters, chart });
+};
+
+/** Scatter over an arbitrary DuckDB table — see queryTableChart. */
+export const queryTableScatter = async ({
+  tableName,
+  chart,
+}: {
+  tableName: string;
+  chart: VisualChartSpec;
+}): Promise<VisualScatterResult> =>
+  runScatterQuery({ tableName, filters: [], chart });
+
+const runScatterQuery = async ({
+  tableName,
+  filters,
+  chart,
+}: {
+  tableName: string;
+  filters: VisualFilter[];
+  chart: VisualChartSpec;
+}): Promise<VisualScatterResult> => {
   if (!chart.measureField) {
     throw new Error('Scatter charts need a Y field');
   }
-  // Force the measure field into the required-column check regardless of aggregation.
-  const { tableName } = await chartTableForLayer(layer, { ...chart, aggregation: 'avg' });
-  const table = `"${tableName}"`;
+  const table = `"${tableName.replace(/"/g, '""')}"`;
   const x = `TRY_CAST(${quoteIdentifier(chart.dimensionField)} AS DOUBLE)`;
   const y = `TRY_CAST(${quoteIdentifier(chart.measureField)} AS DOUBLE)`;
 
@@ -852,6 +899,30 @@ export const queryLayerFieldProfile = async ({
       count: Number(row.count),
     })),
   };
+};
+
+const INTERNAL_TABLE_PREFIXES = ['__ymn_', 'visual_layer_'];
+
+/** DuckDB tables a chart can bind to directly (workflow outputs, SQL results). */
+export const listChartTables = async (): Promise<string[]> => {
+  const result = await duckdbService.query(
+    `SELECT table_name FROM information_schema.tables WHERE table_schema = 'main' ORDER BY table_name;`
+  );
+  return normalizeRows(result.toArray())
+    .map((row) => String(row.table_name))
+    .filter((name) => name && !INTERNAL_TABLE_PREFIXES.some((prefix) => name.startsWith(prefix)));
+};
+
+export const describeChartTable = async (tableName: string): Promise<Array<{ name: string; type: string }>> => {
+  const result = await duckdbService.query(
+    `SELECT column_name, data_type FROM information_schema.columns
+     WHERE table_schema = 'main' AND table_name = '${tableName.replace(/'/g, "''")}'
+     ORDER BY ordinal_position;`
+  );
+  return normalizeRows(result.toArray()).map((row) => ({
+    name: String(row.column_name),
+    type: String(row.data_type),
+  }));
 };
 
 export const __visualAnalyticsCacheSizeForTests = () => registeredLayerTables.size;
