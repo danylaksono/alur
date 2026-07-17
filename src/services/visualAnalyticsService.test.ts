@@ -6,6 +6,7 @@ import {
   clearLayerAnalyticsCache,
   queryLayerChart,
   queryLayerRows,
+  queryLayerScatter,
   queryLayerSelectionBounds,
   registerLayerForAnalytics,
   visualChartFilterKey,
@@ -228,6 +229,91 @@ describe('visual analytics cache helpers', () => {
     expect(query.mock.calls[1][0]).toContain('AS "name_length"');
     expect(query.mock.calls[1][0]).toContain('ORDER BY "name_length" DESC');
     expect(result.rows[0].__ymn_mvt_id).toBe(7);
+  });
+
+  it('queries scatter points with a context flag that ignores the chart axes', async () => {
+    vi.spyOn(duckdbService, 'registerJsonRows').mockResolvedValue(undefined);
+    const query = vi.spyOn(duckdbService, 'query')
+      .mockResolvedValueOnce({ toArray: () => [{ row_count: 3 }] } as any)
+      .mockResolvedValueOnce({ toArray: () => [{ row_count: 2 }] } as any)
+      .mockResolvedValueOnce({
+        toArray: () => [{ x_min: 0, x_max: 10, y_min: 1, y_max: 5, point_count: 3 }],
+      } as any)
+      .mockResolvedValueOnce({
+        toArray: () => [
+          { x: 1, y: 2, in_ctx: 1 },
+          { x: 4, y: 3, in_ctx: 0 },
+        ],
+      } as any);
+
+    const result = await queryLayerScatter({
+      layer: layer('areas'),
+      filters: [
+        { kind: 'range', field: 'value', min: 1, max: 2 },
+        { kind: 'category', field: 'borough', values: ['Camden'] },
+      ],
+      chart: {
+        id: 'chart-4',
+        title: 'value vs score',
+        layerId: 'areas',
+        type: 'scatter',
+        dimensionField: 'value',
+        measureField: 'score',
+        aggregation: 'count',
+        paletteId: 'categorical',
+        maxCategories: 8,
+      },
+    });
+
+    const pointsSql = String(query.mock.calls[3][0]);
+    expect(pointsSql).toContain('CASE WHEN');
+    expect(pointsSql).toContain("'Camden'");
+    // The chart's own axis filter must not affect point classification.
+    expect(pointsSql).not.toContain('"value" AS DOUBLE) >=');
+    expect(pointsSql).not.toContain('USING SAMPLE');
+    expect(result).toMatchObject({
+      totalRows: 3,
+      filteredRows: 2,
+      sampled: false,
+      xMin: 0,
+      xMax: 10,
+      yMin: 1,
+      yMax: 5,
+    });
+    expect(result.points).toEqual([
+      { x: 1, y: 2, inContext: 1 },
+      { x: 4, y: 3, inContext: 0 },
+    ]);
+  });
+
+  it('samples large scatter layers deterministically', async () => {
+    vi.spyOn(duckdbService, 'registerJsonRows').mockResolvedValue(undefined);
+    const query = vi.spyOn(duckdbService, 'query')
+      .mockResolvedValueOnce({ toArray: () => [{ row_count: 50000 }] } as any)
+      .mockResolvedValueOnce({ toArray: () => [{ row_count: 50000 }] } as any)
+      .mockResolvedValueOnce({
+        toArray: () => [{ x_min: 0, x_max: 1, y_min: 0, y_max: 1, point_count: 50000 }],
+      } as any)
+      .mockResolvedValueOnce({ toArray: () => [] } as any);
+
+    const result = await queryLayerScatter({
+      layer: layer('areas'),
+      filters: [],
+      chart: {
+        id: 'chart-5',
+        title: 'big scatter',
+        layerId: 'areas',
+        type: 'scatter',
+        dimensionField: 'value',
+        measureField: 'score',
+        aggregation: 'count',
+        paletteId: 'categorical',
+        maxCategories: 8,
+      },
+    });
+
+    expect(String(query.mock.calls[3][0])).toContain('USING SAMPLE reservoir(12000 ROWS) REPEATABLE');
+    expect(result.sampled).toBe(true);
   });
 
   it('calculates bounds for selected legacy features', async () => {

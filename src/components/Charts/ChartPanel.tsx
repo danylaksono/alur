@@ -3,6 +3,7 @@ import { BarChart3, Donut, Loader2, Plus, Trash2, X } from 'lucide-react';
 import { useStore, type MapLayer } from '../../store/useStore';
 import {
   queryLayerChart,
+  queryLayerScatter,
   visualChartFilterKey,
 } from '../../services/visualAnalyticsService';
 import { CATEGORICAL_PALETTE, SEQUENTIAL_PALETTES } from '../../utils/palettes';
@@ -14,6 +15,7 @@ import type {
   VisualChartSpec,
   VisualChartType,
   VisualFilter,
+  VisualScatterResult,
 } from '../../types/visualAnalytics';
 
 const EXCLUDED_FIELDS = new Set(['geojson', 'geometry', 'geom', 'wkb_geometry', '__ymn_tile_geom', '_ymn_feature_id']);
@@ -23,6 +25,7 @@ const CHART_TYPES: Array<{ id: VisualChartType; label: string }> = [
   { id: 'donut', label: 'Donut' },
   { id: 'rose', label: 'Rose' },
   { id: 'histogram', label: 'Histogram' },
+  { id: 'scatter', label: 'Scatter' },
 ];
 
 const AGGREGATIONS: Array<{ id: VisualChartAggregation; label: string }> = [
@@ -333,6 +336,173 @@ const Histogram = ({
   );
 };
 
+const SCATTER_WIDTH = 260;
+const SCATTER_HEIGHT = 180;
+const SCATTER_PAD = 6;
+
+type Brush2D = { xMin: number; xMax: number; yMin: number; yMax: number };
+
+const ScatterChart = ({
+  result,
+  color,
+  brush,
+  onBrush,
+  onClear,
+}: {
+  result: VisualScatterResult;
+  color: string;
+  brush: Brush2D | null;
+  onBrush: (brush: Brush2D) => void;
+  onClear: () => void;
+}) => {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [drag, setDrag] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+
+  const spanX = result.xMax - result.xMin || 1;
+  const spanY = result.yMax - result.yMin || 1;
+  const plotW = SCATTER_WIDTH - 2 * SCATTER_PAD;
+  const plotH = SCATTER_HEIGHT - 2 * SCATTER_PAD;
+  const pxOf = (value: number) => SCATTER_PAD + ((value - result.xMin) / spanX) * plotW;
+  const pyOf = (value: number) => SCATTER_HEIGHT - SCATTER_PAD - ((value - result.yMin) / spanY) * plotH;
+  const xValueAt = (px: number) =>
+    Math.min(result.xMax, Math.max(result.xMin, result.xMin + ((px - SCATTER_PAD) / plotW) * spanX));
+  const yValueAt = (py: number) =>
+    Math.min(result.yMax, Math.max(result.yMin, result.yMin + ((SCATTER_HEIGHT - SCATTER_PAD - py) / plotH) * spanY));
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = SCATTER_WIDTH * dpr;
+    canvas.height = SCATTER_HEIGHT * dpr;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, SCATTER_WIDTH, SCATTER_HEIGHT);
+
+    const dense = result.points.length > 4000;
+    const size = dense ? 2 : 3.5;
+    const half = size / 2;
+    ctx.globalAlpha = dense ? 0.4 : 0.65;
+    ctx.fillStyle = '#cbd5e1';
+    for (const point of result.points) {
+      if (point.inContext) continue;
+      ctx.fillRect(pxOf(point.x) - half, pyOf(point.y) - half, size, size);
+    }
+    ctx.fillStyle = color;
+    for (const point of result.points) {
+      if (!point.inContext) continue;
+      ctx.fillRect(pxOf(point.x) - half, pyOf(point.y) - half, size, size);
+    }
+    ctx.globalAlpha = 1;
+  }, [result, color]);
+
+  const pointerPos = (event: React.PointerEvent) => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect || !rect.width) return { x: 0, y: 0 };
+    return {
+      x: Math.max(0, Math.min(SCATTER_WIDTH, ((event.clientX - rect.left) / rect.width) * SCATTER_WIDTH)),
+      y: Math.max(0, Math.min(SCATTER_HEIGHT, ((event.clientY - rect.top) / rect.height) * SCATTER_HEIGHT)),
+    };
+  };
+
+  const handlePointerDown = (event: React.PointerEvent) => {
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const pos = pointerPos(event);
+    setDrag({ x0: pos.x, y0: pos.y, x1: pos.x, y1: pos.y });
+  };
+
+  const handlePointerMove = (event: React.PointerEvent) => {
+    if (!drag) return;
+    const pos = pointerPos(event);
+    setDrag({ ...drag, x1: pos.x, y1: pos.y });
+  };
+
+  const handlePointerUp = () => {
+    if (!drag) return;
+    const { x0, y0, x1, y1 } = drag;
+    setDrag(null);
+    if (Math.abs(x1 - x0) < 4 && Math.abs(y1 - y0) < 4) {
+      if (brush) onClear();
+      return;
+    }
+    onBrush({
+      xMin: xValueAt(Math.min(x0, x1)),
+      xMax: xValueAt(Math.max(x0, x1)),
+      yMin: yValueAt(Math.max(y0, y1)),
+      yMax: yValueAt(Math.min(y0, y1)),
+    });
+  };
+
+  const overlayRect = drag
+    ? {
+        left: Math.min(drag.x0, drag.x1),
+        top: Math.min(drag.y0, drag.y1),
+        width: Math.abs(drag.x1 - drag.x0),
+        height: Math.abs(drag.y1 - drag.y0),
+      }
+    : brush
+      ? {
+          left: pxOf(brush.xMin),
+          top: pyOf(brush.yMax),
+          width: Math.max(2, pxOf(brush.xMax) - pxOf(brush.xMin)),
+          height: Math.max(2, pyOf(brush.yMin) - pyOf(brush.yMax)),
+        }
+      : null;
+
+  return (
+    <div>
+      {brush && (
+        <div className="mb-1.5 flex items-center justify-between text-[11px]">
+          <span className="truncate font-semibold text-sky-700">
+            {formatNumber(brush.xMin)} – {formatNumber(brush.xMax)} × {formatNumber(brush.yMin)} – {formatNumber(brush.yMax)}
+          </span>
+          <button
+            type="button"
+            onClick={onClear}
+            className="flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 font-semibold uppercase tracking-wide text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+          >
+            <X className="h-3 w-3" />
+            Clear selection
+          </button>
+        </div>
+      )}
+      <div className="flex gap-1.5">
+        <div className="flex select-none flex-col justify-between py-0.5 text-right text-[10px] tabular-nums text-slate-400">
+          <span>{formatNumber(result.yMax)}</span>
+          <span>{formatNumber(result.yMin)}</span>
+        </div>
+        <div className="relative min-w-0 flex-1">
+          <canvas
+            ref={canvasRef}
+            style={{ width: '100%', height: 'auto', display: 'block' }}
+            className="cursor-crosshair touch-none rounded border border-slate-100 bg-white"
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+          />
+          {overlayRect && (
+            <div
+              className="pointer-events-none absolute border border-sky-500 bg-sky-400/10"
+              style={{
+                left: `${(overlayRect.left / SCATTER_WIDTH) * 100}%`,
+                top: `${(overlayRect.top / SCATTER_HEIGHT) * 100}%`,
+                width: `${(overlayRect.width / SCATTER_WIDTH) * 100}%`,
+                height: `${(overlayRect.height / SCATTER_HEIGHT) * 100}%`,
+              }}
+            />
+          )}
+        </div>
+      </div>
+      <div className="mt-1 flex items-center justify-between pl-6 text-[11px] tabular-nums text-slate-400">
+        <span>{formatNumber(result.xMin)}</span>
+        <span className="text-slate-300">drag to select</span>
+        <span>{formatNumber(result.xMax)}</span>
+      </div>
+    </div>
+  );
+};
+
 const RadialChart = ({
   data,
   type,
@@ -417,6 +587,8 @@ const ChartCard = ({
   onToggleFilter,
   onBrushRange,
   onClearRange,
+  onBrush2D,
+  onClear2D,
   onHoverDatum,
   onLeaveDatum,
 }: {
@@ -429,10 +601,13 @@ const ChartCard = ({
   onToggleFilter: (datum: VisualChartDatum) => void;
   onBrushRange: (min: number, max: number) => void;
   onClearRange: () => void;
+  onBrush2D: (brush: Brush2D) => void;
+  onClear2D: () => void;
   onHoverDatum: (datum: VisualChartDatum) => void;
   onLeaveDatum: () => void;
 }) => {
   const [result, setResult] = useState<VisualChartResult | null>(null);
+  const [scatter, setScatter] = useState<VisualScatterResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const numericFields = numericFieldsForLayer(layer);
@@ -441,30 +616,52 @@ const ChartCard = ({
     () => new Set((result?.data || []).filter((datum) => isDatumActive(datum, filters)).map((datum) => datum.key)),
     [result, filtersKey],
   );
-  const ownRangeFilter = filters.find(
-    (filter): filter is Extract<VisualFilter, { kind: 'range' }> =>
-      filter.kind === 'range' && filter.field === chart.dimensionField,
-  );
-  const brush = ownRangeFilter && ownRangeFilter.min !== undefined && ownRangeFilter.max !== undefined
-    ? { min: ownRangeFilter.min, max: ownRangeFilter.max }
+  const rangeFilterOn = (field: string | undefined) =>
+    field === undefined ? undefined : filters.find(
+      (filter): filter is Extract<VisualFilter, { kind: 'range' }> =>
+        filter.kind === 'range' && filter.field === field
+        && filter.min !== undefined && filter.max !== undefined,
+    );
+  const ownRangeFilter = rangeFilterOn(chart.dimensionField);
+  const brush = ownRangeFilter ? { min: ownRangeFilter.min!, max: ownRangeFilter.max! } : null;
+  const yRangeFilter = chart.measureField === chart.dimensionField ? ownRangeFilter : rangeFilterOn(chart.measureField);
+  const brush2D: Brush2D | null = chart.type === 'scatter' && ownRangeFilter && yRangeFilter
+    ? { xMin: ownRangeFilter.min!, xMax: ownRangeFilter.max!, yMin: yRangeFilter.min!, yMax: yRangeFilter.max! }
     : null;
+  const paletteColors = PALETTES.find((palette) => palette.id === chart.paletteId)?.colors || CATEGORICAL_PALETTE;
+  const pointColor = chart.paletteId === 'categorical'
+    ? paletteColors[0]
+    : paletteColors[Math.min(paletteColors.length - 1, Math.floor(paletteColors.length * 0.75))];
 
   useEffect(() => {
     let cancelled = false;
     const run = async () => {
       if (!layer || !chart.dimensionField) {
         setResult(null);
+        setScatter(null);
         return;
       }
       try {
         setIsLoading(true);
         setError(null);
-        const nextResult = await queryLayerChart({ layer, filters, chart });
-        if (!cancelled) setResult(nextResult);
+        if (chart.type === 'scatter') {
+          const nextScatter = await queryLayerScatter({ layer, filters, chart });
+          if (!cancelled) {
+            setScatter(nextScatter);
+            setResult(null);
+          }
+        } else {
+          const nextResult = await queryLayerChart({ layer, filters, chart });
+          if (!cancelled) {
+            setResult(nextResult);
+            setScatter(null);
+          }
+        }
       } catch (err: any) {
         if (!cancelled) {
           setError(err?.message || 'Chart query failed');
           setResult(null);
+          setScatter(null);
         }
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -526,7 +723,15 @@ const ChartCard = ({
           <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Type</span>
           <select
             value={chart.type}
-            onChange={(event) => onUpdate({ type: event.target.value as VisualChartType })}
+            onChange={(event) => {
+              const nextType = event.target.value as VisualChartType;
+              onUpdate({
+                type: nextType,
+                ...(nextType === 'scatter' && !chart.measureField
+                  ? { measureField: numericFields[0]?.name }
+                  : {}),
+              });
+            }}
             className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] outline-none focus:border-slate-400"
           >
             {CHART_TYPES.map((type) => (
@@ -536,7 +741,9 @@ const ChartCard = ({
         </label>
 
         <label className="space-y-1">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Dimension</span>
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            {chart.type === 'scatter' ? 'X field' : 'Dimension'}
+          </span>
           <select
             value={chart.dimensionField}
             onChange={(event) => onUpdate({ dimensionField: event.target.value })}
@@ -549,14 +756,18 @@ const ChartCard = ({
         </label>
 
         <label className="space-y-1">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Value</span>
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            {chart.type === 'scatter' ? 'Y field' : 'Value'}
+          </span>
           <select
-            value={chart.aggregation === 'count' ? '' : chart.measureField || ''}
-            disabled={chart.aggregation === 'count'}
+            value={chart.type === 'scatter'
+              ? chart.measureField || ''
+              : chart.aggregation === 'count' ? '' : chart.measureField || ''}
+            disabled={chart.type !== 'scatter' && chart.aggregation === 'count'}
             onChange={(event) => onUpdate({ measureField: event.target.value || undefined })}
             className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] outline-none disabled:bg-slate-100 disabled:text-slate-400"
           >
-            <option value="">Rows</option>
+            {chart.type !== 'scatter' && <option value="">Rows</option>}
             {numericFields.map((field) => (
               <option key={field.name} value={field.name}>{field.name}</option>
             ))}
@@ -567,8 +778,9 @@ const ChartCard = ({
           <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Aggregate</span>
           <select
             value={chart.aggregation}
+            disabled={chart.type === 'scatter'}
             onChange={(event) => onUpdate({ aggregation: event.target.value as VisualChartAggregation })}
-            className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] outline-none focus:border-slate-400"
+            className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] outline-none focus:border-slate-400 disabled:bg-slate-100 disabled:text-slate-400"
           >
             {AGGREGATIONS.map((aggregation) => (
               <option key={aggregation.id} value={aggregation.id}>{aggregation.label}</option>
@@ -591,7 +803,7 @@ const ChartCard = ({
       </div>
 
       <div className="p-3">
-        {isLoading && !result ? (
+        {isLoading && !result && !scatter ? (
           <div className="flex h-36 items-center justify-center text-slate-400">
             <Loader2 className="h-4 w-4 animate-spin" />
           </div>
@@ -599,6 +811,29 @@ const ChartCard = ({
           <div className="flex h-36 items-center justify-center px-4 text-center text-[11px] text-rose-500">
             {error}
           </div>
+        ) : chart.type === 'scatter' ? (
+          !scatter || !scatter.points.length ? (
+            <div className="flex h-36 items-center justify-center px-4 text-center text-[11px] text-slate-400">
+              No numeric value pairs for these fields.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between text-[11px] text-slate-400">
+                <span>{scatter.filteredRows.toLocaleString()} active rows</span>
+                <span>
+                  {scatter.sampled && <span className="text-slate-300">sampled · </span>}
+                  {scatter.totalRows.toLocaleString()} total
+                </span>
+              </div>
+              <ScatterChart
+                result={scatter}
+                color={pointColor}
+                brush={brush2D}
+                onBrush={onBrush2D}
+                onClear={onClear2D}
+              />
+            </div>
+          )
         ) : !result || !result.data.length ? (
           <div className="flex h-36 items-center justify-center px-4 text-center text-[11px] text-slate-400">
             No chartable values for this field.
@@ -725,6 +960,32 @@ export const ChartPanel = () => {
     );
   };
 
+  const scatterAxisFields = (chart: VisualChartSpec) =>
+    new Set([chart.dimensionField, chart.measureField].filter((field): field is string => Boolean(field)));
+
+  const setScatterBrush = (chart: VisualChartSpec, brush: Brush2D) => {
+    const axes = scatterAxisFields(chart);
+    const rest = layerFilters(chart.layerId).filter(
+      (filter) => !(filter.kind === 'range' && axes.has(filter.field)),
+    );
+    const next: VisualFilter[] = [
+      ...rest,
+      { kind: 'range', field: chart.dimensionField, min: brush.xMin, max: brush.xMax },
+    ];
+    if (chart.measureField && chart.measureField !== chart.dimensionField) {
+      next.push({ kind: 'range', field: chart.measureField, min: brush.yMin, max: brush.yMax });
+    }
+    setLayerFilters(chart.layerId, next);
+  };
+
+  const clearScatterBrush = (chart: VisualChartSpec) => {
+    const axes = scatterAxisFields(chart);
+    setLayerFilters(
+      chart.layerId,
+      layerFilters(chart.layerId).filter((filter) => !(filter.kind === 'range' && axes.has(filter.field))),
+    );
+  };
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-slate-50">
       <div className="shrink-0 border-b bg-white px-4 py-3">
@@ -779,6 +1040,8 @@ export const ChartPanel = () => {
                   onToggleFilter={(datum) => toggleFilter(chart, datum)}
                   onBrushRange={(min, max) => setRangeFilter(chart, min, max)}
                   onClearRange={() => clearRangeFilter(chart)}
+                  onBrush2D={(brush) => setScatterBrush(chart, brush)}
+                  onClear2D={() => clearScatterBrush(chart)}
                   onHoverDatum={(datum) => setHighlightedFeatures(chart.layerId, datum.featureIds)}
                   onLeaveDatum={() => setHighlightedFeatures(chart.layerId, [])}
                 />

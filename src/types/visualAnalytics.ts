@@ -12,7 +12,7 @@ export type VisualAnalyticsState = {
   charts: VisualChartSpec[];
 };
 
-export type VisualChartType = 'bar' | 'donut' | 'rose' | 'histogram';
+export type VisualChartType = 'bar' | 'donut' | 'rose' | 'histogram' | 'scatter';
 
 export type VisualChartAggregation = 'count' | 'sum' | 'avg' | 'min' | 'max';
 
@@ -47,6 +47,26 @@ export type VisualChartResult = {
   totalRows: number;
   filteredRows: number;
   data: VisualChartDatum[];
+};
+
+export type VisualScatterPoint = {
+  x: number;
+  y: number;
+  /** 1 when the row passes the chart's context filters (other fields' filters). */
+  inContext: 0 | 1;
+};
+
+export type VisualScatterResult = {
+  chartId: string;
+  totalRows: number;
+  filteredRows: number;
+  /** True when points are a reservoir sample rather than every row. */
+  sampled: boolean;
+  points: VisualScatterPoint[];
+  xMin: number;
+  xMax: number;
+  yMin: number;
+  yMax: number;
 };
 
 export type VisualFilter =

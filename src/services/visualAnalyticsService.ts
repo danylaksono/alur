@@ -5,6 +5,7 @@ import {
   type VisualChartResult,
   type VisualChartSpec,
   type VisualFilter,
+  type VisualScatterResult,
 } from '../types/visualAnalytics';
 import { compileVisualFilterPredicate, compileVisualFiltersWhereClause, quoteIdentifier } from '../utils/visualFilterSql';
 import { CATEGORICAL_PALETTE, getPalette } from '../utils/palettes';
@@ -589,6 +590,80 @@ export const queryLayerChart = async ({
       };
     }),
   };
+};
+
+const SCATTER_MAX_POINTS = 12000;
+
+export const queryLayerScatter = async ({
+  layer,
+  filters,
+  chart,
+}: {
+  layer: AnalyticsLayer;
+  filters: VisualFilter[];
+  chart: VisualChartSpec;
+}): Promise<VisualScatterResult> => {
+  if (!chart.measureField) {
+    throw new Error('Scatter charts need a Y field');
+  }
+  // Force the measure field into the required-column check regardless of aggregation.
+  const { tableName } = await chartTableForLayer(layer, { ...chart, aggregation: 'avg' });
+  const table = `"${tableName}"`;
+  const x = `TRY_CAST(${quoteIdentifier(chart.dimensionField)} AS DOUBLE)`;
+  const y = `TRY_CAST(${quoteIdentifier(chart.measureField)} AS DOUBLE)`;
+
+  // Crossfilter semantics: exclude filters on the scatter's own axes so points
+  // never vanish under the chart's own brush; other charts' filters colour points.
+  const contextPredicate = filters
+    .filter((filter) => filter.field !== chart.dimensionField && filter.field !== chart.measureField)
+    .map(compileVisualFilterPredicate)
+    .filter((item): item is string => Boolean(item))
+    .join(' AND ');
+  const whereClause = compileVisualFiltersWhereClause(filters);
+
+  const [totalResult, filteredResult, extentResult] = await Promise.all([
+    duckdbService.query(`SELECT COUNT(*) AS row_count FROM ${table};`),
+    duckdbService.query(`SELECT COUNT(*) AS row_count FROM ${table} ${whereClause};`),
+    duckdbService.query(
+      `SELECT MIN(${x}) AS x_min, MAX(${x}) AS x_max, MIN(${y}) AS y_min, MAX(${y}) AS y_max, COUNT(*) AS point_count
+       FROM ${table} WHERE ${x} IS NOT NULL AND ${y} IS NOT NULL;`
+    ),
+  ]);
+  const totalRaw = normalizeRows(totalResult.toArray())[0] || {};
+  const filteredRaw = normalizeRows(filteredResult.toArray())[0] || {};
+  const extent = normalizeRows(extentResult.toArray())[0] || {};
+  const pointCount = Number(extent.point_count ?? 0);
+  const base = {
+    chartId: chart.id,
+    totalRows: Number(totalRaw.row_count ?? 0),
+    filteredRows: Number(filteredRaw.row_count ?? 0),
+  };
+
+  const xMin = Number(extent.x_min);
+  const xMax = Number(extent.x_max);
+  const yMin = Number(extent.y_min);
+  const yMax = Number(extent.y_max);
+  if (!pointCount || ![xMin, xMax, yMin, yMax].every(Number.isFinite)) {
+    return { ...base, sampled: false, points: [], xMin: 0, xMax: 1, yMin: 0, yMax: 1 };
+  }
+
+  const sampled = pointCount > SCATTER_MAX_POINTS;
+  // REPEATABLE keeps the sample stable across refetches so points don't jump while brushing.
+  const sampleClause = sampled ? ` USING SAMPLE reservoir(${SCATTER_MAX_POINTS} ROWS) REPEATABLE (7)` : '';
+  const result = await duckdbService.query(
+    `SELECT ${x} AS x, ${y} AS y,
+            ${contextPredicate ? `CASE WHEN ${contextPredicate} THEN 1 ELSE 0 END` : '1'} AS in_ctx
+     FROM ${table} WHERE ${x} IS NOT NULL AND ${y} IS NOT NULL${sampleClause};`
+  );
+  const points = normalizeRows(result.toArray())
+    .map((row) => ({
+      x: Number(row.x),
+      y: Number(row.y),
+      inContext: (Number(row.in_ctx) ? 1 : 0) as 0 | 1,
+    }))
+    .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
+
+  return { ...base, sampled, points, xMin, xMax, yMin, yMax };
 };
 
 export type TemporalRange = {
