@@ -98,6 +98,49 @@ describe('visual analytics cache helpers', () => {
     });
   });
 
+  it('excludes own-dimension filters from the chart series and reports totals (crossfilter)', async () => {
+    vi.spyOn(duckdbService, 'registerJsonRows').mockResolvedValue(undefined);
+    const query = vi.spyOn(duckdbService, 'query')
+      .mockResolvedValueOnce({ toArray: () => [{ row_count: 3 }] } as any)
+      .mockResolvedValueOnce({ toArray: () => [{ row_count: 1 }] } as any)
+      .mockResolvedValueOnce({
+        toArray: () => [
+          { label: 'Camden', total_count: 2, total_value: 2, count_value: 1, aggregate_value: 1, feature_ids: 'a' },
+        ],
+      } as any);
+
+    const result = await queryLayerChart({
+      layer: layer('areas'),
+      filters: [
+        { kind: 'category', field: 'borough', values: ['Camden'] },
+        { kind: 'range', field: 'value', min: 1, max: 2 },
+      ],
+      chart: {
+        id: 'chart-3',
+        title: 'Type counts',
+        layerId: 'areas',
+        type: 'bar',
+        dimensionField: 'borough',
+        aggregation: 'count',
+        paletteId: 'categorical',
+        maxCategories: 8,
+      },
+    });
+
+    const groupSql = String(query.mock.calls[2][0]);
+    expect(groupSql).toContain('FILTER (WHERE');
+    expect(groupSql).toContain('"value"');
+    expect(groupSql).not.toContain("'Camden'");
+    expect(groupSql).toContain('ORDER BY total_value DESC');
+    expect(result.data[0]).toMatchObject({
+      label: 'Camden',
+      value: 1,
+      count: 1,
+      totalValue: 2,
+      totalCount: 2,
+    });
+  });
+
   it('uses the MVT backing table for DuckDB chart feature ids', async () => {
     vi.spyOn(duckdbService, 'getTableSchema').mockResolvedValue({
       toArray: () => [

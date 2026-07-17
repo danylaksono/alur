@@ -6,7 +6,7 @@ import {
   type VisualChartSpec,
   type VisualFilter,
 } from '../types/visualAnalytics';
-import { compileVisualFiltersWhereClause, quoteIdentifier } from '../utils/visualFilterSql';
+import { compileVisualFilterPredicate, compileVisualFiltersWhereClause, quoteIdentifier } from '../utils/visualFilterSql';
 import { CATEGORICAL_PALETTE, getPalette } from '../utils/palettes';
 import type { MapLayer } from '../store/useStore';
 import type { FieldProfile } from '../utils/classification';
@@ -361,14 +361,15 @@ export const materializeLayerSelection = async ({
   return { source, featureCount: await duckdbService.getTableFeatureCount(safeTableName) };
 };
 
-const aggregationExpression = (chart: VisualChartSpec) => {
-  if (chart.aggregation === 'count' || !chart.measureField) return 'COUNT(*)';
+const aggregationExpression = (chart: VisualChartSpec, filterPredicate?: string) => {
+  const filterSuffix = filterPredicate ? ` FILTER (WHERE ${filterPredicate})` : '';
+  if (chart.aggregation === 'count' || !chart.measureField) return `COUNT(*)${filterSuffix}`;
 
   const field = `TRY_CAST(${quoteIdentifier(chart.measureField)} AS DOUBLE)`;
-  if (chart.aggregation === 'sum') return `COALESCE(SUM(${field}), 0)`;
-  if (chart.aggregation === 'avg') return `COALESCE(AVG(${field}), 0)`;
-  if (chart.aggregation === 'min') return `COALESCE(MIN(${field}), 0)`;
-  return `COALESCE(MAX(${field}), 0)`;
+  if (chart.aggregation === 'sum') return `COALESCE(SUM(${field})${filterSuffix}, 0)`;
+  if (chart.aggregation === 'avg') return `COALESCE(AVG(${field})${filterSuffix}, 0)`;
+  if (chart.aggregation === 'min') return `COALESCE(MIN(${field})${filterSuffix}, 0)`;
+  return `COALESCE(MAX(${field})${filterSuffix}, 0)`;
 };
 
 const chartPalette = (chart: VisualChartSpec, count: number) => {
@@ -468,7 +469,18 @@ export const queryLayerChart = async ({
   const table = `"${tableName}"`;
   const whereClause = compileVisualFiltersWhereClause(filters);
   const field = quoteIdentifier(chart.dimensionField);
-  const aggregate = aggregationExpression(chart);
+
+  // Crossfilter semantics: a chart ignores filters on its own dimension so the
+  // full distribution stays visible while brushing; other charts' filters apply.
+  const contextPredicate = filters
+    .filter((filter) => filter.field !== chart.dimensionField)
+    .map(compileVisualFilterPredicate)
+    .filter((item): item is string => Boolean(item))
+    .join(' AND ');
+  const totalAggregate = aggregationExpression(chart);
+  const aggregate = contextPredicate ? aggregationExpression(chart, contextPredicate) : totalAggregate;
+  const filteredCountExpr = contextPredicate ? `COUNT(*) FILTER (WHERE ${contextPredicate})` : 'COUNT(*)';
+  const featureIdFilterSuffix = contextPredicate ? ` FILTER (WHERE ${contextPredicate})` : '';
 
   const [totalResult, filteredResult] = await Promise.all([
     duckdbService.query(`SELECT COUNT(*) AS row_count FROM ${table};`),
@@ -478,9 +490,10 @@ export const queryLayerChart = async ({
   const filteredRaw = normalizeRows(filteredResult.toArray())[0] || {};
 
   if (chart.type === 'histogram') {
+    // Bin over the unfiltered extent so bins stay stable while brushing and filtering.
     const statsResult = await duckdbService.query(
       `SELECT MIN(TRY_CAST(${field} AS DOUBLE)) AS min_value, MAX(TRY_CAST(${field} AS DOUBLE)) AS max_value
-       FROM ${table} ${whereClause};`
+       FROM ${table};`
     );
     const stats = normalizeRows(statsResult.toArray())[0] || {};
     const min = Number(stats.min_value);
@@ -499,11 +512,12 @@ export const queryLayerChart = async ({
     const bucketExpr = max === min
       ? '0'
       : `LEAST(${binCount - 1}, CAST(FLOOR((TRY_CAST(${field} AS DOUBLE) - ${min}) / ${width || 1}) AS INTEGER))`;
-    const andOrWhere = whereClause ? `${whereClause} AND` : 'WHERE';
     const result = await duckdbService.query(
-      `SELECT ${bucketExpr} AS bucket, COUNT(*) AS count_value, ${aggregate} AS aggregate_value,
-              STRING_AGG(CAST(${featureIdExpression} AS VARCHAR), '\u001f') AS feature_ids
-       FROM ${table} ${andOrWhere} TRY_CAST(${field} AS DOUBLE) IS NOT NULL
+      `SELECT ${bucketExpr} AS bucket,
+              COUNT(*) AS total_count, ${totalAggregate} AS total_value,
+              ${filteredCountExpr} AS count_value, ${aggregate} AS aggregate_value,
+              STRING_AGG(CAST(${featureIdExpression} AS VARCHAR), '\u001f')${featureIdFilterSuffix} AS feature_ids
+       FROM ${table} WHERE TRY_CAST(${field} AS DOUBLE) IS NOT NULL
        GROUP BY bucket
        ORDER BY bucket;`
     );
@@ -521,11 +535,15 @@ export const queryLayerChart = async ({
         const from = min + width * index;
         const to = min + width * (index + 1);
         const label = `${from.toLocaleString(undefined, { maximumFractionDigits: 2 })}-${to.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+        const value = Number(row.aggregate_value ?? row.count_value ?? 0);
+        const count = Number(row.count_value ?? 0);
         return {
           key: `bin-${index}`,
           label,
-          value: Number(row.aggregate_value ?? row.count_value ?? 0),
-          count: Number(row.count_value ?? 0),
+          value,
+          count,
+          totalValue: Number(row.total_value ?? value),
+          totalCount: Number(row.total_count ?? count),
           color: colors[index],
           filter: { kind: 'range' as const, field: chart.dimensionField, min: from, max: to },
           featureIds: featureIdsFromValue(row.feature_ids),
@@ -535,13 +553,16 @@ export const queryLayerChart = async ({
   }
 
   const limit = Math.max(3, Math.min(30, chart.maxCategories || 8));
-  const andOrWhere = whereClause ? `${whereClause} AND` : 'WHERE';
+  // Order and limit by the unfiltered series so categories keep stable
+  // positions (and don't pop in and out) as linked filters change.
   const result = await duckdbService.query(
-    `SELECT CAST(${field} AS VARCHAR) AS label, COUNT(*) AS count_value, ${aggregate} AS aggregate_value,
-            STRING_AGG(CAST(${featureIdExpression} AS VARCHAR), '\u001f') AS feature_ids
-     FROM ${table} ${andOrWhere} ${field} IS NOT NULL
+    `SELECT CAST(${field} AS VARCHAR) AS label,
+            COUNT(*) AS total_count, ${totalAggregate} AS total_value,
+            ${filteredCountExpr} AS count_value, ${aggregate} AS aggregate_value,
+            STRING_AGG(CAST(${featureIdExpression} AS VARCHAR), '\u001f')${featureIdFilterSuffix} AS feature_ids
+     FROM ${table} WHERE ${field} IS NOT NULL
      GROUP BY label
-     ORDER BY aggregate_value DESC, count_value DESC
+     ORDER BY total_value DESC, total_count DESC
      LIMIT ${limit};`
   );
   const rows = normalizeRows(result.toArray());
@@ -553,11 +574,15 @@ export const queryLayerChart = async ({
     filteredRows: Number(filteredRaw.row_count ?? 0),
     data: rows.map((row, index) => {
       const label = String(row.label);
+      const value = Number(row.aggregate_value ?? row.count_value ?? 0);
+      const count = Number(row.count_value ?? 0);
       return {
         key: label,
         label,
-        value: Number(row.aggregate_value ?? row.count_value ?? 0),
-        count: Number(row.count_value ?? 0),
+        value,
+        count,
+        totalValue: Number(row.total_value ?? value),
+        totalCount: Number(row.total_count ?? count),
         color: colors[index],
         filter: { kind: 'category' as const, field: chart.dimensionField, values: [label] },
         featureIds: featureIdsFromValue(row.feature_ids),

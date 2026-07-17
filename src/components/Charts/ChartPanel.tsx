@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { BarChart3, Donut, Loader2, Plus, Trash2 } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { BarChart3, Donut, Loader2, Plus, Trash2, X } from 'lucide-react';
 import { useStore, type MapLayer } from '../../store/useStore';
 import {
   queryLayerChart,
@@ -72,6 +72,25 @@ const defaultChartForLayer = (layer: MapLayer): VisualChartSpec | null => {
   };
 };
 
+/** Whether a datum's mark should render as selected given the layer's active filters. */
+const isDatumActive = (datum: VisualChartDatum, filters: VisualFilter[]) => {
+  const own = datum.filter;
+  if (own.kind === 'category') {
+    return filters.some(
+      (filter) => filter.kind === 'category' && filter.field === own.field
+        && own.values.every((value) => filter.values.includes(value)),
+    );
+  }
+  if (own.kind === 'range') {
+    return filters.some(
+      (filter) => filter.kind === 'range' && filter.field === own.field
+        && (filter.min === undefined || (own.min ?? -Infinity) >= filter.min - 1e-9)
+        && (filter.max === undefined || (own.max ?? Infinity) <= filter.max + 1e-9),
+    );
+  }
+  return filters.some((filter) => visualChartFilterKey(filter) === visualChartFilterKey(own));
+};
+
 const polarToCartesian = (cx: number, cy: number, r: number, angle: number) => {
   const radians = ((angle - 90) * Math.PI) / 180;
   return { x: cx + r * Math.cos(radians), y: cy + r * Math.sin(radians) };
@@ -106,12 +125,13 @@ const Bars = ({
   onLeave: () => void;
   onClick: (datum: VisualChartDatum) => void;
 }) => {
-  const maxValue = Math.max(...data.map((datum) => datum.value), 1);
+  const maxValue = Math.max(...data.map((datum) => datum.totalValue), 1);
 
   return (
     <div className="space-y-1.5">
       {data.map((datum) => {
-        const active = activeKeys.has(visualChartFilterKey(datum.filter));
+        const active = activeKeys.has(datum.key);
+        const isFiltered = datum.value !== datum.totalValue;
         return (
           <button
             key={datum.key}
@@ -122,26 +142,193 @@ const Bars = ({
             onBlur={onLeave}
             onClick={() => onClick(datum)}
             className={cn(
-              'grid w-full grid-cols-[minmax(0,1fr)_64px] items-center gap-2 rounded-md px-2 py-1 text-left transition-colors hover:bg-slate-50',
+              'grid w-full grid-cols-[minmax(0,1fr)_72px] items-center gap-2 rounded-md px-2 py-1 text-left transition-colors hover:bg-slate-50',
               active && 'bg-sky-50 ring-1 ring-sky-200'
             )}
-            title={`${datum.label}: ${formatNumber(datum.value)} (${datum.count.toLocaleString()} rows)`}
+            title={`${datum.label}: ${formatNumber(datum.value)} of ${formatNumber(datum.totalValue)} (${datum.count.toLocaleString()} rows)`}
           >
             <span className="min-w-0">
               <span className="block truncate text-[11px] font-semibold text-slate-600">{datum.label}</span>
-              <span className="mt-1 block h-2 overflow-hidden rounded-full bg-slate-100">
+              <span className="relative mt-1 block h-2 overflow-hidden rounded-full bg-slate-100">
                 <span
-                  className="block h-full rounded-full"
-                  style={{ width: `${Math.max(3, (datum.value / maxValue) * 100)}%`, backgroundColor: datum.color }}
+                  className="absolute inset-y-0 left-0 rounded-full bg-slate-200"
+                  style={{ width: `${Math.max(3, (datum.totalValue / maxValue) * 100)}%` }}
+                />
+                <span
+                  className="absolute inset-y-0 left-0 rounded-full"
+                  style={{ width: `${(datum.value / maxValue) * 100}%`, backgroundColor: datum.color }}
                 />
               </span>
             </span>
-            <span className="text-right text-[11px] font-bold tabular-nums text-slate-700">
-              {formatNumber(datum.value)}
+            <span className="text-right text-[11px] tabular-nums">
+              <span className="font-bold text-slate-700">{formatNumber(datum.value)}</span>
+              {isFiltered && (
+                <span className="text-slate-400"> /{formatNumber(datum.totalValue)}</span>
+              )}
             </span>
           </button>
         );
       })}
+    </div>
+  );
+};
+
+const HISTOGRAM_WIDTH = 260;
+const HISTOGRAM_HEIGHT = 88;
+
+type BrushRange = { min: number; max: number };
+
+const Histogram = ({
+  data,
+  brush,
+  onHover,
+  onLeave,
+  onBrushRange,
+  onClearRange,
+}: {
+  data: VisualChartDatum[];
+  brush: BrushRange | null;
+  onHover: (datum: VisualChartDatum) => void;
+  onLeave: () => void;
+  onBrushRange: (min: number, max: number) => void;
+  onClearRange: () => void;
+}) => {
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const [drag, setDrag] = useState<{ start: number; current: number } | null>(null);
+
+  const bins = data.map((datum) => datum.filter as Extract<VisualFilter, { kind: 'range' }>);
+  const domainMin = bins[0]?.min ?? 0;
+  const domainMax = bins[bins.length - 1]?.max ?? 1;
+  const domainSpan = domainMax - domainMin || 1;
+  const maxValue = Math.max(...data.map((datum) => datum.totalValue), 1);
+  const cellWidth = HISTOGRAM_WIDTH / Math.max(1, data.length);
+  const xOfValue = (value: number) => ((value - domainMin) / domainSpan) * HISTOGRAM_WIDTH;
+
+  const pointerX = (event: React.PointerEvent) => {
+    const rect = svgRef.current?.getBoundingClientRect();
+    if (!rect || !rect.width) return 0;
+    const x = ((event.clientX - rect.left) / rect.width) * HISTOGRAM_WIDTH;
+    return Math.max(0, Math.min(HISTOGRAM_WIDTH, x));
+  };
+
+  const binIndexAt = (x: number) =>
+    Math.max(0, Math.min(data.length - 1, Math.floor(x / cellWidth)));
+
+  const handlePointerDown = (event: React.PointerEvent) => {
+    if (!data.length) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const x = pointerX(event);
+    setDrag({ start: x, current: x });
+  };
+
+  const handlePointerMove = (event: React.PointerEvent) => {
+    if (drag) {
+      setDrag({ start: drag.start, current: pointerX(event) });
+      return;
+    }
+    onHover(data[binIndexAt(pointerX(event))]);
+  };
+
+  const handlePointerUp = (event: React.PointerEvent) => {
+    if (!drag) return;
+    const from = Math.min(drag.start, drag.current);
+    const to = Math.max(drag.start, drag.current);
+    setDrag(null);
+
+    if (to - from < 4) {
+      // Treat as a click: brush the single bin, or clear if it is the active brush.
+      const bin = bins[binIndexAt(from)];
+      if (bin?.min === undefined || bin?.max === undefined) return;
+      if (brush && brush.min === bin.min && brush.max === bin.max) onClearRange();
+      else onBrushRange(bin.min, bin.max);
+      return;
+    }
+
+    const first = bins[binIndexAt(from)];
+    const last = bins[binIndexAt(to)];
+    if (first?.min === undefined || last?.max === undefined) return;
+    onBrushRange(first.min, last.max);
+  };
+
+  const dragRect = drag
+    ? { x: Math.min(drag.start, drag.current), width: Math.abs(drag.current - drag.start) }
+    : null;
+  const brushRect = brush && !drag
+    ? { x: xOfValue(brush.min), width: Math.max(2, xOfValue(brush.max) - xOfValue(brush.min)) }
+    : null;
+
+  return (
+    <div>
+      {brush && (
+        <div className="mb-1.5 flex items-center justify-between text-[11px]">
+          <span className="font-semibold text-sky-700">
+            {formatNumber(brush.min)} – {formatNumber(brush.max)}
+          </span>
+          <button
+            type="button"
+            onClick={onClearRange}
+            className="flex items-center gap-1 rounded px-1.5 py-0.5 font-semibold uppercase tracking-wide text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+          >
+            <X className="h-3 w-3" />
+            Clear range
+          </button>
+        </div>
+      )}
+      <svg
+        ref={svgRef}
+        viewBox={`0 0 ${HISTOGRAM_WIDTH} ${HISTOGRAM_HEIGHT}`}
+        className="w-full cursor-crosshair touch-none select-none"
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerLeave={() => { if (!drag) onLeave(); }}
+      >
+        {data.map((datum, index) => {
+          const bin = bins[index];
+          const outsideBrush = brush
+            && ((bin.max ?? Infinity) <= brush.min + 1e-9 || (bin.min ?? -Infinity) >= brush.max - 1e-9);
+          const totalHeight = (datum.totalValue / maxValue) * (HISTOGRAM_HEIGHT - 4);
+          const filteredHeight = (datum.value / maxValue) * (HISTOGRAM_HEIGHT - 4);
+          const x = index * cellWidth + 1;
+          const width = Math.max(1, cellWidth - 2);
+          return (
+            <g key={datum.key} opacity={outsideBrush ? 0.35 : 1}>
+              <title>{`${datum.label}: ${formatNumber(datum.value)} of ${formatNumber(datum.totalValue)}`}</title>
+              <rect
+                x={x}
+                y={HISTOGRAM_HEIGHT - totalHeight}
+                width={width}
+                height={totalHeight}
+                rx={1.5}
+                className="fill-slate-200"
+              />
+              <rect
+                x={x}
+                y={HISTOGRAM_HEIGHT - filteredHeight}
+                width={width}
+                height={filteredHeight}
+                rx={1.5}
+                fill={datum.color}
+              />
+            </g>
+          );
+        })}
+        {(dragRect || brushRect) && (
+          <rect
+            x={(dragRect || brushRect)!.x}
+            y={0}
+            width={(dragRect || brushRect)!.width}
+            height={HISTOGRAM_HEIGHT}
+            className="fill-sky-400/15 stroke-sky-500"
+            strokeWidth={1}
+          />
+        )}
+      </svg>
+      <div className="mt-1 flex items-center justify-between text-[11px] tabular-nums text-slate-400">
+        <span>{formatNumber(domainMin)}</span>
+        <span className="text-slate-300">drag to brush</span>
+        <span>{formatNumber(domainMax)}</span>
+      </div>
     </div>
   );
 };
@@ -174,7 +361,7 @@ const RadialChart = ({
           const end = start + fraction * 360;
           cursor = end;
           const outer = type === 'rose' ? 24 + (datum.value / maxValue) * 40 : 54;
-          const active = activeKeys.has(visualChartFilterKey(datum.filter));
+          const active = activeKeys.has(datum.key);
           return (
             <path
               key={datum.key}
@@ -207,7 +394,12 @@ const RadialChart = ({
           >
             <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: datum.color }} />
             <span className="min-w-0 flex-1 truncate text-[11px] text-slate-600">{datum.label}</span>
-            <span className="text-[11px] font-bold tabular-nums text-slate-700">{formatNumber(datum.value)}</span>
+            <span className="text-[11px] tabular-nums">
+              <span className="font-bold text-slate-700">{formatNumber(datum.value)}</span>
+              {datum.value !== datum.totalValue && (
+                <span className="text-slate-400"> /{formatNumber(datum.totalValue)}</span>
+              )}
+            </span>
           </button>
         ))}
       </div>
@@ -223,6 +415,8 @@ const ChartCard = ({
   onUpdate,
   onRemove,
   onToggleFilter,
+  onBrushRange,
+  onClearRange,
   onHoverDatum,
   onLeaveDatum,
 }: {
@@ -233,6 +427,8 @@ const ChartCard = ({
   onUpdate: (patch: Partial<Omit<VisualChartSpec, 'id'>>) => void;
   onRemove: () => void;
   onToggleFilter: (datum: VisualChartDatum) => void;
+  onBrushRange: (min: number, max: number) => void;
+  onClearRange: () => void;
   onHoverDatum: (datum: VisualChartDatum) => void;
   onLeaveDatum: () => void;
 }) => {
@@ -241,7 +437,17 @@ const ChartCard = ({
   const [error, setError] = useState<string | null>(null);
   const numericFields = numericFieldsForLayer(layer);
   const filtersKey = JSON.stringify(filters);
-  const activeFilterKeys = useMemo(() => new Set(filters.map(visualChartFilterKey)), [filters]);
+  const activeKeys = useMemo(
+    () => new Set((result?.data || []).filter((datum) => isDatumActive(datum, filters)).map((datum) => datum.key)),
+    [result, filtersKey],
+  );
+  const ownRangeFilter = filters.find(
+    (filter): filter is Extract<VisualFilter, { kind: 'range' }> =>
+      filter.kind === 'range' && filter.field === chart.dimensionField,
+  );
+  const brush = ownRangeFilter && ownRangeFilter.min !== undefined && ownRangeFilter.max !== undefined
+    ? { min: ownRangeFilter.min, max: ownRangeFilter.max }
+    : null;
 
   useEffect(() => {
     let cancelled = false;
@@ -385,7 +591,7 @@ const ChartCard = ({
       </div>
 
       <div className="p-3">
-        {isLoading ? (
+        {isLoading && !result ? (
           <div className="flex h-36 items-center justify-center text-slate-400">
             <Loader2 className="h-4 w-4 animate-spin" />
           </div>
@@ -403,11 +609,20 @@ const ChartCard = ({
               <span>{result.filteredRows.toLocaleString()} active rows</span>
               <span>{result.totalRows.toLocaleString()} total</span>
             </div>
-            {chart.type === 'donut' || chart.type === 'rose' ? (
+            {chart.type === 'histogram' ? (
+              <Histogram
+                data={result.data}
+                brush={brush}
+                onHover={onHoverDatum}
+                onLeave={onLeaveDatum}
+                onBrushRange={onBrushRange}
+                onClearRange={onClearRange}
+              />
+            ) : chart.type === 'donut' || chart.type === 'rose' ? (
               <RadialChart
                 data={result.data}
                 type={chart.type}
-                activeKeys={activeFilterKeys}
+                activeKeys={activeKeys}
                 onHover={onHoverDatum}
                 onLeave={onLeaveDatum}
                 onClick={onToggleFilter}
@@ -415,7 +630,7 @@ const ChartCard = ({
             ) : (
               <Bars
                 data={result.data}
-                activeKeys={activeFilterKeys}
+                activeKeys={activeKeys}
                 onHover={onHoverDatum}
                 onLeave={onLeaveDatum}
                 onClick={onToggleFilter}
@@ -455,8 +670,35 @@ export const ChartPanel = () => {
     addChart(nextChart);
   };
 
+  const layerFilters = (layerId: string) => visualAnalytics.layers[layerId]?.filters || [];
+
   const toggleFilter = (chart: VisualChartSpec, datum: VisualChartDatum) => {
-    const currentFilters = visualAnalytics.layers[chart.layerId]?.filters || [];
+    const currentFilters = layerFilters(chart.layerId);
+
+    if (datum.filter.kind === 'category') {
+      // Merge into one multi-value filter per field so several categories
+      // combine as OR instead of contradictory ANDed single-value filters.
+      const value = datum.filter.values[0];
+      const existing = currentFilters.find(
+        (filter): filter is Extract<VisualFilter, { kind: 'category' }> =>
+          filter.kind === 'category' && filter.field === datum.filter.field,
+      );
+      if (!existing) {
+        setLayerFilters(chart.layerId, [...currentFilters, datum.filter]);
+        return;
+      }
+      const values = existing.values.includes(value)
+        ? existing.values.filter((item) => item !== value)
+        : [...existing.values, value];
+      setLayerFilters(
+        chart.layerId,
+        values.length
+          ? currentFilters.map((filter) => (filter === existing ? { ...existing, values } : filter))
+          : currentFilters.filter((filter) => filter !== existing),
+      );
+      return;
+    }
+
     const datumKey = visualChartFilterKey(datum.filter);
     const exists = currentFilters.some((filter) => visualChartFilterKey(filter) === datumKey);
     setLayerFilters(
@@ -464,6 +706,22 @@ export const ChartPanel = () => {
       exists
         ? currentFilters.filter((filter) => visualChartFilterKey(filter) !== datumKey)
         : [...currentFilters, datum.filter],
+    );
+  };
+
+  const setRangeFilter = (chart: VisualChartSpec, min: number, max: number) => {
+    const rest = layerFilters(chart.layerId).filter(
+      (filter) => !(filter.kind === 'range' && filter.field === chart.dimensionField),
+    );
+    setLayerFilters(chart.layerId, [...rest, { kind: 'range', field: chart.dimensionField, min, max }]);
+  };
+
+  const clearRangeFilter = (chart: VisualChartSpec) => {
+    setLayerFilters(
+      chart.layerId,
+      layerFilters(chart.layerId).filter(
+        (filter) => !(filter.kind === 'range' && filter.field === chart.dimensionField),
+      ),
     );
   };
 
@@ -477,7 +735,7 @@ export const ChartPanel = () => {
               Charts
             </h3>
             <p className="mt-1 truncate text-[11px] text-slate-400">
-              Click chart marks to filter. Hover to highlight mapped features.
+              Click marks to filter, drag histograms to brush. Grey bars show the unfiltered total.
             </p>
           </div>
           <button
@@ -519,6 +777,8 @@ export const ChartPanel = () => {
                   onUpdate={(patch) => updateChart(chart.id, patch)}
                   onRemove={() => removeChart(chart.id)}
                   onToggleFilter={(datum) => toggleFilter(chart, datum)}
+                  onBrushRange={(min, max) => setRangeFilter(chart, min, max)}
+                  onClearRange={() => clearRangeFilter(chart)}
                   onHoverDatum={(datum) => setHighlightedFeatures(chart.layerId, datum.featureIds)}
                   onLeaveDatum={() => setHighlightedFeatures(chart.layerId, [])}
                 />

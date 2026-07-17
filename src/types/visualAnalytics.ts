@@ -31,8 +31,12 @@ export type VisualChartSpec = {
 export type VisualChartDatum = {
   key: string;
   label: string;
+  /** Aggregate over rows passing the chart's context filters (other fields' filters). */
   value: number;
   count: number;
+  /** Aggregate over all rows, ignoring filters — the grey context series. */
+  totalValue: number;
+  totalCount: number;
   color: string;
   filter: VisualFilter;
   featureIds: string[];
