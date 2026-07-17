@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { X } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { SelectionSummary } from '../Visualisation/SelectionSummary';
+import { SelectionExplain } from '../Visualisation/SelectionExplain';
 import { ErrorBoundary } from '../ErrorBoundary';
 
 /**
@@ -45,6 +46,9 @@ export const ContextInspector = () => {
           filters={filters}
           selectedFeatureIds={selectedFeatureIds}
         />
+      </ErrorBoundary>
+      <ErrorBoundary name="Selection Explain">
+        <SelectionExplain layer={selectedLayer} selectedFeatureIds={selectedFeatureIds} />
       </ErrorBoundary>
     </div>
   );

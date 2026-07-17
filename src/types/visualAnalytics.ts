@@ -97,6 +97,30 @@ export type VisualFilter =
       includeNull?: boolean;
     };
 
+export type SelectionDivergence =
+  | {
+      kind: 'numeric';
+      field: string;
+      /** Standardized mean difference |mean_sel − mean_rest| / std (effect size). */
+      score: number;
+      selectedMean: number;
+      restMean: number;
+    }
+  | {
+      kind: 'categorical';
+      field: string;
+      /** Total variation distance between category shares (0..1). */
+      score: number;
+      categories: Array<{ label: string; selectedShare: number; restShare: number }>;
+    };
+
+export type SelectionExplanation = {
+  selectedCount: number;
+  restCount: number;
+  /** Fields ranked by how strongly the selection diverges from the rest. */
+  fields: SelectionDivergence[];
+};
+
 export type LayerSummaryMetric = {
   field: string;
   kind: 'numeric';

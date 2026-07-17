@@ -2,6 +2,8 @@ import { duckdbService } from './duckdb';
 import {
   FEATURE_ID_PROPERTY,
   type LayerAnalyticsSummary,
+  type SelectionDivergence,
+  type SelectionExplanation,
   type VisualChartResult,
   type VisualChartSpec,
   type VisualFilter,
@@ -899,6 +901,122 @@ export const queryLayerFieldProfile = async ({
       count: Number(row.count),
     })),
   };
+};
+
+const EXPLAIN_MAX_IDS = 5000;
+const EXPLAIN_MAX_NUMERIC_FIELDS = 24;
+const EXPLAIN_MAX_CATEGORY_FIELDS = 5;
+
+/**
+ * Rank a layer's attributes by how strongly the selected features differ from
+ * the rest: standardized mean difference for numeric fields, total variation
+ * distance over the top categories for categorical fields.
+ */
+export const explainLayerSelection = async ({
+  layer,
+  selectedFeatureIds,
+}: {
+  layer: AnalyticsLayer;
+  selectedFeatureIds: string[];
+}): Promise<SelectionExplanation | null> => {
+  if (selectedFeatureIds.length < 2) return null;
+
+  const tableName = await analyticsTableForLayer(layer);
+  const table = `"${tableName.replace(/"/g, '""')}"`;
+  const fidColumn = quoteIdentifier(featureIdColumnForLayer(layer));
+  const idList = selectedFeatureIds
+    .slice(0, EXPLAIN_MAX_IDS)
+    .map((id) => `'${String(id).replace(/'/g, "''")}'`)
+    .join(', ');
+  const selPredicate = `CAST(${fidColumn} AS VARCHAR) IN (${idList})`;
+  const restPredicate = `NOT (${selPredicate})`;
+
+  const tileColumns = (layer.source?.kind === 'duckdb-table' || layer.source?.kind === 'duckdb-query')
+    ? new Set(layer.source.tileSource?.propertyColumns || [])
+    : null;
+  const columns = analyticsFieldsForLayer(layer)
+    .filter((name) => {
+      const lower = name.toLowerCase();
+      return ![FEATURE_ID_PROPERTY, 'geojson', 'geometry', 'geom', 'wkb_geometry'].includes(lower)
+        && !lower.startsWith('__ymn_')
+        && (!tileColumns || tileColumns.has(name));
+    })
+    .slice(0, 36);
+  if (!columns.length) return null;
+
+  // One probe pass classifies fields as numeric vs categorical.
+  const probeResult = await duckdbService.query(
+    `SELECT COUNT(*) FILTER (WHERE ${selPredicate}) AS sel_count,
+            COUNT(*) FILTER (WHERE ${restPredicate}) AS rest_count,
+            ${columns.map((column, index) =>
+              `COUNT(TRY_CAST(${quoteIdentifier(column)} AS DOUBLE)) AS p${index}_num, COUNT(${quoteIdentifier(column)}) AS p${index}_all`).join(', ')}
+     FROM ${table};`
+  );
+  const probe = normalizeRows(probeResult.toArray())[0] || {};
+  const selectedCount = Number(probe.sel_count ?? 0);
+  const restCount = Number(probe.rest_count ?? 0);
+  if (!selectedCount || !restCount) return null;
+
+  const numericColumns: string[] = [];
+  const categoricalColumns: string[] = [];
+  columns.forEach((column, index) => {
+    const numeric = Number(probe[`p${index}_num`] ?? 0);
+    const nonNull = Number(probe[`p${index}_all`] ?? 0);
+    if (nonNull > 0 && numeric >= nonNull * 0.8 && numericColumns.length < EXPLAIN_MAX_NUMERIC_FIELDS) {
+      numericColumns.push(column);
+    } else if (nonNull > 0 && categoricalColumns.length < EXPLAIN_MAX_CATEGORY_FIELDS) {
+      categoricalColumns.push(column);
+    }
+  });
+
+  const fields: SelectionDivergence[] = [];
+
+  if (numericColumns.length) {
+    const numericResult = await duckdbService.query(
+      `SELECT ${numericColumns.map((column, index) => {
+        const value = `TRY_CAST(${quoteIdentifier(column)} AS DOUBLE)`;
+        return `AVG(${value}) FILTER (WHERE ${selPredicate}) AS n${index}_sel,
+                AVG(${value}) FILTER (WHERE ${restPredicate}) AS n${index}_rest,
+                STDDEV_POP(${value}) AS n${index}_std`;
+      }).join(', ')}
+       FROM ${table};`
+    );
+    const stats = normalizeRows(numericResult.toArray())[0] || {};
+    numericColumns.forEach((column, index) => {
+      const selectedMean = Number(stats[`n${index}_sel`]);
+      const restMean = Number(stats[`n${index}_rest`]);
+      const std = Number(stats[`n${index}_std`]);
+      if (!Number.isFinite(selectedMean) || !Number.isFinite(restMean)) return;
+      const score = std > 0
+        ? Math.abs(selectedMean - restMean) / std
+        : selectedMean === restMean ? 0 : 1;
+      fields.push({ kind: 'numeric', field: column, score, selectedMean, restMean });
+    });
+  }
+
+  for (const column of categoricalColumns) {
+    const field = quoteIdentifier(column);
+    const result = await duckdbService.query(
+      `SELECT CAST(${field} AS VARCHAR) AS label,
+              COUNT(*) FILTER (WHERE ${selPredicate}) AS sel_n,
+              COUNT(*) FILTER (WHERE ${restPredicate}) AS rest_n
+       FROM ${table} WHERE ${field} IS NOT NULL
+       GROUP BY label ORDER BY COUNT(*) DESC LIMIT 8;`
+    );
+    const rows = normalizeRows(result.toArray());
+    if (!rows.length) continue;
+    const categories = rows.map((row) => ({
+      label: String(row.label),
+      selectedShare: Number(row.sel_n ?? 0) / selectedCount,
+      restShare: Number(row.rest_n ?? 0) / restCount,
+    }));
+    const score = categories.reduce((sum, item) => sum + Math.abs(item.selectedShare - item.restShare), 0) / 2;
+    categories.sort((a, b) => Math.abs(b.selectedShare - b.restShare) - Math.abs(a.selectedShare - a.restShare));
+    fields.push({ kind: 'categorical', field: column, score, categories: categories.slice(0, 3) });
+  }
+
+  fields.sort((a, b) => b.score - a.score);
+  return { selectedCount, restCount, fields: fields.slice(0, 8) };
 };
 
 const INTERNAL_TABLE_PREFIXES = ['__ymn_', 'visual_layer_'];

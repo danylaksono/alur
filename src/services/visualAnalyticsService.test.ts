@@ -10,6 +10,7 @@ import {
   queryLayerSelectionBounds,
   queryTableChart,
   listChartTables,
+  explainLayerSelection,
   registerLayerForAnalytics,
   visualChartFilterKey,
 } from './visualAnalyticsService';
@@ -367,6 +368,47 @@ describe('visual analytics cache helpers', () => {
   it('calculates bounds for selected legacy features', async () => {
     const bounds = await queryLayerSelectionBounds(layer('areas'), ['b']);
     expect(bounds).toEqual([[1, 1], [1, 1]]);
+  });
+
+  it('ranks selection divergence across numeric and categorical fields', async () => {
+    vi.spyOn(duckdbService, 'registerJsonRows').mockResolvedValue(undefined);
+    const query = vi.spyOn(duckdbService, 'query')
+      // probe: classify fields, count selection split
+      .mockResolvedValueOnce({
+        toArray: () => [{ sel_count: 2, rest_count: 3, p0_num: 5, p0_all: 5, p1_num: 0, p1_all: 5 }],
+      } as any)
+      // numeric stats
+      .mockResolvedValueOnce({
+        toArray: () => [{ n0_sel: 10, n0_rest: 4, n0_std: 3 }],
+      } as any)
+      // categorical shares
+      .mockResolvedValueOnce({
+        toArray: () => [
+          { label: 'Camden', sel_n: 2, rest_n: 0 },
+          { label: 'Brent', sel_n: 0, rest_n: 3 },
+        ],
+      } as any);
+
+    const richLayer = {
+      id: 'mix',
+      geojson: {
+        type: 'FeatureCollection' as const,
+        features: [{
+          type: 'Feature' as const,
+          geometry: { type: 'Point' as const, coordinates: [0, 0] },
+          properties: { [FEATURE_ID_PROPERTY]: 'a', value: 1, borough: 'Camden' },
+        }],
+      },
+    };
+
+    const result = await explainLayerSelection({ layer: richLayer, selectedFeatureIds: ['a', 'b'] });
+
+    expect(String(query.mock.calls[0][0])).toContain("IN ('a', 'b')");
+    expect(result).not.toBeNull();
+    expect(result!.selectedCount).toBe(2);
+    expect(result!.restCount).toBe(3);
+    expect(result!.fields[0]).toMatchObject({ kind: 'numeric', field: 'value', score: 2, selectedMean: 10, restMean: 4 });
+    expect(result!.fields[1]).toMatchObject({ kind: 'categorical', field: 'borough', score: 1 });
   });
 
   it('builds stable chart filter keys for linked brushing', () => {
