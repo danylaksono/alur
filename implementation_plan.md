@@ -1,4 +1,4 @@
-# Implementation Plan: YMNNGIS — Browser GIS Modeler
+# Implementation Plan: ALUR — Interactive Visual Analytics
 
 ## Executive Summary
 

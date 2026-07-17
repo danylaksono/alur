@@ -38,7 +38,7 @@ export const downloadMapStyleExport = (layers: MapLayer[]) => {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
-  anchor.download = `ymnngis-map-style-${Date.now()}.json`;
+  anchor.download = `alur-map-style-${Date.now()}.json`;
   anchor.click();
   URL.revokeObjectURL(url);
 };

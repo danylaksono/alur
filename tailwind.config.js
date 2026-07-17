@@ -7,18 +7,18 @@ export default {
   theme: {
     extend: {
       colors: {
-        background: "oklch(0.98 0.01 220)",
-        foreground: "oklch(0.2 0.02 220)",
+        background: "oklch(0.985 0.006 180)",
+        foreground: "oklch(0.22 0.025 190)",
         primary: {
-          DEFAULT: "oklch(0.6 0.15 250)",
-          foreground: "oklch(0.98 0.01 220)",
+          DEFAULT: "oklch(0.47 0.09 185)",
+          foreground: "oklch(0.985 0.006 180)",
         },
         secondary: {
-          DEFAULT: "oklch(0.7 0.12 280)",
-          foreground: "oklch(0.2 0.02 220)",
+          DEFAULT: "oklch(0.76 0.14 78)",
+          foreground: "oklch(0.22 0.025 190)",
         },
-        muted: "oklch(0.9 0.01 220)",
-        border: "oklch(0.85 0.01 220)",
+        muted: "oklch(0.93 0.012 180)",
+        border: "oklch(0.87 0.015 180)",
       },
       fontFamily: {
         sans: ['Figtree', 'Inter', 'system-ui', 'sans-serif'],

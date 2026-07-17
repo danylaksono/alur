@@ -1,19 +1,19 @@
-# YMNNGIS
+# ALUR
 
-**You Might Not Need Desktop GIS.** A browser-based spatial analysis and interactive visualisation platform powered by DuckDB-Wasm and MapLibre GL.
+**Interactive visual analytics, from data to direction.**
 
 ## What it does
 
-YMNNGIS is a single-page web application that brings the GIS workflow to your browser. Load spatial data, build processing pipelines as visual node diagrams, style and interact with map layers, and get AI assistance — all without installing a server or desktop GIS.
+ALUR is a browser-based workspace for inspecting, exploring and understanding data through coordinated tables, charts, maps and visual workflows. Load data, compare distributions, filter and select across linked views, calculate fields, build reproducible processing pipelines and ask the analysis copilot for help.
 
-The app starts as a blank canvas: drop a Parquet or CSV file onto the map (or use **Add data**) and everything runs locally in your browser. The AI copilot is bring-your-own-key — add an OpenRouter API key in Settings; it is stored only in your browser's localStorage.
+Maps are one analytical view, not the product boundary: ALUR uses MapLibre when geography helps answer the question, while the interactive table, charts and DuckDB workflow remain equally important. Everything runs locally in the browser. The copilot is bring-your-own-key — add an OpenRouter API key in Settings; it is stored only in your browser's localStorage.
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
-| Spatial engine | DuckDB-Wasm (in-browser SQL + `spatial` + `h3` extensions) |
-| Map rendering | MapLibre GL JS |
+| Analytical engine | DuckDB-Wasm (in-browser SQL + `spatial` + `h3` extensions) |
+| Linked views | TanStack Table + custom SVG charts + MapLibre GL JS |
 | Workflow editor | XYFlow (React Flow) |
 | State management | Zustand |
 | AI assistant | LLM-powered chat with tool calling |
@@ -29,7 +29,7 @@ npm install
 npm run dev        # Start dev server on localhost:5173
 npm run build      # Production build
 npm run preview    # Preview production build
-npm run test       # Run test suite (60 tests)
+npm run test       # Run the test suite
 ```
 
 ## GitHub Pages Deployment
@@ -40,7 +40,7 @@ Pushes to `main` are deployed through GitHub Actions in `.github/workflows/deplo
 
 ## Architecture
 
-Map-first shell: the map fills the viewport; everything else lives in a collapsible left panel and a resizable bottom drawer.
+Coordinated visual-analytics shell: the main canvas provides geographic context when available, while charts, layers and the copilot live in a collapsible left panel and the workflow, table and SQL views share a resizable bottom drawer.
 
 ```
 ┌──────────────────────────────────────────────────────────┐
@@ -72,11 +72,11 @@ Map-first shell: the map fills the viewport; everything else lives in a collapsi
 
 ### Data flow
 
-1. **Load data** — Parquet, CSV, or GeoJSON files via input nodes (DuckDB tables/views)
-2. **Build workflow** — Chain nodes (filter, buffer, aggregate, attribute calc, visualisation, output) as a directed acyclic graph
-3. **Execute** — DuckDB compiles the node chain into a single CTE SQL query and materializes renderable table-backed layers in WebAssembly
-4. **Visualise** — DuckDB-backed `MapLayer` sources render through MapLibre vector tiles (`ST_AsMVT`) and use the visualisation compiler for paint/layout expressions
-5. **Interact** — Hover, inspect, and filter features on the map; DuckDB recomputes profiles, summaries, and filtered rows in real time while GeoJSON remains an export/fallback format
+1. **Load** — Bring Parquet, CSV, or GeoJSON data into local DuckDB tables/views
+2. **Inspect** — Explore records, field profiles, distributions and missing values in the table
+3. **Relate** — Select and filter across linked tables, charts and maps
+4. **Transform** — Chain filters, calculations, joins, aggregates, spatial operations and visualisation recipes as a directed acyclic graph
+5. **Explain or export** — Revisit the generated SQL, use the copilot, or export a reusable result
 
 ## Features
 
@@ -86,7 +86,7 @@ Map-first shell: the map fills the viewport; everything else lives in a collapsi
 - Step-through execution per node or full workflow run
 - SQL preview for every stage
 
-### Visualisation (7 map styles)
+### Map visualisation (7 styles)
 - **Choropleth** — numeric classification with equal interval or quantile breaks, configurable class count and palette
 - **Categorical** — top-N categories with stable colour assignment
 - **Graduated symbols** — point radius proportional to a numeric field
@@ -107,7 +107,7 @@ All styles are compiled to native MapLibre expressions — no hand-written JSON.
 - **Filter chips** — visual display of all active filters with individual remove and clear-all
 - **Stable feature IDs** — `_ymn_feature_id` assigned on layer creation, used for cross-component linking
 
-### AI Copilot
+### ALUR Copilot
 - Natural-language workflow creation (“add a 500m buffer around london wards”)
 - One-shot map styling (“style the need layer as a five-class quantile choropleth”)
 - H3 hexbin generation (“create H3 cells at resolution 7 covering camden”)

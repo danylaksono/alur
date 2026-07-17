@@ -203,10 +203,10 @@ export const LocationSearchControl = ({
                 onClick={() => chooseResult(result)}
                 className={cn(
                   'flex w-full items-start gap-2 rounded-md px-2.5 py-2 text-left transition-colors',
-                  activeIndex === index ? 'bg-indigo-50' : 'hover:bg-slate-50',
+                  activeIndex === index ? 'bg-teal-50' : 'hover:bg-slate-50',
                 )}
               >
-                <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-indigo-500" />
+                <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-teal-600" />
                 <span className="min-w-0">
                   <span className="line-clamp-2 block text-xs font-medium leading-4 text-slate-700">{result.label}</span>
                   <span className="mt-0.5 block text-[10px] capitalize text-slate-400">{resultKind(result)}</span>

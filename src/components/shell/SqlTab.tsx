@@ -104,7 +104,7 @@ export const SqlTab = ({
               {lastManualSql && (
                 <button
                   onClick={handlePromoteToNode}
-                  className="flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-[11px] font-semibold text-indigo-700 transition-all hover:bg-indigo-100"
+                  className="flex items-center gap-1.5 rounded-lg border border-teal-200 bg-teal-50 px-2.5 py-1.5 text-[11px] font-semibold text-teal-700 transition-all hover:bg-teal-100"
                 >
                   <Workflow className="h-3 w-3" /> Promote to node
                 </button>

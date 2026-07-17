@@ -1,4 +1,4 @@
-# YMNNGIS: Production Roadmap
+# ALUR: Production Roadmap
 
 This document outlines the architectural evolution and feature roadmap for GeoModeler Pro, transitioning from a prototype to a production-grade GIS processing modeler.
 

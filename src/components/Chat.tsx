@@ -438,7 +438,7 @@ export const Chat = () => {
     <div className="flex h-full min-h-0 flex-col bg-white">
       <div className="p-3 border-b bg-muted/20 flex items-center justify-between shrink-0">
         <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
-          <Sparkles className="w-3 h-3 text-primary" /> GIS Copilot
+          <Sparkles className="w-3 h-3 text-primary" /> ALUR Copilot
         </h3>
         {hasApiKey && (
           <span className="max-w-40 truncate text-[11px] bg-primary/10 text-primary px-1.5 py-0.5 rounded font-semibold" title={settings.openRouterModelId}>
@@ -473,16 +473,16 @@ export const Chat = () => {
         {chatMessages.map((msg, i) => {
           if (msg.kind === 'tool_call') {
             return (
-              <div key={i} className="bg-indigo-50 mr-6 p-3 rounded-xl border border-indigo-100">
+              <div key={i} className="mr-6 rounded-xl border border-teal-100 bg-teal-50 p-3">
                 <div className="flex items-center gap-2 mb-1">
-                  <div className="w-5 h-5 rounded bg-indigo-200 flex items-center justify-center">
-                    <Zap className="w-3 h-3 text-indigo-700" />
+                  <div className="flex h-5 w-5 items-center justify-center rounded bg-teal-200">
+                    <Zap className="h-3 w-3 text-teal-700" />
                   </div>
-                  <span className="text-[11px] font-bold text-indigo-600 uppercase tracking-wide">
+                  <span className="text-[11px] font-bold uppercase tracking-wide text-teal-700">
                     {msg.data?.toolName || 'Tool Call'}
                   </span>
                 </div>
-                <div className="text-[11px] text-indigo-900 font-mono bg-indigo-100/50 p-2 rounded mt-1 max-h-20 overflow-y-auto break-all">
+                <div className="mt-1 max-h-20 overflow-y-auto break-all rounded bg-teal-100/60 p-2 font-mono text-[11px] text-teal-950">
                   {msg.data?.summary || msg.content}
                 </div>
               </div>
@@ -536,7 +536,7 @@ export const Chat = () => {
             onChange={(e) => setInput(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
             disabled={!hasApiKey}
-            placeholder={hasApiKey ? 'Ask to build a workflow...' : 'Add an API key in Settings to chat'}
+            placeholder={hasApiKey ? 'Ask about your data or build a workflow...' : 'Add an API key in Settings to chat'}
             className="w-full text-xs p-3 pr-10 border rounded-xl focus:ring-2 focus:ring-primary outline-none shadow-sm transition-all disabled:cursor-not-allowed disabled:bg-slate-50"
           />
           <button

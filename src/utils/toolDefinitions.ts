@@ -1,7 +1,7 @@
 export const llmToolDefinitions = [
   {
     name: 'add_node',
-    description: 'Add a new node to the spatial workflow graph.',
+    description: 'Add a new node to the visual analysis workflow graph.',
     parameters: {
       type: 'object',
       properties: {
@@ -108,7 +108,7 @@ export const llmToolDefinitions = [
   },
   {
     name: 'run_spatial_query',
-    description: 'Execute a raw spatial SQL query against DuckDB.',
+    description: 'Execute a DuckDB SQL query, including spatial SQL when required.',
     parameters: {
       type: 'object',
       properties: {

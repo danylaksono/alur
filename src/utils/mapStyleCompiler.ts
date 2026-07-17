@@ -15,7 +15,7 @@ export type CompiledLabelLayer = {
   paint: Record<string, unknown>;
 };
 
-const FALLBACK_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
+const FALLBACK_COLORS = ['#0d9488', '#2563eb', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
 
 export const geometryKindForLayer = (layer: MapLayer): GeometryKind => {
   return geometryKindForSource(layer);

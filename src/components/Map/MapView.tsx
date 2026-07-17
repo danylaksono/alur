@@ -355,7 +355,7 @@ export const MapView = () => {
             </div>`
           ).join('');
           if (Object.keys(props).length > 8) html += `<div style="font:10px monospace;color:#94a3b8;margin-top:4px">+ ${Object.keys(props).length - 8} more fields</div>`;
-          html = `<div style="font:10px/1.4 sans-serif;font-weight:700;color:#6366f1;margin-bottom:4px">${layer.name}</div>${html}`;
+          html = `<div style="font:10px/1.4 sans-serif;font-weight:700;color:#0f766e;margin-bottom:4px">${layer.name}</div>${html}`;
           popup.current?.setLngLat(e.lngLat).setHTML(html).addTo(m);
         };
 
@@ -620,7 +620,7 @@ export const MapView = () => {
     if (!m) return;
 
     locationMarker.current?.remove();
-    locationMarker.current = new maplibregl.Marker({ color: '#4f46e5' })
+    locationMarker.current = new maplibregl.Marker({ color: '#0f766e' })
       .setLngLat(result.center)
       .addTo(m);
 

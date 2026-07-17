@@ -4,14 +4,14 @@
 
 @layer base {
   :root {
-    --background: 0.98 0.01 220;
-    --foreground: 0.2 0.02 220;
-    --primary: 0.6 0.15 250;
-    --primary-foreground: 0.98 0.01 220;
-    --secondary: 0.7 0.12 280;
-    --secondary-foreground: 0.2 0.02 220;
-    --muted: 0.9 0.01 220;
-    --border: 0.85 0.01 220;
+    --background: 0.985 0.006 180;
+    --foreground: 0.22 0.025 190;
+    --primary: 0.47 0.09 185;
+    --primary-foreground: 0.985 0.006 180;
+    --secondary: 0.76 0.14 78;
+    --secondary-foreground: 0.22 0.025 190;
+    --muted: 0.93 0.012 180;
+    --border: 0.87 0.015 180;
   }
 }
 
@@ -60,7 +60,7 @@ body {
 }
 
 .react-flow__edge.selected .react-flow__edge-path {
-  stroke: #6366f1; /* indigo-500 */
+  stroke: #0f766e; /* ALUR teal */
   stroke-width: 2;
 }
 

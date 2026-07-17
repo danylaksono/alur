@@ -239,7 +239,7 @@ export const buildDotDensityVisualisation = ({
   kind: 'dot_density',
   field,
   dotValue: 100,
-  color: '#6366f1',
+  color: '#0d9488',
   radius: 2.5,
   opacity: 0.65,
 });

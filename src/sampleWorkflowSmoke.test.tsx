@@ -129,9 +129,9 @@ describe('sample GIS workflow smoke test', () => {
     const shellHtml = renderToString(<App />);
     expect(shellHtml).toContain('Add data');
     expect(shellHtml).toContain('New project');
-    expect(shellHtml).toContain('Map Layers');
+    expect(shellHtml).toContain('Data Layers');
     // The style editor is gated behind a per-layer action; the list view shows by default.
-    expect(shellHtml).toContain('Add an input node or run a workflow');
+    expect(shellHtml).toContain('Add data or run a workflow');
     expect(shellHtml).toContain('Basemap');
     expect(shellHtml).toContain('Workflow');
     expect(shellHtml).toContain('Table');
@@ -144,7 +144,7 @@ describe('sample GIS workflow smoke test', () => {
     expect(workflowHtml).toContain('Execute Workflow');
 
     const chatHtml = renderToString(<Chat />);
-    expect(chatHtml).toContain('GIS Copilot');
+    expect(chatHtml).toContain('ALUR Copilot');
     expect(chatHtml).toContain('Bring your own key');
 
     const sqlHtml = renderToString(<SqlTab setManualPreview={() => {}} />);

@@ -47,7 +47,7 @@ export const LayerManager = ({ onEditStyle }: { onEditStyle?: (layerId: string) 
         <div className="flex items-center justify-between">
           <h3 className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
             <Layers className="h-3.5 w-3.5" />
-            Map Layers
+            Data Layers
           </h3>
           <div className="flex items-center gap-1.5">
             <button
@@ -69,7 +69,7 @@ export const LayerManager = ({ onEditStyle }: { onEditStyle?: (layerId: string) 
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
         {mapLayers.length === 0 ? (
           <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-5 text-center text-[11px] text-slate-500">
-            Add an input node or run a workflow to create map layers.
+            Add data or run a workflow to create an explorable layer.
           </div>
         ) : (
           <div className="space-y-2">
@@ -151,7 +151,7 @@ export const LayerManager = ({ onEditStyle }: { onEditStyle?: (layerId: string) 
                         className={cn(
                           'rounded p-1 transition-colors',
                           layer.visualisation
-                            ? 'text-indigo-600 hover:bg-indigo-50'
+                            ? 'text-teal-700 hover:bg-teal-50'
                             : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
                         )}
                         title={layer.visualisation ? `Edit style (${layer.visualisation.kind})` : 'Style layer'}
