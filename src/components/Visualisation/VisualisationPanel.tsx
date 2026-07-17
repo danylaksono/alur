@@ -13,13 +13,14 @@ import {
   buildGraduatedLineVisualisation,
   buildHexbinVisualisation,
   buildBivariateVisualisation,
+  buildGlyphGridVisualisation,
   buildLegend,
   profileGeoJsonField,
   type FieldProfile,
 } from '../../utils/classification';
-import type { HexbinAggregate, VisualisationKind } from '../../types/visualisation';
+import type { GlyphGridGlyph, HexbinAggregate, VisualisationKind } from '../../types/visualisation';
 import { geometryKindForLayer } from '../../utils/mapStyleCompiler';
-import { getPalette, getBivariatePalette, BIVARIATE_PALETTES, SEQUENTIAL_PALETTES } from '../../utils/palettes';
+import { getPalette, getBivariatePalette, BIVARIATE_PALETTES, CATEGORICAL_PALETTE, SEQUENTIAL_PALETTES } from '../../utils/palettes';
 import { cn } from '../../utils/cn';
 import { queryLayerFieldProfile, queryLayerTemporalRange, type TemporalRange } from '../../services/visualAnalyticsService';
 import { generateDotDensityGeoJSON } from '../../services/dotDensityService';
@@ -158,6 +159,11 @@ export const VisualisationPanel = ({
   const [hexCellSize, setHexCellSize] = useState(500);
   const [hexAggregate, setHexAggregate] = useState<HexbinAggregate>('count');
   const [hexbinGenerating, setHexbinGenerating] = useState(false);
+  const [glyphMode, setGlyphMode] = useState<'grid' | 'hex'>('grid');
+  const [glyphType, setGlyphType] = useState<GlyphGridGlyph>('density');
+  const [glyphCellSize, setGlyphCellSize] = useState(48);
+  const [glyphFields, setGlyphFields] = useState<string[]>([]);
+  const [glyphAggregate, setGlyphAggregate] = useState<'count' | 'sum' | 'avg'>('count');
   const [temporalField, setTemporalField] = useState('');
   const [temporalStart, setTemporalStart] = useState('');
   const [temporalEnd, setTemporalEnd] = useState('');
@@ -211,6 +217,15 @@ export const VisualisationPanel = ({
       if (vis.kind === 'hexbin') {
         setHexCellSize(vis.cellSize);
         setHexAggregate(vis.aggregate);
+      }
+      if (vis.kind === 'glyph_grid') {
+        setGlyphMode(vis.mode);
+        setGlyphType(vis.glyph);
+        setGlyphCellSize(vis.cellSize);
+        setGlyphFields(vis.fields);
+        setGlyphAggregate(vis.aggregate);
+        if (vis.fields[0]) setField(vis.fields[0]);
+        else setField(fields[0] || '');
       }
       return;
     }
@@ -266,6 +281,11 @@ export const VisualisationPanel = ({
       (kind === 'extrusion' && geometryKind === 'polygon' && profile?.kind === 'numeric') ||
       (kind === 'graduated_line' && geometryKind === 'line' && profile?.kind === 'numeric') ||
       (kind === 'hexbin' && geometryKind === 'point' && (hexAggregate === 'count' || profile?.kind === 'numeric')) ||
+      (kind === 'glyph_grid' && (
+        ['pie', 'donut', 'bars', 'radial'].includes(glyphType)
+          ? glyphFields.length > 0
+          : glyphAggregate === 'count' || profile?.kind === 'numeric'
+      )) ||
       (kind === 'bivariate' && profile?.kind === 'numeric' && profileY?.kind === 'numeric')),
   );
 
@@ -278,6 +298,21 @@ export const VisualisationPanel = ({
       if (hasActiveStyle) {
         clearLayerVisualisation(selectedLayer.id);
       }
+      return;
+    }
+
+    if (kind === 'glyph_grid') {
+      if (!canApply) return;
+      const multivariate = ['pie', 'donut', 'bars', 'radial'].includes(glyphType);
+      const visualisation = buildGlyphGridVisualisation({
+        mode: glyphMode,
+        cellSize: glyphCellSize,
+        glyph: glyphType,
+        fields: multivariate ? glyphFields : glyphAggregate === 'count' ? [] : [field],
+        aggregate: multivariate ? 'count' : glyphAggregate,
+        palette: multivariate ? CATEGORICAL_PALETTE : getPalette(paletteId).colors,
+      });
+      updateLayerVisualisation(selectedLayer.id, visualisation, buildLegend(visualisation));
       return;
     }
 
@@ -409,7 +444,7 @@ export const VisualisationPanel = ({
         })
         .finally(() => setHexbinGenerating(false));
     }
-  }, [selectedLayer?.id, hasActiveStyle, field, fieldY, kind, method, classCount, paletteId, bivariatePaletteId, heightMultiplier, hexAggregate, hexCellSize, canApply, profile, profileY, updateLayerVisualisation, clearLayerVisualisation]);
+  }, [selectedLayer?.id, hasActiveStyle, field, fieldY, kind, method, classCount, paletteId, bivariatePaletteId, heightMultiplier, hexAggregate, hexCellSize, glyphMode, glyphType, glyphCellSize, glyphAggregate, glyphFields.join('|'), canApply, profile, profileY, updateLayerVisualisation, clearLayerVisualisation]);
 
   const activeFilters = selectedLayer ? visualAnalytics.layers[selectedLayer.id]?.filters || [] : [];
   const activeFilterKeys = new Set(activeFilters.map(visualFilterKey));
@@ -514,6 +549,7 @@ export const VisualisationPanel = ({
                   {geometryKind === 'point' && <option value="graduated_symbol">Symbols</option>}
                   {geometryKind === 'point' && <option value="heatmap">Heatmap</option>}
                   {geometryKind === 'point' && <option value="hexbin">Hexbin</option>}
+                  <option value="glyph_grid">Glyph grid</option>
                   {geometryKind === 'polygon' && <option value="extrusion">3D extrusion</option>}
                   {geometryKind === 'polygon' && selectedLayer.geojson && <option value="dot_density">Dot density</option>}
                   {geometryKind === 'line' && <option value="graduated_line">Line width</option>}
@@ -608,6 +644,121 @@ export const VisualisationPanel = ({
                     ))}
                   </select>
                 </label>
+              </div>
+            )}
+
+            {kind === 'glyph_grid' && (
+              <div className="space-y-2">
+                <div className="grid grid-cols-3 gap-2">
+                  <label className="space-y-1">
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Shape</span>
+                    <select
+                      value={glyphMode}
+                      onChange={(event) => setGlyphMode(event.target.value as 'grid' | 'hex')}
+                      className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                    >
+                      <option value="grid">Squares</option>
+                      <option value="hex">Hexagons</option>
+                    </select>
+                  </label>
+                  <label className="space-y-1">
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Glyph</span>
+                    <select
+                      value={glyphType}
+                      onChange={(event) => setGlyphType(event.target.value as GlyphGridGlyph)}
+                      className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                    >
+                      <option value="density">Density fill</option>
+                      <option value="circle">Proportional circle</option>
+                      <option value="pie">Pie</option>
+                      <option value="donut">Donut</option>
+                      <option value="bars">Bars</option>
+                      <option value="radial">Radial bars</option>
+                    </select>
+                  </label>
+                  <label className="space-y-1">
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Cell {glyphCellSize}px</span>
+                    <input
+                      type="range"
+                      min={24}
+                      max={128}
+                      step={4}
+                      value={glyphCellSize}
+                      onChange={(event) => setGlyphCellSize(Number(event.target.value))}
+                      className="h-8 w-full"
+                    />
+                  </label>
+                </div>
+
+                {(glyphType === 'density' || glyphType === 'circle') && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="space-y-1">
+                      <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Aggregate</span>
+                      <select
+                        value={glyphAggregate}
+                        onChange={(event) => setGlyphAggregate(event.target.value as 'count' | 'sum' | 'avg')}
+                        className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                      >
+                        <option value="count">Count</option>
+                        <option value="sum">Sum of field</option>
+                        <option value="avg">Mean of field</option>
+                      </select>
+                    </label>
+                    {glyphType === 'density' && (
+                      <label className="space-y-1">
+                        <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Palette</span>
+                        <select
+                          value={paletteId}
+                          onChange={(event) => setPaletteId(event.target.value)}
+                          className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                        >
+                          {SEQUENTIAL_PALETTES.map((palette) => (
+                            <option key={palette.id} value={palette.id}>{palette.name}</option>
+                          ))}
+                        </select>
+                      </label>
+                    )}
+                  </div>
+                )}
+
+                {['pie', 'donut', 'bars', 'radial'].includes(glyphType) && (
+                  <div className="space-y-1">
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                      Glyph fields ({glyphFields.length}/6)
+                    </span>
+                    <div className="max-h-40 space-y-0.5 overflow-y-auto rounded-md border border-slate-200 bg-white p-1.5">
+                      {fields.map((name) => {
+                        const checked = glyphFields.includes(name);
+                        return (
+                          <label key={name} className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-[11px] text-slate-600 hover:bg-slate-50">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              disabled={!checked && glyphFields.length >= 6}
+                              onChange={() =>
+                                setGlyphFields((current) =>
+                                  checked ? current.filter((item) => item !== name) : [...current, name])
+                              }
+                              className="h-3 w-3"
+                            />
+                            {checked && (
+                              <span
+                                className="h-2.5 w-2.5 shrink-0 rounded-sm"
+                                style={{ backgroundColor: CATEGORICAL_PALETTE[glyphFields.indexOf(name) % CATEGORICAL_PALETTE.length] }}
+                              />
+                            )}
+                            <span className="truncate">{name}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                <p className="text-[11px] leading-relaxed text-slate-400">
+                  Screen-space glyphs re-aggregate as you pan and zoom. Click a cell to select its features.
+                  Not included in map style exports.
+                </p>
               </div>
             )}
 

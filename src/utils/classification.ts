@@ -11,6 +11,8 @@ import type {
   HexbinAggregate,
   BivariateVisualisation,
   ClassificationMethod,
+  GlyphGridVisualisation,
+  GlyphGridGlyph,
   LayerVisualisation,
   LegendSpec,
 } from '../types/visualisation';
@@ -330,6 +332,31 @@ export const buildBivariateVisualisation = ({
   outlineWidth: 0.5,
 });
 
+export const buildGlyphGridVisualisation = ({
+  mode,
+  cellSize,
+  glyph,
+  fields,
+  aggregate,
+  palette,
+}: {
+  mode: 'grid' | 'hex';
+  cellSize: number;
+  glyph: GlyphGridGlyph;
+  fields: string[];
+  aggregate: 'count' | 'sum' | 'avg';
+  palette: string[];
+}): GlyphGridVisualisation => ({
+  kind: 'glyph_grid',
+  mode,
+  cellSize: Math.max(24, Math.min(128, Math.round(cellSize))),
+  glyph,
+  fields: fields.slice(0, 6),
+  aggregate,
+  palette,
+  opacity: 0.85,
+});
+
 const classBreakItems = (breaks: number[], palette: string[]) =>
   palette.map((color, index) => {
     const low = index === 0 ? undefined : breaks[index - 1];
@@ -421,6 +448,31 @@ export const buildLegend = (
       title: 'Hexbin',
       kind: 'simple',
       items: [{ label: `hex ${sizeLabel} · ${metric}`, color: '#0f766e' }],
+    };
+  }
+
+  if (visualisation.kind === 'glyph_grid') {
+    const shape = visualisation.mode === 'hex' ? 'hex' : 'grid';
+    if (['pie', 'donut', 'bars', 'radial'].includes(visualisation.glyph) && visualisation.fields.length) {
+      return {
+        title: `Glyph ${shape} · ${visualisation.glyph}`,
+        kind: 'simple',
+        items: visualisation.fields.map((field, index) => ({
+          label: field,
+          color: visualisation.palette[index % visualisation.palette.length],
+        })),
+      };
+    }
+    const metric = visualisation.aggregate === 'count'
+      ? 'count'
+      : `${visualisation.aggregate}(${visualisation.fields[0] ?? ''})`;
+    return {
+      title: `Glyph ${shape} · ${metric}`,
+      kind: 'heatmap',
+      items: visualisation.palette.map((color, index) => ({
+        label: index === 0 ? 'Low' : index === visualisation.palette.length - 1 ? 'High' : '',
+        color,
+      })),
     };
   }
 

@@ -14,6 +14,14 @@ import type { GeocodingResult } from '../../services/geocodingService';
 import { mvtTileUrl, registerMvtProtocol, registerMvtTileSource, unregisterMvtTileSource } from '../../services/mvtTileService';
 import { boundsForLayer, mvtSourceForLayer } from '../../utils/layerSource';
 import { compileVisualFiltersWhereClause } from '../../utils/visualFilterSql';
+import { ScreenGridLayerGL } from 'screengrid';
+import {
+  buildGlyphGridLayerOptions,
+  glyphCellFeatureIds,
+  queryLayerGlyphPoints,
+  type GlyphPoint,
+} from '../../services/glyphGridService';
+import type { GlyphGridVisualisation } from '../../types/visualisation';
 
 function getLayerBounds(geojson: GeoJSON.FeatureCollection) {
   const coords: [number, number][] = [];
@@ -109,6 +117,7 @@ export const MapView = () => {
   const nodeLayerMap = useRef<Map<string, string>>(new Map());
   const previousFeatureState = useRef<Map<string, { hoveredFeatureId?: string; highlightedFeatureIds: Set<string>; selectedFeatureIds: Set<string> }>>(new Map());
   const styleReady = useRef(false);
+  const glyphLayers = useRef<Map<string, { layer: ScreenGridLayerGL<GlyphPoint, number, number[]>; key: string }>>(new Map());
   type LayerEventName = 'click' | 'mousemove' | 'mouseleave';
   const layerEventHandlers = useRef<Map<string, Array<{ event: LayerEventName; mapLayerId: string; fn: (...args: any[]) => void }>>>(new Map());
 
@@ -122,6 +131,7 @@ export const MapView = () => {
   const selectLayer = useStore((s) => s.selectLayer);
   const setHoveredFeature = useStore((s) => s.setHoveredFeature);
   const toggleSelectedFeature = useStore((s) => s.toggleSelectedFeature);
+  const setFeatureSelection = useStore((s) => s.setFeatureSelection);
   const visibleLegends = mapLayers
     .filter((layer) => layer.visible && layer.legend)
     .map((layer) => ({
@@ -200,6 +210,8 @@ export const MapView = () => {
     renderedLayerIds.current.clear();
     renderedSourceVersions.current.clear();
     nodeLayerMap.current.clear();
+    // setStyle wipes custom layers too — forget them so the glyph sync re-adds.
+    glyphLayers.current.clear();
     popup.current?.remove();
     styleReady.current = false;
     m.setStyle(nextStyleUrl);
@@ -475,7 +487,10 @@ export const MapView = () => {
         }
 
         if (m.getLayer(layerId)) {
-          m.setLayoutProperty(layerId, 'visibility', layer.visible ? 'visible' : 'none');
+          // Glyph-grid layers render on the screengrid canvas instead; hiding the
+          // base layer keeps feature clicks from competing with cell clicks.
+          const glyphActive = layer.visualisation?.kind === 'glyph_grid';
+          m.setLayoutProperty(layerId, 'visibility', layer.visible && !glyphActive ? 'visible' : 'none');
           m.setFilter(layerId, compileMapFilter(layerFilters) as any);
         }
 
@@ -489,6 +504,73 @@ export const MapView = () => {
 
     syncLayers();
   }, [mapLayers, selectedBasemapId, layerFilterKey, setSelectedNodeId, selectLayer, setHoveredFeature, toggleSelectedFeature]);
+
+  // Glyph-grid layers: screengrid custom canvas layers fed from DuckDB points.
+  useEffect(() => {
+    const m = map.current;
+    if (!m) return;
+    let cancelled = false;
+
+    const syncGlyphLayers = async () => {
+      if (!styleReady.current) {
+        m.once('style.load', () => { if (!cancelled) syncGlyphLayers(); });
+        return;
+      }
+
+      const wanted = new Map<string, { layer: typeof mapLayers[number]; vis: GlyphGridVisualisation }>();
+      mapLayers.forEach((layer) => {
+        if (layer.visible && layer.visualisation?.kind === 'glyph_grid') {
+          wanted.set(layer.id, { layer, vis: layer.visualisation });
+        }
+      });
+
+      glyphLayers.current.forEach((entry, layerId) => {
+        if (!wanted.has(layerId)) {
+          if (m.getLayer(entry.layer.id)) m.removeLayer(entry.layer.id);
+          glyphLayers.current.delete(layerId);
+        }
+      });
+
+      for (const [layerId, { layer, vis }] of wanted) {
+        const filters = visualAnalytics.layers[layerId]?.filters || [];
+        const renderVersion = layer.source.kind === 'duckdb-table' || layer.source.kind === 'duckdb-query'
+          ? layer.source.renderVersion
+          : layer.styleVersion;
+        const key = JSON.stringify({ v: layer.styleVersion, r: renderVersion, filters, vis });
+        const existing = glyphLayers.current.get(layerId);
+        if (existing && existing.key === key) continue;
+
+        let points: GlyphPoint[] = [];
+        try {
+          points = await queryLayerGlyphPoints({ layer, filters, vis });
+        } catch {
+          // Data errors surface as an empty glyph layer rather than a crash.
+        }
+        if (cancelled) return;
+
+        const glyphMapLayerId = `glyph-layer-${layerId}`;
+        const stale = glyphLayers.current.get(layerId);
+        if (stale && m.getLayer(stale.layer.id)) m.removeLayer(stale.layer.id);
+        if (m.getLayer(glyphMapLayerId)) m.removeLayer(glyphMapLayerId);
+
+        const options = buildGlyphGridLayerOptions({
+          id: glyphMapLayerId,
+          vis,
+          points,
+          onCellClick: (cell) => {
+            selectLayer(layerId);
+            setFeatureSelection(layerId, glyphCellFeatureIds(cell));
+          },
+        });
+        const glyphLayer = new ScreenGridLayerGL<GlyphPoint, number, number[]>(options);
+        m.addLayer(glyphLayer as unknown as maplibregl.CustomLayerInterface);
+        glyphLayers.current.set(layerId, { layer: glyphLayer, key });
+      }
+    };
+
+    syncGlyphLayers();
+    return () => { cancelled = true; };
+  }, [mapLayers, layerFilterKey, selectedBasemapId, selectLayer, setFeatureSelection]);
 
   useEffect(() => {
     const m = map.current;
@@ -549,8 +631,9 @@ export const MapView = () => {
       const layerId = `input-layer-${layer.id}`;
       if (!m.getLayer(layerId)) return;
       const isInactive = Boolean(activeLayerId && layer.id !== activeLayerId);
+      const glyphActive = layer.visualisation?.kind === 'glyph_grid';
 
-      m.setLayoutProperty(layerId, 'visibility', layer.visible ? 'visible' : 'none');
+      m.setLayoutProperty(layerId, 'visibility', layer.visible && !glyphActive ? 'visible' : 'none');
       m.setFilter(layerId, compileMapFilter(visualAnalytics.layers[layer.id]?.filters || []) as any);
 
       const isSelected = layer.id === activeLayerId;

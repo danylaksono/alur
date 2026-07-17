@@ -17,6 +17,7 @@ const legendKindLabel: Record<LegendSpec['kind'], string> = {
   graduated_line: 'Width',
   hexbin: 'Hexbin',
   bivariate: 'Bivariate',
+  glyph_grid: 'Glyphs',
 };
 
 export const LegendControl = ({

@@ -17,7 +17,8 @@ export type VisualisationKind =
   | 'extrusion'
   | 'graduated_line'
   | 'hexbin'
-  | 'bivariate';
+  | 'bivariate'
+  | 'glyph_grid';
 
 export type LegendItem = {
   label: string;
@@ -155,6 +156,27 @@ export type BivariateVisualisation = {
   outlineWidth: number;
 };
 
+export type GlyphGridGlyph = 'density' | 'circle' | 'pie' | 'donut' | 'bars' | 'radial';
+
+/**
+ * Screen-space gridded glyph map rendered by the screengrid plugin.
+ * Analysis-only style: it draws on its own canvas and is not part of the
+ * exportable MapLibre style JSON.
+ */
+export type GlyphGridVisualisation = {
+  kind: 'glyph_grid';
+  mode: 'grid' | 'hex';
+  /** Cell size in screen pixels. */
+  cellSize: number;
+  glyph: GlyphGridGlyph;
+  /** Numeric fields summed per cell; drive multivariate glyph segments. */
+  fields: string[];
+  /** Cell weight for density/circle glyphs: row count or fields[0] sum/mean. */
+  aggregate: 'count' | 'sum' | 'avg';
+  palette: string[];
+  opacity: number;
+};
+
 export type LayerVisualisation =
   | SimpleVisualisation
   | ChoroplethVisualisation
@@ -166,4 +188,5 @@ export type LayerVisualisation =
   | ExtrusionVisualisation
   | GraduatedLineVisualisation
   | HexbinVisualisation
-  | BivariateVisualisation;
+  | BivariateVisualisation
+  | GlyphGridVisualisation;
