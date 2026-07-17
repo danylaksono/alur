@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { BarChart3, Donut, Loader2, Plus, Trash2, X } from 'lucide-react';
+import { BarChart3, Donut, Loader2, Plus, RotateCw, Trash2, X } from 'lucide-react';
 import { useStore, type MapLayer } from '../../store/useStore';
 import {
   describeChartTable,
   listChartTables,
+  queryChartFacetValues,
   queryLayerChart,
   queryLayerScatter,
   queryTableChart,
@@ -130,17 +131,20 @@ const arcPath = (cx: number, cy: number, inner: number, outer: number, startAngl
 const Bars = ({
   data,
   activeKeys,
+  maxScale,
   onHover,
   onLeave,
   onClick,
 }: {
   data: VisualChartDatum[];
   activeKeys: Set<string>;
+  /** Shared scale across small multiples; defaults to this chart's own max. */
+  maxScale?: number;
   onHover: (datum: VisualChartDatum) => void;
   onLeave: () => void;
   onClick: (datum: VisualChartDatum) => void;
 }) => {
-  const maxValue = Math.max(...data.map((datum) => datum.totalValue), 1);
+  const maxValue = maxScale ?? Math.max(...data.map((datum) => datum.totalValue), 1);
 
   return (
     <div className="space-y-1.5">
@@ -196,6 +200,7 @@ type BrushRange = { min: number; max: number };
 const Histogram = ({
   data,
   brush,
+  maxScale,
   onHover,
   onLeave,
   onBrushRange,
@@ -203,6 +208,8 @@ const Histogram = ({
 }: {
   data: VisualChartDatum[];
   brush: BrushRange | null;
+  /** Shared scale across small multiples; defaults to this chart's own max. */
+  maxScale?: number;
   onHover: (datum: VisualChartDatum) => void;
   onLeave: () => void;
   onBrushRange: (min: number, max: number) => void;
@@ -215,7 +222,7 @@ const Histogram = ({
   const domainMin = bins[0]?.min ?? 0;
   const domainMax = bins[bins.length - 1]?.max ?? 1;
   const domainSpan = domainMax - domainMin || 1;
-  const maxValue = Math.max(...data.map((datum) => datum.totalValue), 1);
+  const maxValue = maxScale ?? Math.max(...data.map((datum) => datum.totalValue), 1);
   const cellWidth = HISTOGRAM_WIDTH / Math.max(1, data.length);
   const xOfValue = (value: number) => ((value - domainMin) / domainSpan) * HISTOGRAM_WIDTH;
 
@@ -622,6 +629,7 @@ const ChartCard = ({
 }) => {
   const [result, setResult] = useState<VisualChartResult | null>(null);
   const [scatter, setScatter] = useState<VisualScatterResult | null>(null);
+  const [facetResults, setFacetResults] = useState<Array<{ value: string; result: VisualChartResult }> | null>(null);
   const [tableFields, setTableFields] = useState<ChartField[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -681,6 +689,7 @@ const ChartCard = ({
       if ((!isTableChart && !layer) || !chart.dimensionField) {
         setResult(null);
         setScatter(null);
+        setFacetResults(null);
         return;
       }
       try {
@@ -693,6 +702,24 @@ const ChartCard = ({
           if (!cancelled) {
             setScatter(nextScatter);
             setResult(null);
+            setFacetResults(null);
+          }
+        } else if (chart.facetField) {
+          const values = await queryChartFacetValues({
+            layer: isTableChart ? undefined : layer!,
+            tableName: chart.tableName,
+            facetField: chart.facetField,
+          });
+          const results = await Promise.all(values.map((value) => {
+            const facet = { field: chart.facetField!, value };
+            return isTableChart
+              ? queryTableChart({ tableName: chart.tableName!, chart, facet })
+              : queryLayerChart({ layer: layer!, filters, chart, facet });
+          }));
+          if (!cancelled) {
+            setFacetResults(values.map((value, index) => ({ value, result: results[index] })));
+            setResult(null);
+            setScatter(null);
           }
         } else {
           const nextResult = isTableChart
@@ -701,6 +728,7 @@ const ChartCard = ({
           if (!cancelled) {
             setResult(nextResult);
             setScatter(null);
+            setFacetResults(null);
           }
         }
       } catch (err: any) {
@@ -708,6 +736,7 @@ const ChartCard = ({
           setError(err?.message || 'Chart query failed');
           setResult(null);
           setScatter(null);
+          setFacetResults(null);
         }
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -716,7 +745,7 @@ const ChartCard = ({
 
     run();
     return () => { cancelled = true; };
-  }, [layer?.id, layer?.styleVersion, chart.tableName, filtersKey, chart.type, chart.dimensionField, chart.measureField, chart.aggregation, chart.paletteId, chart.maxCategories]);
+  }, [layer?.id, layer?.styleVersion, chart.tableName, filtersKey, chart.type, chart.dimensionField, chart.measureField, chart.aggregation, chart.paletteId, chart.maxCategories, chart.facetField]);
 
   return (
     <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
@@ -794,8 +823,8 @@ const ChartCard = ({
               const nextType = event.target.value as VisualChartType;
               onUpdate({
                 type: nextType,
-                ...(nextType === 'scatter' && !chart.measureField
-                  ? { measureField: numericFields[0]?.name }
+                ...(nextType === 'scatter'
+                  ? { facetField: undefined, ...(chart.measureField ? {} : { measureField: numericFields[0]?.name }) }
                   : {}),
               });
             }}
@@ -867,10 +896,26 @@ const ChartCard = ({
             ))}
           </select>
         </label>
+
+        {chart.type !== 'scatter' && (
+          <label className="space-y-1">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Facet by</span>
+            <select
+              value={chart.facetField || ''}
+              onChange={(event) => onUpdate({ facetField: event.target.value || undefined })}
+              className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] outline-none focus:border-slate-400"
+            >
+              <option value="">None</option>
+              {availableFields.map((field) => (
+                <option key={field.name} value={field.name}>{field.name}</option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
 
       <div className="p-3">
-        {isLoading && !result && !scatter ? (
+        {isLoading && !result && !scatter && !facetResults ? (
           <div className="flex h-36 items-center justify-center text-slate-400">
             <Loader2 className="h-4 w-4 animate-spin" />
           </div>
@@ -899,6 +944,58 @@ const ChartCard = ({
                 onBrush={onBrush2D}
                 onClear={onClear2D}
               />
+            </div>
+          )
+        ) : chart.facetField ? (
+          !facetResults || !facetResults.length ? (
+            <div className="flex h-36 items-center justify-center px-4 text-center text-[11px] text-slate-400">
+              No facet values for this field.
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-2">
+              {(() => {
+                const sharedMax = Math.max(
+                  ...facetResults.flatMap((item) => item.result.data.map((datum) => datum.totalValue)),
+                  1,
+                );
+                return facetResults.map(({ value, result: facetResult }) => {
+                  const facetActiveKeys = new Set(
+                    facetResult.data.filter((datum) => isDatumActive(datum, filters)).map((datum) => datum.key),
+                  );
+                  return (
+                    <div key={value} className="rounded-md border border-slate-100 bg-white p-1.5">
+                      <div className="mb-1 flex items-center justify-between gap-1">
+                        <span className="truncate text-[11px] font-semibold text-slate-600" title={value}>{value}</span>
+                        <span className="shrink-0 text-[10px] tabular-nums text-slate-400">
+                          {facetResult.totalRows.toLocaleString()}
+                        </span>
+                      </div>
+                      {!facetResult.data.length ? (
+                        <div className="py-4 text-center text-[10px] text-slate-300">no values</div>
+                      ) : chart.type === 'histogram' ? (
+                        <Histogram
+                          data={facetResult.data}
+                          brush={brush}
+                          maxScale={sharedMax}
+                          onHover={onHoverDatum}
+                          onLeave={onLeaveDatum}
+                          onBrushRange={onBrushRange}
+                          onClearRange={onClearRange}
+                        />
+                      ) : (
+                        <Bars
+                          data={facetResult.data}
+                          activeKeys={facetActiveKeys}
+                          maxScale={sharedMax}
+                          onHover={onHoverDatum}
+                          onLeave={onLeaveDatum}
+                          onClick={onToggleFilter}
+                        />
+                      )}
+                    </div>
+                  );
+                });
+              })()}
             </div>
           )
         ) : !result || !result.data.length ? (
@@ -963,15 +1060,18 @@ export const ChartPanel = () => {
   const hasChartableLayer = mapLayers.some((layer) => fieldsForLayer(layer).length > 0);
   const [tables, setTables] = useState<string[]>([]);
 
+  const [tablesRefreshTick, setTablesRefreshTick] = useState(0);
+
   // Workflow runs and SQL executions materialize new DuckDB tables; refresh
-  // the source list whenever the panel (re)mounts or the workspace changes.
+  // the source list when the panel (re)mounts, the workspace changes, or the
+  // user asks via the refresh button.
   useEffect(() => {
     let cancelled = false;
     listChartTables()
       .then((names) => { if (!cancelled) setTables(names); })
       .catch(() => { if (!cancelled) setTables([]); });
     return () => { cancelled = true; };
-  }, [mapLayers, charts.length]);
+  }, [mapLayers, charts.length, tablesRefreshTick]);
 
   const handleAddChart = () => {
     if (selectedLayer) {
@@ -1097,15 +1197,25 @@ export const ChartPanel = () => {
               Click marks to filter, drag histograms to brush. Grey bars show the unfiltered total.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={handleAddChart}
-            disabled={!hasChartableLayer && !tables.length}
-            className="flex h-8 items-center gap-1.5 rounded-md bg-slate-900 px-3 text-[11px] font-semibold uppercase tracking-wider text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Add
-          </button>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setTablesRefreshTick((tick) => tick + 1)}
+              className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-700"
+              title="Refresh data sources (picks up new workflow and SQL tables)"
+            >
+              <RotateCw className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={handleAddChart}
+              disabled={!hasChartableLayer && !tables.length}
+              className="flex h-8 items-center gap-1.5 rounded-md bg-slate-900 px-3 text-[11px] font-semibold uppercase tracking-wider text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Add
+            </button>
+          </div>
         </div>
       </div>
 

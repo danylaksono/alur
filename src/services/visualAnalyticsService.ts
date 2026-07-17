@@ -459,17 +459,26 @@ export const visualChartFilterKey = (filter: VisualFilter) => {
   return `${filter.field}:range:${filter.min ?? ''}:${filter.max ?? ''}:${filter.includeNull ? 'null' : ''}`;
 };
 
+export type ChartFacet = { field: string; value: string };
+
+const facetPredicate = (facet: ChartFacet | undefined) =>
+  facet
+    ? `CAST(${quoteIdentifier(facet.field)} AS VARCHAR) = '${facet.value.replace(/'/g, "''")}'`
+    : '';
+
 export const queryLayerChart = async ({
   layer,
   filters,
   chart,
+  facet,
 }: {
   layer: AnalyticsLayer;
   filters: VisualFilter[];
   chart: VisualChartSpec;
+  facet?: ChartFacet;
 }): Promise<VisualChartResult> => {
   const { tableName, featureIdExpression } = await chartTableForLayer(layer, chart);
-  return runChartQuery({ tableName, featureIdExpression, filters, chart });
+  return runChartQuery({ tableName, featureIdExpression, filters, chart, facet });
 };
 
 /** Chart an arbitrary DuckDB table (workflow output, SQL result). Unlinked:
@@ -477,24 +486,53 @@ export const queryLayerChart = async ({
 export const queryTableChart = async ({
   tableName,
   chart,
+  facet,
 }: {
   tableName: string;
   chart: VisualChartSpec;
+  facet?: ChartFacet;
 }): Promise<VisualChartResult> =>
-  runChartQuery({ tableName, featureIdExpression: 'NULL', filters: [], chart });
+  runChartQuery({ tableName, featureIdExpression: 'NULL', filters: [], chart, facet });
+
+/** Top facet values (by row count) for a small-multiples chart. */
+export const queryChartFacetValues = async ({
+  layer,
+  tableName,
+  facetField,
+  limit = 6,
+}: {
+  layer?: AnalyticsLayer;
+  tableName?: string;
+  facetField: string;
+  limit?: number;
+}): Promise<string[]> => {
+  const resolved = tableName ?? (layer ? await analyticsTableForLayer(layer) : null);
+  if (!resolved) return [];
+  const field = quoteIdentifier(facetField);
+  const result = await duckdbService.query(
+    `SELECT CAST(${field} AS VARCHAR) AS value FROM "${resolved.replace(/"/g, '""')}"
+     WHERE ${field} IS NOT NULL
+     GROUP BY value ORDER BY COUNT(*) DESC, value
+     LIMIT ${Math.max(1, Math.min(12, limit))};`
+  );
+  return normalizeRows(result.toArray()).map((row) => String(row.value));
+};
 
 const runChartQuery = async ({
   tableName,
   featureIdExpression,
   filters,
   chart,
+  facet,
 }: {
   tableName: string;
   featureIdExpression: string;
   filters: VisualFilter[];
   chart: VisualChartSpec;
+  facet?: ChartFacet;
 }): Promise<VisualChartResult> => {
   const table = `"${tableName.replace(/"/g, '""')}"`;
+  const facetWhere = facetPredicate(facet);
   const whereClause = compileVisualFiltersWhereClause(filters);
   const field = quoteIdentifier(chart.dimensionField);
 
@@ -510,9 +548,10 @@ const runChartQuery = async ({
   const filteredCountExpr = contextPredicate ? `COUNT(*) FILTER (WHERE ${contextPredicate})` : 'COUNT(*)';
   const featureIdFilterSuffix = contextPredicate ? ` FILTER (WHERE ${contextPredicate})` : '';
 
+  const combinedPredicates = [whereClause.replace(/^WHERE\s+/, ''), facetWhere].filter(Boolean).join(' AND ');
   const [totalResult, filteredResult] = await Promise.all([
-    duckdbService.query(`SELECT COUNT(*) AS row_count FROM ${table};`),
-    duckdbService.query(`SELECT COUNT(*) AS row_count FROM ${table} ${whereClause};`),
+    duckdbService.query(`SELECT COUNT(*) AS row_count FROM ${table} ${facetWhere ? `WHERE ${facetWhere}` : ''};`),
+    duckdbService.query(`SELECT COUNT(*) AS row_count FROM ${table} ${combinedPredicates ? `WHERE ${combinedPredicates}` : ''};`),
   ]);
   const totalRaw = normalizeRows(totalResult.toArray())[0] || {};
   const filteredRaw = normalizeRows(filteredResult.toArray())[0] || {};
@@ -545,7 +584,7 @@ const runChartQuery = async ({
               COUNT(*) AS total_count, ${totalAggregate} AS total_value,
               ${filteredCountExpr} AS count_value, ${aggregate} AS aggregate_value,
               STRING_AGG(CAST(${featureIdExpression} AS VARCHAR), '\u001f')${featureIdFilterSuffix} AS feature_ids
-       FROM ${table} WHERE TRY_CAST(${field} AS DOUBLE) IS NOT NULL
+       FROM ${table} WHERE TRY_CAST(${field} AS DOUBLE) IS NOT NULL${facetWhere ? ` AND ${facetWhere}` : ''}
        GROUP BY bucket
        ORDER BY bucket;`
     );
@@ -588,7 +627,7 @@ const runChartQuery = async ({
             COUNT(*) AS total_count, ${totalAggregate} AS total_value,
             ${filteredCountExpr} AS count_value, ${aggregate} AS aggregate_value,
             STRING_AGG(CAST(${featureIdExpression} AS VARCHAR), '\u001f')${featureIdFilterSuffix} AS feature_ids
-     FROM ${table} WHERE ${field} IS NOT NULL
+     FROM ${table} WHERE ${field} IS NOT NULL${facetWhere ? ` AND ${facetWhere}` : ''}
      GROUP BY label
      ORDER BY total_value DESC, total_count DESC
      LIMIT ${limit};`

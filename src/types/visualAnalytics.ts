@@ -29,6 +29,8 @@ export type VisualChartSpec = {
   type: VisualChartType;
   dimensionField: string;
   measureField?: string;
+  /** Small multiples: one mini-chart per top value of this field (not for scatter). */
+  facetField?: string;
   aggregation: VisualChartAggregation;
   paletteId: string;
   maxCategories: number;

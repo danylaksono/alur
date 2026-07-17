@@ -319,6 +319,40 @@ describe('visual analytics cache helpers', () => {
     expect(result.sampled).toBe(true);
   });
 
+  it('scopes faceted chart queries to the facet value, including totals', async () => {
+    vi.spyOn(duckdbService, 'registerJsonRows').mockResolvedValue(undefined);
+    const query = vi.spyOn(duckdbService, 'query')
+      .mockResolvedValueOnce({ toArray: () => [{ row_count: 2 }] } as any)
+      .mockResolvedValueOnce({ toArray: () => [{ row_count: 2 }] } as any)
+      .mockResolvedValueOnce({
+        toArray: () => [
+          { label: 'Camden', total_count: 2, total_value: 2, count_value: 2, aggregate_value: 2, feature_ids: 'a' },
+        ],
+      } as any);
+
+    await queryLayerChart({
+      layer: layer('areas'),
+      filters: [],
+      chart: {
+        id: 'chart-7',
+        title: 'Faceted',
+        layerId: 'areas',
+        type: 'bar',
+        dimensionField: 'borough',
+        aggregation: 'count',
+        paletteId: 'categorical',
+        maxCategories: 8,
+        facetField: 'tenure',
+      },
+      facet: { field: 'tenure', value: "owner's" },
+    });
+
+    const totalSql = String(query.mock.calls[0][0]);
+    const groupSql = String(query.mock.calls[2][0]);
+    expect(totalSql).toContain(`CAST("tenure" AS VARCHAR) = 'owner''s'`);
+    expect(groupSql).toContain(`AND CAST("tenure" AS VARCHAR) = 'owner''s'`);
+  });
+
   it('charts an arbitrary DuckDB table without filters or feature ids', async () => {
     const query = vi.spyOn(duckdbService, 'query')
       .mockResolvedValueOnce({ toArray: () => [{ row_count: 4 }] } as any)
