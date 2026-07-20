@@ -14,6 +14,7 @@ import { LeftPanel } from './LeftPanel';
 import { BottomDrawer } from './BottomDrawer';
 import { ContextInspector } from './ContextInspector';
 import { SettingsDialog } from './SettingsDialog';
+import { AboutDialog } from './AboutDialog';
 
 export const AppShell = () => {
   const drawerMode = useStore((s) => s.ui.drawerMode);
@@ -88,6 +89,7 @@ export const AppShell = () => {
       </div>
 
       <SettingsDialog />
+      <AboutDialog />
       <ToastContainer />
     </div>
   );

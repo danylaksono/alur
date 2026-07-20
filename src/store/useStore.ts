@@ -76,6 +76,7 @@ export type UIState = {
   drawerHeight: number;
   activeDrawerTab: DrawerTab;
   isSettingsOpen: boolean;
+  isAboutOpen: boolean;
 };
 
 export type SettingsState = {
@@ -122,6 +123,7 @@ interface AppState {
   setActiveDrawerTab: (tab: DrawerTab) => void;
   openDrawerTab: (tab: DrawerTab) => void;
   setSettingsOpen: (open: boolean) => void;
+  setAboutOpen: (open: boolean) => void;
   updateSettings: (patch: Partial<SettingsState>) => void;
   setDuckDBReady: (ready: boolean) => void;
   setSelectedBasemapId: (id: BasemapId) => void;
@@ -236,6 +238,7 @@ const initialUIState: UIState = {
   drawerHeight: 320,
   activeDrawerTab: 'workflow',
   isSettingsOpen: false,
+  isAboutOpen: false,
 };
 
 const initialSettings: SettingsState = {
@@ -297,6 +300,9 @@ export const useStore = create<AppState>()(persist((set, get) => ({
   })),
   setSettingsOpen: (open) => set((state) => ({
     ui: { ...state.ui, isSettingsOpen: open },
+  })),
+  setAboutOpen: (open) => set((state) => ({
+    ui: { ...state.ui, isAboutOpen: open },
   })),
   updateSettings: (patch) => set((state) => ({
     settings: { ...state.settings, ...patch },
