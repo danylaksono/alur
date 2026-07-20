@@ -18,6 +18,7 @@ import { ScreenGridLayerGL } from 'screengrid';
 import {
   buildGlyphGridLayerOptions,
   glyphCellFeatureIds,
+  glyphPointDataKey,
   queryLayerGlyphPoints,
   type GlyphPoint,
 } from '../../services/glyphGridService';
@@ -118,6 +119,7 @@ export const MapView = () => {
   const previousFeatureState = useRef<Map<string, { hoveredFeatureId?: string; highlightedFeatureIds: Set<string>; selectedFeatureIds: Set<string> }>>(new Map());
   const styleReady = useRef(false);
   const glyphLayers = useRef<Map<string, { layer: ScreenGridLayerGL<GlyphPoint, number, number[]>; key: string }>>(new Map());
+  const glyphPointCache = useRef<Map<string, { key: string; promise: Promise<GlyphPoint[]> }>>(new Map());
   type LayerEventName = 'click' | 'mousemove' | 'mouseleave';
   const layerEventHandlers = useRef<Map<string, Array<{ event: LayerEventName; mapLayerId: string; fn: (...args: any[]) => void }>>>(new Map());
 
@@ -518,10 +520,16 @@ export const MapView = () => {
       }
 
       const wanted = new Map<string, { layer: typeof mapLayers[number]; vis: GlyphGridVisualisation }>();
+      const configuredGlyphLayerIds = new Set<string>();
       mapLayers.forEach((layer) => {
+        if (layer.visualisation?.kind === 'glyph_grid') configuredGlyphLayerIds.add(layer.id);
         if (layer.visible && layer.visualisation?.kind === 'glyph_grid') {
           wanted.set(layer.id, { layer, vis: layer.visualisation });
         }
+      });
+
+      glyphPointCache.current.forEach((_, layerId) => {
+        if (!configuredGlyphLayerIds.has(layerId)) glyphPointCache.current.delete(layerId);
       });
 
       glyphLayers.current.forEach((entry, layerId) => {
@@ -533,26 +541,30 @@ export const MapView = () => {
 
       for (const [layerId, { layer, vis }] of wanted) {
         const filters = visualAnalytics.layers[layerId]?.filters || [];
-        const renderVersion = layer.source.kind === 'duckdb-table' || layer.source.kind === 'duckdb-query'
-          ? layer.source.renderVersion
-          : layer.styleVersion;
-        const key = JSON.stringify({ v: layer.styleVersion, r: renderVersion, filters, vis });
+        const dataKey = glyphPointDataKey({ layer, filters, vis });
+        const key = JSON.stringify({ dataKey, vis });
         const existing = glyphLayers.current.get(layerId);
         if (existing && existing.key === key) continue;
 
         let points: GlyphPoint[] = [];
         try {
-          points = await queryLayerGlyphPoints({ layer, filters, vis });
-        } catch {
+          const cached = glyphPointCache.current.get(layerId);
+          if (cached?.key === dataKey) {
+            points = await cached.promise;
+          } else {
+            const promise = queryLayerGlyphPoints({ layer, filters, vis });
+            glyphPointCache.current.set(layerId, { key: dataKey, promise });
+            points = await promise;
+          }
+        } catch (error) {
+          const cached = glyphPointCache.current.get(layerId);
+          if (cached?.key === dataKey) glyphPointCache.current.delete(layerId);
+          console.error(`Failed to prepare glyph-grid points for layer "${layer.name}"`, error);
           // Data errors surface as an empty glyph layer rather than a crash.
         }
         if (cancelled) return;
 
         const glyphMapLayerId = `glyph-layer-${layerId}`;
-        const stale = glyphLayers.current.get(layerId);
-        if (stale && m.getLayer(stale.layer.id)) m.removeLayer(stale.layer.id);
-        if (m.getLayer(glyphMapLayerId)) m.removeLayer(glyphMapLayerId);
-
         const options = buildGlyphGridLayerOptions({
           id: glyphMapLayerId,
           vis,
@@ -562,6 +574,14 @@ export const MapView = () => {
             setFeatureSelection(layerId, glyphCellFeatureIds(cell));
           },
         });
+
+        if (existing && m.getLayer(existing.layer.id)) {
+          existing.layer.setConfig(options);
+          glyphLayers.current.set(layerId, { layer: existing.layer, key });
+          continue;
+        }
+
+        if (m.getLayer(glyphMapLayerId)) m.removeLayer(glyphMapLayerId);
         const glyphLayer = new ScreenGridLayerGL<GlyphPoint, number, number[]>(options);
         m.addLayer(glyphLayer as unknown as maplibregl.CustomLayerInterface);
         glyphLayers.current.set(layerId, { layer: glyphLayer, key });

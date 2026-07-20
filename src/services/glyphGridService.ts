@@ -19,6 +19,36 @@ const GLYPH_MAX_POINTS = 60000;
 const normalizeRows = (rows: any[]) =>
   rows.map((row) => (typeof row?.toJSON === 'function' ? row.toJSON() : row));
 
+export const glyphPointDataKey = ({
+  layer,
+  filters,
+  vis,
+}: {
+  layer: Pick<MapLayer, 'id' | 'source' | 'styleVersion'>;
+  filters: VisualFilter[];
+  vis: GlyphGridVisualisation;
+}) => {
+  const source = layer.source.kind === 'duckdb-table' || layer.source.kind === 'duckdb-query'
+    ? {
+        kind: layer.source.kind,
+        renderVersion: layer.source.renderVersion,
+        tableName: layer.source.tileSource?.tableName,
+        featureIdColumn: layer.source.featureIdColumn,
+      }
+    : {
+        kind: layer.source.kind,
+        styleVersion: layer.styleVersion,
+      };
+
+  return JSON.stringify({
+    layerId: layer.id,
+    source,
+    filters,
+    fields: vis.fields,
+    aggregate: vis.aggregate,
+  });
+};
+
 const geometryCentroid = (geometry: GeoJSON.Geometry | null): [number, number] | null => {
   if (!geometry) return null;
   if (geometry.type === 'GeometryCollection') return geometryCentroid(geometry.geometries[0] || null);
@@ -86,15 +116,18 @@ export const queryLayerGlyphPoints = async ({
 
     const countResult = await duckdbService.query(`SELECT COUNT(*) AS n FROM ${table} ${whereClause};`);
     const count = Number(normalizeRows(countResult.toArray())[0]?.n ?? 0);
-    const sampleClause = count > GLYPH_MAX_POINTS
-      ? ` USING SAMPLE reservoir(${GLYPH_MAX_POINTS} ROWS) REPEATABLE (11)`
-      : '';
+    // SAMPLE is logically evaluated before an outer WHERE in DuckDB. Wrap the
+    // filtered rows so large filtered datasets still yield up to the full cap.
+    const fromClause = count > GLYPH_MAX_POINTS
+      ? `(SELECT * FROM ${table} ${whereClause})
+         USING SAMPLE reservoir(${GLYPH_MAX_POINTS} ROWS) REPEATABLE (11)`
+      : `${table} ${whereClause}`;
 
     const result = await duckdbService.query(
       `SELECT ST_X(${lonLat}) AS lon, ST_Y(${lonLat}) AS lat,
               CAST(${quoteIdentifier(layer.source.featureIdColumn)} AS VARCHAR) AS id,
               ${weightSelect} AS weight${valueSelects}
-       FROM ${table} ${whereClause}${sampleClause};`
+       FROM ${fromClause};`
     );
     return normalizeRows(result.toArray())
       .map((row) => ({

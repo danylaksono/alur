@@ -70,19 +70,48 @@ const withFileNameSuffix = (path: string, suffix: string) => {
 
     return `${path}${suffix}`;
 };
-const isSupportedMvtPropertyType = (type: string) => {
-    const normalized = type.toLowerCase();
-    return (
-        normalized.includes('varchar') ||
-        normalized.includes('string') ||
-        normalized.includes('char') ||
-        normalized.includes('bool') ||
-        normalized.includes('int') ||
-        normalized.includes('double') ||
-        normalized.includes('float') ||
-        normalized.includes('real') ||
-        normalized.includes('decimal')
-    );
+type MvtPropertyType = 'VARCHAR' | 'FLOAT' | 'DOUBLE' | 'INTEGER' | 'BIGINT' | 'BOOLEAN';
+
+export const mvtPropertyTypeForDuckDbType = (type: string): MvtPropertyType | null => {
+    const normalized = type.trim().toUpperCase();
+    if (normalized.includes('[')) return null;
+
+    const baseType = normalized.match(/^[A-Z]+/)?.[0] ?? '';
+
+    switch (baseType) {
+        case 'VARCHAR':
+        case 'STRING':
+        case 'CHAR':
+        case 'CHARACTER':
+        case 'BPCHAR':
+            return 'VARCHAR';
+        case 'BOOLEAN':
+        case 'BOOL':
+            return 'BOOLEAN';
+        case 'TINYINT':
+        case 'SMALLINT':
+        case 'INTEGER':
+        case 'INT':
+            return 'INTEGER';
+        case 'BIGINT':
+        case 'UTINYINT':
+        case 'USMALLINT':
+        case 'UINTEGER':
+            return 'BIGINT';
+        case 'FLOAT':
+        case 'REAL':
+            return 'FLOAT';
+        case 'DOUBLE':
+            return 'DOUBLE';
+        case 'DECIMAL':
+        case 'NUMERIC':
+        case 'UBIGINT':
+        case 'HUGEINT':
+        case 'UHUGEINT':
+            return 'DOUBLE';
+        default:
+            return null;
+    }
 };
 
 class DuckDBService {
@@ -347,18 +376,30 @@ class DuckDBService {
 
     private propertyColumnsForMvt(columns: any[]) {
         return columns
-            .filter((col: any) => {
+            .map((col: any) => {
                 const name = String(col.name || '');
                 const loweredName = name.toLowerCase();
                 const type = String(col.type || '');
-                return (
-                    name &&
-                    !['geojson', 'geometry', 'geom', 'wkb_geometry', 'geometry_bbox'].includes(loweredName) &&
-                    !loweredName.startsWith('__ymn_') &&
-                    isSupportedMvtPropertyType(type)
-                );
+                const mvtType = mvtPropertyTypeForDuckDbType(type);
+                if (
+                    !name ||
+                    ['geojson', 'geometry', 'geom', 'wkb_geometry', 'geometry_bbox'].includes(loweredName) ||
+                    loweredName.startsWith('__ymn_') ||
+                    !mvtType
+                ) {
+                    return null;
+                }
+
+                const identifier = qi(name);
+                const baseType = type.trim().toUpperCase().match(/^[A-Z]+/)?.[0] ?? '';
+                return {
+                    name,
+                    selectExpression: baseType === mvtType
+                        ? identifier
+                        : `CAST(${identifier} AS ${mvtType}) AS ${identifier}`,
+                };
             })
-            .map((col: any) => String(col.name));
+            .filter((col): col is { name: string; selectExpression: string } => Boolean(col));
     }
 
     private fieldsForLayerSource(columns: any[]) {
@@ -642,9 +683,10 @@ class DuckDBService {
 
         const sourceTable = qi(tableName);
         const tileTable = mvtTableNameFor(tableName);
-        const propertyColumns = this.propertyColumnsForMvt(columns);
-        const propertySelect = propertyColumns.length
-            ? `, ${propertyColumns.map((name) => qi(name)).join(', ')}`
+        const propertyProjections = this.propertyColumnsForMvt(columns);
+        const propertyColumns = propertyProjections.map(({ name }) => name);
+        const propertySelect = propertyProjections.length
+            ? `, ${propertyProjections.map(({ selectExpression }) => selectExpression).join(', ')}`
             : '';
         const sourceCrs = options.sourceCrs || 'EPSG:4326';
 
