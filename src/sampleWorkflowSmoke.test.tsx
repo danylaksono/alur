@@ -136,6 +136,7 @@ describe('sample GIS workflow smoke test', () => {
     expect(shellHtml).toContain('Workflow');
     expect(shellHtml).toContain('Table');
     expect(shellHtml).toContain('SQL');
+    expect(shellHtml).toContain('Execute Workflow');
 
     const workflowHtml = renderToString(<WorkflowTab />);
     expect(workflowHtml).toContain('Data Input');

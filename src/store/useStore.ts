@@ -232,7 +232,7 @@ const noopStorage: Storage = {
 const initialUIState: UIState = {
   activeRailTab: 'layers',
   isPanelCollapsed: false,
-  drawerMode: 'collapsed',
+  drawerMode: 'open',
   drawerHeight: 320,
   activeDrawerTab: 'workflow',
   isSettingsOpen: false,
