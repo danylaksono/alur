@@ -89,7 +89,7 @@ export type LoadingOperation = {
   startedAt: number;
 };
 
-export type RailTab = 'layers' | 'charts' | 'chat';
+export type RailTab = 'layers' | 'charts' | 'cohorts' | 'chat';
 export type DrawerTab = 'workflow' | 'table' | 'sql';
 export type DrawerMode = 'collapsed' | 'open' | 'maximized';
 

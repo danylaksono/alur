@@ -154,8 +154,8 @@ export const CohortPanel = () => {
   const bookmarks = visualAnalytics.bookmarks;
 
   return (
-    <section className="border-t border-slate-200 bg-white">
-      <div className="flex items-center justify-between px-3 py-2"><h3 className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500"><Users className="h-3.5 w-3.5" /> Cohorts</h3>{comparison && <button type="button" onClick={() => setComparison(undefined)} className="rounded p-1 text-slate-400 hover:bg-slate-100" title="Close comparison"><X className="h-3.5 w-3.5" /></button>}</div>
+    <section className="min-h-full bg-white">
+      <div className="flex items-center justify-between border-b bg-slate-50 px-3 py-3"><div><h3 className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500"><Users className="h-3.5 w-3.5" /> Cohorts</h3><p className="mt-1 text-[10px] text-slate-400">Save subsets, compare groups, and revisit analytical states.</p></div>{comparison && <button type="button" onClick={() => setComparison(undefined)} className="rounded p-1 text-slate-400 hover:bg-slate-100" title="Close comparison"><X className="h-3.5 w-3.5" /></button>}</div>
       {!layer ? <p className="px-3 pb-3 text-[10px] text-slate-400">Select a layer to save and compare subsets.</p> : <div className="space-y-3 px-3 pb-3">
         <div className="space-y-1.5 rounded-md border border-slate-200 bg-slate-50 p-2">
           <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Cohort name (optional)" className="h-7 w-full rounded border border-slate-200 bg-white px-2 text-[10px] outline-none focus:border-sky-400" />

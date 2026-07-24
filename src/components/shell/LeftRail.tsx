@@ -1,10 +1,11 @@
-import { BarChart3, Info, Layers, Sparkles } from 'lucide-react';
+import { BarChart3, Info, Layers, Sparkles, Users } from 'lucide-react';
 import { useStore, type RailTab } from '../../store/useStore';
 import { cn } from '../../utils/cn';
 
 const RAIL_TABS: Array<{ id: RailTab; icon: typeof Layers; label: string }> = [
   { id: 'layers', icon: Layers, label: 'Layers' },
   { id: 'charts', icon: BarChart3, label: 'Charts' },
+  { id: 'cohorts', icon: Users, label: 'Cohorts' },
   { id: 'chat', icon: Sparkles, label: 'Copilot' },
 ];
 

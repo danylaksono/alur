@@ -5,6 +5,7 @@ import App from './App';
 import { WorkflowTab } from './components/shell/WorkflowTab';
 import { SqlTab } from './components/shell/SqlTab';
 import { Chat } from './components/Chat';
+import { CohortPanel } from './components/Visualisation/CohortPanel';
 import { useStore, type WorkflowNode } from './store/useStore';
 import { buildWorkflowSQL } from './utils/workflowEngine';
 import { llmToolDefinitions } from './utils/toolDefinitions';
@@ -134,10 +135,14 @@ describe('sample visual analytics workflow smoke test', () => {
     expect(shellHtml).toContain('Add data or run a workflow');
     expect(shellHtml).toContain('Basemap');
     expect(shellHtml).toContain('About');
+    expect(shellHtml).toContain('aria-label="Cohorts"');
     expect(shellHtml).toContain('Workflow');
     expect(shellHtml).toContain('Table');
     expect(shellHtml).toContain('SQL');
     expect(shellHtml).toContain('Loading workflow editor');
+
+    const cohortsHtml = renderToString(<CohortPanel />);
+    expect(cohortsHtml).toContain('Save subsets, compare groups, and revisit analytical states.');
 
     const workflowHtml = renderToString(<WorkflowTab />);
     expect(workflowHtml).toContain('Data Input');

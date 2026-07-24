@@ -2,7 +2,6 @@ import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { useStore } from '../../store/useStore';
 import { LayerManager } from '../LayerManager';
 import { ErrorBoundary } from '../ErrorBoundary';
-import { CohortPanel } from '../Visualisation/CohortPanel';
 
 const VisualisationPanel = lazy(() => import('../Visualisation/VisualisationPanel').then((module) => ({ default: module.VisualisationPanel })));
 
@@ -62,9 +61,6 @@ export const LayersTab = () => {
             setStylingLayerId(layerId);
           }}
         />
-      </ErrorBoundary>
-      <ErrorBoundary name="Cohorts and bookmarks">
-        <CohortPanel />
       </ErrorBoundary>
     </div>
   );

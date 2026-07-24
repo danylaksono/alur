@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
-import { BarChart3, Database, FilePlus2, Gauge, Layers, LayoutDashboard, MapPinned, Redo2, ScanSearch, Search, Sparkles, Table2, Terminal, Undo2, Workflow, X } from 'lucide-react';
+import { BarChart3, Database, FilePlus2, Gauge, Layers, LayoutDashboard, MapPinned, Redo2, ScanSearch, Search, Sparkles, Table2, Terminal, Undo2, Users, Workflow, X } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { useAnalyticsCommands } from '../../hooks/useAnalyticsCommands';
 import { metadataForLayer, preferredExplorationField } from '../../utils/datasetMetadata';
@@ -29,7 +29,7 @@ export const CommandPalette = () => {
 
   const commands = useMemo<Command[]>(() => {
     const state = useStore.getState();
-    const openRail = (tab: 'layers' | 'charts' | 'chat') => () => state.setActiveRailTab(tab);
+    const openRail = (tab: 'layers' | 'charts' | 'cohorts' | 'chat') => () => state.setActiveRailTab(tab);
     const openDrawer = (tab: 'workflow' | 'table' | 'sql') => () => state.openDrawerTab(tab);
     const explorationField = selectedLayer
       ? preferredExplorationField(metadataForLayer(selectedLayer))
@@ -41,6 +41,7 @@ export const CommandPalette = () => {
       { id: 'add-data', label: 'Add data', keywords: 'load import parquet csv file', icon: FilePlus2, run: () => document.getElementById('alur-file-input')?.click() },
       { id: 'layers', label: 'Open Layers', keywords: 'map style visualise', icon: Layers, run: openRail('layers') },
       { id: 'charts', label: 'Open Charts', keywords: 'graph plot distribution', icon: BarChart3, run: openRail('charts') },
+      { id: 'cohorts', label: 'Open Cohorts', keywords: 'compare groups subsets bookmarks sensemaking', icon: Users, run: openRail('cohorts') },
       ...(selectedLayer && explorationField ? [{
         id: 'create-chart',
         label: `Create chart of ${explorationField.name}`,

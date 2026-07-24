@@ -3,6 +3,7 @@ import { useStore } from '../../store/useStore';
 import { ChartPanel } from '../Charts/ChartPanel';
 import { ErrorBoundary } from '../ErrorBoundary';
 import { LayersTab } from './LayersTab';
+import { CohortPanel } from '../Visualisation/CohortPanel';
 
 const Chat = lazy(() => import('../Chat').then((module) => ({ default: module.Chat })));
 
@@ -21,6 +22,10 @@ export const LeftPanel = () => {
       ) : activeRailTab === 'charts' ? (
         <ErrorBoundary name="Chart Panel">
           <ChartPanel />
+        </ErrorBoundary>
+      ) : activeRailTab === 'cohorts' ? (
+        <ErrorBoundary name="Cohorts and bookmarks">
+          <div className="min-h-0 flex-1 overflow-y-auto"><CohortPanel /></div>
         </ErrorBoundary>
       ) : (
         <ErrorBoundary name="Chat">

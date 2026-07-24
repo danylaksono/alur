@@ -50,7 +50,7 @@ export type ProjectManifestV1 = {
     selectedBasemapId: BasemapId;
     selectedNodeId: string | null;
     selectedLayerId: string | null;
-    activeRailTab: 'layers' | 'charts' | 'chat';
+    activeRailTab: 'layers' | 'charts' | 'cohorts' | 'chat';
     activeDrawerTab: 'workflow' | 'table' | 'sql';
     drawerMode: 'collapsed' | 'open' | 'maximized';
     drawerHeight: number;

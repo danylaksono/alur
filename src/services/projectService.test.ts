@@ -87,4 +87,10 @@ describe('projectService', () => {
     expect(restored.workspace.workspaceMode).toBe('board');
     expect(restored.visualAnalytics.dashboard?.cards[0]).toMatchObject({ id: 'note-1', note: 'Retain this view.' });
   });
+
+  it('round-trips the dedicated cohorts rail placement', () => {
+    useStore.getState().setActiveRailTab('cohorts');
+    const restored = parseProjectManifest(serialiseProjectManifest(createProjectManifest()));
+    expect(restored.workspace.activeRailTab).toBe('cohorts');
+  });
 });
