@@ -20,6 +20,8 @@ export type MvtTileSource = {
     layerName: string;
     geometryKind: 'point' | 'line' | 'polygon';
     propertyColumns: string[];
+    /** Subset embedded in map tiles; omitted means all available properties. */
+    renderPropertyColumns?: string[];
     filterWhereClause?: string;
 };
 
@@ -513,18 +515,44 @@ class DuckDBService {
         };
     }
 
-    private async layerBounds(
-        tableName: string,
-        geomExpr: string,
+    private async boundsFromExtent(
+        extent: LayerExtent | undefined,
         sourceCrs: string,
     ): Promise<[[number, number], [number, number]] | undefined> {
-        const boundsGeomExpr = sourceCrs === 'EPSG:4326'
-            ? geomExpr
-            : `ST_Transform(${geomExpr}, '${sourceCrs}', 'EPSG:4326', true)`;
-        const extent = await this.layerExtent(tableName, boundsGeomExpr);
         if (!extent) return undefined;
-        if (extent.minX < -180 || extent.maxX > 180 || extent.minY < -90 || extent.maxY > 90) return undefined;
-        return [[extent.minX, extent.minY], [extent.maxX, extent.maxY]];
+        if (sourceCrs === 'EPSG:4326') {
+            if (extent.minX < -180 || extent.maxX > 180 || extent.minY < -90 || extent.maxY > 90) return undefined;
+            return [[extent.minX, extent.minY], [extent.maxX, extent.maxY]];
+        }
+
+        try {
+            // Projection transforms are monotonic over the supported CRS
+            // heuristics, so four extent corners produce map-fit bounds without
+            // re-transforming every geometry in the dataset.
+            const result = await this.query(`
+                WITH corners(x, y) AS (
+                    VALUES
+                        (${extent.minX}, ${extent.minY}),
+                        (${extent.minX}, ${extent.maxY}),
+                        (${extent.maxX}, ${extent.minY}),
+                        (${extent.maxX}, ${extent.maxY})
+                ), transformed AS (
+                    SELECT ST_Transform(ST_Point(x, y), '${sourceCrs}', 'EPSG:4326', true) AS geom
+                    FROM corners
+                )
+                SELECT MIN(ST_X(geom)) AS min_x, MIN(ST_Y(geom)) AS min_y,
+                       MAX(ST_X(geom)) AS max_x, MAX(ST_Y(geom)) AS max_y
+                FROM transformed;
+            `);
+            const rawRow = result.toArray()[0];
+            const row = typeof rawRow?.toJSON === 'function' ? rawRow.toJSON() : rawRow;
+            const bounds = [Number(row?.min_x), Number(row?.min_y), Number(row?.max_x), Number(row?.max_y)];
+            if (!bounds.every(Number.isFinite)) return undefined;
+            if (bounds[0] < -180 || bounds[2] > 180 || bounds[1] < -90 || bounds[3] > 90) return undefined;
+            return [[bounds[0], bounds[1]], [bounds[2], bounds[3]]];
+        } catch {
+            return undefined;
+        }
     }
 
     private geometryKindFromType(type: string): MvtTileSource['geometryKind'] {
@@ -674,10 +702,13 @@ class DuckDBService {
         return null;
     }
 
-    async prepareMvtTileSource(tableName: string, options: { filterWhereClause?: string; sourceCrs?: string } = {}): Promise<MvtTileSource | null> {
+    async prepareMvtTileSource(
+        tableName: string,
+        options: { filterWhereClause?: string; sourceCrs?: string; columns?: unknown[] } = {},
+    ): Promise<MvtTileSource | null> {
         if (!this.spatialLoaded) return null;
 
-        const columns = await this.getTableSchemaRows(tableName);
+        const columns = options.columns ?? await this.getTableSchemaRows(tableName);
         const geomExpr = this.geometryExpression(columns);
         if (!geomExpr) return null;
 
@@ -728,9 +759,11 @@ class DuckDBService {
 
         const extent = await this.layerExtent(tableName, geomExpr);
         const crsEstimate = this.estimateCrs(extent, `${tableName} ${options.originalTableName ?? ''}`);
+        const bounds = await this.boundsFromExtent(extent, crsEstimate.transformCrs);
         const tileSource = await this.prepareMvtTileSource(tableName, {
             filterWhereClause: options.filterWhereClause,
             sourceCrs: crsEstimate.transformCrs,
+            columns,
         });
         if (!tileSource) return null;
 
@@ -749,7 +782,7 @@ class DuckDBService {
             crsReason: crsEstimate.reason,
             geometryKind: tileSource.geometryKind,
             featureIdColumn: '__alur_mvt_id',
-            bounds: await this.layerBounds(tableName, geomExpr, crsEstimate.transformCrs),
+            bounds,
             fields: this.fieldsForLayerSource(columns),
             tileSource,
             renderVersion: Date.now(),
@@ -769,7 +802,10 @@ class DuckDBService {
     }
 
     async getMvtTile(source: MvtTileSource, z: number, x: number, y: number): Promise<ArrayBuffer> {
-        const propertyEntries = source.propertyColumns
+        const availableProperties = new Set(source.propertyColumns);
+        const renderedProperties = source.renderPropertyColumns ?? source.propertyColumns;
+        const propertyEntries = renderedProperties
+            .filter((name) => availableProperties.has(name))
             .map((name) => `${JSON.stringify(name)}: ${qi(name)}`)
             .join(', ');
         const properties = propertyEntries ? `, ${propertyEntries}` : '';

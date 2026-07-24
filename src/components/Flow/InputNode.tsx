@@ -11,6 +11,7 @@ export const InputNode = ({ data, id, selected }: any) => {
   const datasetLabel = fileLabel.replace(/\.[^/.]+$/, '');
   const crsLabel = config.crs || 'CRS pending';
   const crsTitle = [config.crsName, config.crsReason].filter(Boolean).join(' - ');
+  const isLoading = loading || config.loadStatus === 'loading';
 
   const handleFileUpload = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -33,10 +34,12 @@ export const InputNode = ({ data, id, selected }: any) => {
       label="Data Source"
       title={config.tableName ? datasetLabel : 'Load data'}
     >
-      {loading ? (
+      {isLoading ? (
         <div className="flex flex-col items-center justify-center py-4 gap-2">
           <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />
-          <span className="text-[11px] text-muted-foreground">Loading data...</span>
+          <span className="max-w-[180px] truncate text-[11px] text-muted-foreground" title={config.loadStage}>
+            {config.loadStage || 'Loading data…'}
+          </span>
         </div>
       ) : config.tableName ? (
         <div className="space-y-2">
@@ -62,8 +65,13 @@ export const InputNode = ({ data, id, selected }: any) => {
         <label className="cursor-pointer group flex flex-col items-center justify-center py-3 border-2 border-dashed border-muted rounded-lg hover:bg-blue-50 hover:border-blue-200 transition-all">
           <Upload className="w-4 h-4 text-muted-foreground group-hover:text-blue-500 mb-1" />
           <span className="text-[11px] font-medium text-muted-foreground group-hover:text-blue-600">
-            Upload Parquet / CSV
+            {config.loadStatus === 'error' ? 'Try another Parquet / CSV' : 'Upload Parquet / CSV'}
           </span>
+          {config.loadStatus === 'error' && (
+            <span className="mt-1 max-w-[180px] truncate text-[9px] text-rose-500" title={config.loadError}>
+              Load failed
+            </span>
+          )}
           <input
             type="file"
             className="hidden"

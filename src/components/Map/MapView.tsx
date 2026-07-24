@@ -23,6 +23,8 @@ import {
   type GlyphPoint,
 } from '../../services/glyphGridService';
 import type { GlyphGridVisualisation } from '../../types/visualisation';
+import { requiredMapTileProperties } from '../../utils/mapTileProperties';
+import { queryLayerFeatureDetails } from '../../services/visualAnalyticsService';
 
 function getLayerBounds(geojson: GeoJSON.FeatureCollection) {
   const coords: [number, number][] = [];
@@ -65,6 +67,31 @@ function formatPopupValue(value: unknown): string {
   if (typeof value === 'object') return JSON.stringify(value).slice(0, 100);
   return String(value).slice(0, 80);
 }
+
+const escapeHtml = (value: string) => value
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#039;');
+
+const popupHtml = (layerName: string, properties: Record<string, unknown> | null, loading = false) => {
+  const title = `<div style="font:10px/1.4 sans-serif;font-weight:700;color:#0f766e;margin-bottom:4px">${escapeHtml(layerName)}</div>`;
+  if (loading) {
+    return `${title}<div style="font:11px/1.5 sans-serif;color:#64748b">Loading feature details…</div>`;
+  }
+  const entries = Object.entries(properties || {}).slice(0, 8);
+  const rows = entries.map(([key, value]) =>
+    `<div style="display:flex;justify-content:space-between;gap:8px;font:11px/1.5 monospace">
+      <span style="font-weight:600;color:#475569">${escapeHtml(key)}</span>
+      <span style="color:#1e293b;text-align:right;max-width:160px;overflow:hidden;text-overflow:ellipsis">${escapeHtml(formatPopupValue(value))}</span>
+    </div>`,
+  ).join('');
+  const remainder = Object.keys(properties || {}).length - entries.length;
+  return `${title}${rows}${remainder > 0
+    ? `<div style="font:10px monospace;color:#94a3b8;margin-top:4px">+ ${remainder} more fields</div>`
+    : ''}`;
+};
 
 const compileMapFilter = (filters: VisualFilter[]) => {
   const expressions = filters.map((filter) => {
@@ -112,6 +139,7 @@ export const MapView = () => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const popup = useRef<maplibregl.Popup | null>(null);
+  const popupRequestId = useRef(0);
   const locationMarker = useRef<maplibregl.Marker | null>(null);
   const renderedLayerIds = useRef<Set<string>>(new Set());
   const renderedSourceVersions = useRef<Map<string, string>>(new Map());
@@ -187,8 +215,15 @@ export const MapView = () => {
       }
     });
     m.on('idle', () => {
-      const { restylingLayerIds, setLayerRestyling } = useStore.getState();
+      const { restylingLayerIds, setLayerRestyling, loadingOperations, finishLoadingOperation } = useStore.getState();
       Object.keys(restylingLayerIds).forEach((layerId) => setLayerRestyling(layerId, false));
+      Object.values(loadingOperations).forEach((operation) => {
+        if (!operation.waitForLayerId) return;
+        const sourceId = `input-source-${operation.waitForLayerId}`;
+        if (m.getSource(sourceId) && m.isSourceLoaded(sourceId)) {
+          finishLoadingOperation(operation.id);
+        }
+      });
     });
 
     return () => {
@@ -244,6 +279,20 @@ export const MapView = () => {
       // most of the time — deferring syncs indefinitely.
       if (!styleReady.current) { m.once('style.load', syncLayers); return; }
 
+      // On the first dataset, position the camera before registering its vector
+      // source. Otherwise MapLibre immediately asks DuckDB for a world-scale
+      // tile at zoom 1, where dense building polygons quantize into large
+      // triangles/squares and block the useful local tiles behind them.
+      if (renderedLayerIds.current.size === 0 && mapLayers.length > 0 && m.getZoom() <= 2.5) {
+        const requestedLayerId = useStore.getState().layerFocusRequest?.layerId;
+        const initialLayer = mapLayers.find((layer) => layer.id === requestedLayerId) ?? mapLayers[0];
+        const initialBounds = boundsForLayer(initialLayer)
+          || (initialLayer.geojson ? getLayerBounds(initialLayer.geojson) : null);
+        if (initialBounds) {
+          m.fitBounds(initialBounds, { padding: 50, duration: 0, maxZoom: 16 });
+        }
+      }
+
       // Remove stale layers
       const currentIds = new Set(mapLayers.map((l) => l.id));
       renderedLayerIds.current.forEach((rid) => {
@@ -276,13 +325,20 @@ export const MapView = () => {
         const baseMvtSource = mvtSourceForLayer(layer);
         const tileFilterFields = new Set(baseMvtSource?.propertyColumns || []);
         const tileFilters = layerFilters.filter((filter) => tileFilterFields.has(filter.field));
+        const renderPropertyColumns = baseMvtSource
+          ? requiredMapTileProperties(baseMvtSource.propertyColumns, layer.visualisation, tileFilters)
+          : [];
         const tileSource = baseMvtSource
-          ? { ...baseMvtSource, filterWhereClause: compileVisualFiltersWhereClause(tileFilters) }
+          ? {
+              ...baseMvtSource,
+              filterWhereClause: compileVisualFiltersWhereClause(tileFilters),
+              renderPropertyColumns,
+            }
           : undefined;
         const renderVersion = layer.source.kind === 'duckdb-table' || layer.source.kind === 'duckdb-query'
           ? layer.source.renderVersion
           : layer.styleVersion;
-        const sourceVersion = `${renderVersion}:${JSON.stringify(tileFilters)}`;
+        const sourceVersion = `${renderVersion}:${JSON.stringify(tileFilters)}:${JSON.stringify(renderPropertyColumns)}`;
         const isVectorTiled = Boolean(tileSource);
         const isClustered = !isVectorTiled && layerGeoKind === 'point' && typeof layer.clusterRadius === 'number';
         const sourceLayer = tileSource?.layerName;
@@ -360,17 +416,22 @@ export const MapView = () => {
           selectLayer(layer.id);
           if (featureId) toggleSelectedFeature(layer.id, featureId);
 
-          const props = feature.properties || {};
-          const entries = Object.entries(props).slice(0, 8);
-          let html = entries.map(([k, v]) =>
-            `<div style="display:flex;justify-content:space-between;gap:8px;font:11px/1.5 monospace">
-              <span style="font-weight:600;color:#475569">${k}</span>
-              <span style="color:#1e293b;text-align:right;max-width:160px;overflow:hidden;text-overflow:ellipsis">${formatPopupValue(v)}</span>
-            </div>`
-          ).join('');
-          if (Object.keys(props).length > 8) html += `<div style="font:10px monospace;color:#94a3b8;margin-top:4px">+ ${Object.keys(props).length - 8} more fields</div>`;
-          html = `<div style="font:10px/1.4 sans-serif;font-weight:700;color:#0f766e;margin-bottom:4px">${layer.name}</div>${html}`;
-          popup.current?.setLngLat(e.lngLat).setHTML(html).addTo(m);
+          if (!featureId) {
+            popup.current?.setLngLat(e.lngLat).setHTML(popupHtml(layer.name, feature.properties || {})).addTo(m);
+            return;
+          }
+
+          const requestId = ++popupRequestId.current;
+          popup.current?.setLngLat(e.lngLat).setHTML(popupHtml(layer.name, null, true)).addTo(m);
+          void queryLayerFeatureDetails(layer, featureId)
+            .then((properties) => {
+              if (popupRequestId.current !== requestId) return;
+              popup.current?.setHTML(popupHtml(layer.name, properties || feature.properties || {}));
+            })
+            .catch(() => {
+              if (popupRequestId.current !== requestId) return;
+              popup.current?.setHTML(popupHtml(layer.name, feature.properties || {}));
+            });
         };
 
         // Detach this layer's previous handlers so re-syncs never accumulate duplicates.
@@ -708,10 +769,12 @@ export const MapView = () => {
       }
     };
 
-    if (!m.isStyleLoaded()) {
-      m.once('idle', fitFocusedLayer);
+    // isStyleLoaded() becomes false again while custom tiles are loading. The
+    // style.load event is the correct readiness boundary for camera changes.
+    if (!styleReady.current) {
+      m.once('style.load', fitFocusedLayer);
       return () => {
-        m.off('idle', fitFocusedLayer);
+        m.off('style.load', fitFocusedLayer);
       };
     }
 

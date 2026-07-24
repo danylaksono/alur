@@ -66,6 +66,17 @@ export type Toast = {
   message: string;
 };
 
+export type LoadingOperation = {
+  id: string;
+  title: string;
+  detail: string;
+  progress?: number;
+  fileName?: string;
+  /** When set, MapView completes the operation once this layer has rendered. */
+  waitForLayerId?: string;
+  startedAt: number;
+};
+
 export type RailTab = 'layers' | 'charts' | 'chat';
 export type DrawerTab = 'workflow' | 'table' | 'sql';
 export type DrawerMode = 'collapsed' | 'open' | 'maximized';
@@ -112,6 +123,7 @@ interface AppState {
   nodeExecutionStates: Record<string, NodeExecutionState>;
   visualAnalytics: VisualAnalyticsState;
   toasts: Toast[];
+  loadingOperations: Record<string, LoadingOperation>;
   ui: UIState;
   settings: SettingsState;
   /** Layers whose map source/tiles are currently re-rendering after a style or filter change. */
@@ -167,6 +179,9 @@ interface AppState {
   addChatMessage: (role: 'user' | 'assistant' | 'system', content: string, data?: { kind?: string; toolName?: string; summary?: string; icon?: string }) => void;
   addToast: (toast: Omit<Toast, 'id'>) => void;
   removeToast: (id: string) => void;
+  startLoadingOperation: (operation: Omit<LoadingOperation, 'startedAt'>) => void;
+  updateLoadingOperation: (id: string, patch: Partial<Omit<LoadingOperation, 'id' | 'startedAt'>>) => void;
+  finishLoadingOperation: (id: string) => void;
 }
 
 export type NewMapLayer = Omit<MapLayer, 'visible' | 'opacity' | 'createdAt' | 'featureCount' | 'styleVersion' | 'source'> &
@@ -259,6 +274,7 @@ export const useStore = create<AppState>()(persist((set, get) => ({
   nodeExecutionStates: {},
   visualAnalytics: { layers: {}, charts: [] },
   toasts: [],
+  loadingOperations: {},
   ui: initialUIState,
   settings: initialSettings,
   restylingLayerIds: {},
@@ -271,6 +287,26 @@ export const useStore = create<AppState>()(persist((set, get) => ({
     }
     return { restylingLayerIds: removeRecordKeys(state.restylingLayerIds, new Set([layerId])) };
   }),
+
+  startLoadingOperation: (operation) => set((state) => ({
+    loadingOperations: {
+      ...state.loadingOperations,
+      [operation.id]: { ...operation, startedAt: Date.now() },
+    },
+  })),
+  updateLoadingOperation: (id, patch) => set((state) => {
+    const current = state.loadingOperations[id];
+    if (!current) return state;
+    return {
+      loadingOperations: {
+        ...state.loadingOperations,
+        [id]: { ...current, ...patch },
+      },
+    };
+  }),
+  finishLoadingOperation: (id) => set((state) => ({
+    loadingOperations: removeRecordKeys(state.loadingOperations, new Set([id])),
+  })),
 
   setActiveRailTab: (tab) => set((state) => ({
     ui: { ...state.ui, activeRailTab: tab, isPanelCollapsed: false },
@@ -358,6 +394,7 @@ export const useStore = create<AppState>()(persist((set, get) => ({
     nodeExecutionStates: {},
     visualAnalytics: { layers: {}, charts: [] },
     restylingLayerIds: {},
+    loadingOperations: {},
   }),
 
   onNodesChange: (changes) => {

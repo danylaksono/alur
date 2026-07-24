@@ -15,9 +15,11 @@ import { BottomDrawer } from './BottomDrawer';
 import { ContextInspector } from './ContextInspector';
 import { SettingsDialog } from './SettingsDialog';
 import { AboutDialog } from './AboutDialog';
+import { GlobalLoadingOverlay } from '../GlobalLoadingOverlay';
 
 export const AppShell = () => {
   const drawerMode = useStore((s) => s.ui.drawerMode);
+  const isGlobalLoading = useStore((s) => Object.keys(s.loadingOperations).length > 0);
   const isMaximized = drawerMode === 'maximized';
   const [isDragOver, setIsDragOver] = useState(false);
 
@@ -46,7 +48,7 @@ export const AppShell = () => {
   };
 
   return (
-    <div className="flex h-screen w-full flex-col overflow-hidden bg-background">
+    <div className="flex h-screen w-full flex-col overflow-hidden bg-background" aria-busy={isGlobalLoading}>
       <Header />
 
       <div className="flex min-h-0 flex-1">
@@ -91,6 +93,7 @@ export const AppShell = () => {
       <SettingsDialog />
       <AboutDialog />
       <ToastContainer />
+      <GlobalLoadingOverlay />
     </div>
   );
 };

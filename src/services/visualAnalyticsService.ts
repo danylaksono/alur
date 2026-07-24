@@ -40,6 +40,30 @@ export const analyticsTableForLayer = async (layer: AnalyticsLayer) => {
   return registerLayerForAnalytics({ id: layer.id, geojson: layer.geojson || { type: 'FeatureCollection', features: [] } });
 };
 
+export const queryLayerFeatureDetails = async (layer: AnalyticsLayer, featureId: string) => {
+  if (!layer.source || layer.source.kind === 'legacy-geojson') {
+    const feature = layer.geojson?.features.find((item) => (
+      String(item.properties?.[FEATURE_ID_PROPERTY] ?? item.id ?? '') === featureId
+    ));
+    return feature?.properties ? { ...feature.properties } : null;
+  }
+
+  const tableName = layer.source.tileSource.tableName;
+  const idColumn = layer.source.featureIdColumn;
+  const escapedId = featureId.replace(/'/g, "''");
+  const result = await duckdbService.query(
+    `SELECT * EXCLUDE (__alur_tile_geom)
+     FROM "${tableName.replace(/"/g, '""')}"
+     WHERE CAST(${quoteIdentifier(idColumn)} AS VARCHAR) = '${escapedId}'
+     LIMIT 1;`,
+  );
+  const row = normalizeRows(result.toArray())[0];
+  if (!row) return null;
+  return Object.fromEntries(
+    Object.entries(row).filter(([key]) => !key.startsWith('__alur_')),
+  );
+};
+
 const geometryCoordinates = (geometry: GeoJSON.Geometry | null): number[][] => {
   if (!geometry) return [];
   if (geometry.type === 'GeometryCollection') return geometry.geometries.flatMap(geometryCoordinates);

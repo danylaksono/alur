@@ -47,6 +47,30 @@ describe('layer state', () => {
     expect(state.mapLayers[0].geojson?.features[0].properties?._alur_feature_id).toBe('1');
   });
 
+  it('tracks global loading operations until their map layer is ready', () => {
+    const store = useStore.getState();
+    store.startLoadingOperation({
+      id: 'load-roads',
+      title: 'Loading data',
+      detail: 'Opening roads.parquet…',
+      fileName: 'roads.parquet',
+      progress: 25,
+    });
+    store.updateLoadingOperation('load-roads', {
+      detail: 'Drawing features on the map…',
+      progress: 92,
+      waitForLayerId: 'roads',
+    });
+
+    expect(useStore.getState().loadingOperations['load-roads']).toMatchObject({
+      progress: 92,
+      waitForLayerId: 'roads',
+    });
+
+    store.finishLoadingOperation('load-roads');
+    expect(useStore.getState().loadingOperations).toEqual({});
+  });
+
   it('replaces repeated execution layers while preserving layer preferences', () => {
     const store = useStore.getState();
     store.addMapLayer({ id: 'exec-buffer', name: 'Buffer', geojson: fc(1), opacity: 0.5 });
