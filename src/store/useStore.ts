@@ -14,7 +14,27 @@ import {
 import { DEFAULT_BASEMAP_ID, type BasemapId } from '../utils/basemaps';
 import type { LayerVisualisation, LegendSpec } from '../types/visualisation';
 import { ensureFeatureIds } from '../utils/featureIdentity';
-import type { AnalyticalBookmark, CohortComparisonSelection, CohortSpec, DashboardCard, KpiSpec, VisualAnalyticsState, VisualChartSpec, VisualFilter } from '../types/visualAnalytics';
+import type {
+  AnalysisVariant,
+  AnalyticalBookmark,
+  CohortComparisonSelection,
+  CohortSpec,
+  ComparisonSpec,
+  DashboardCard,
+  ExplainCard,
+  ExplainDocument,
+  ExplainSection,
+  KpiSpec,
+  VisualAnalyticsState,
+  VisualChartSpec,
+  VisualFilter,
+} from '../types/visualAnalytics';
+
+type HydratedVisualAnalyticsState = VisualAnalyticsState & {
+  comparisons: ComparisonSpec[];
+  explain: ExplainDocument;
+  variants: AnalysisVariant[];
+};
 import type { MvtTileSource } from '../services/duckdb';
 import type { LayerSource } from '../types/layers';
 import type { LayerBounds } from '../types/layers';
@@ -106,7 +126,7 @@ export type UIState = {
   layerStyleRequest?: { layerId: string; field?: string; requestedAt: number };
   recoverySave: { status: 'idle' | 'saving' | 'saved' | 'error'; savedAt?: number };
   mapCamera: { longitude: number; latitude: number; zoom: number; bearing: number; pitch: number };
-  workspaceMode: 'explore' | 'board';
+  workspaceMode: 'explore' | 'compare' | 'explain' | 'board';
   isPresentationMode: boolean;
 };
 
@@ -126,7 +146,7 @@ export type ChatMessage = {
   };
 };
 
-interface AppState {
+export interface AppState {
   nodes: WorkflowNode[];
   edges: Edge[];
   duckdbReady: boolean;
@@ -141,7 +161,7 @@ interface AppState {
   layerFocusRequest: { layerId: string; requestedAt: number; bounds?: LayerBounds } | null;
   nodeSchemas: Record<string, any[]>;
   nodeExecutionStates: Record<string, NodeExecutionState>;
-  visualAnalytics: VisualAnalyticsState;
+  visualAnalytics: HydratedVisualAnalyticsState;
   toasts: Toast[];
   loadingOperations: Record<string, LoadingOperation>;
   ui: UIState;
@@ -216,6 +236,11 @@ interface AppState {
   duplicateCohort: (cohortId: string, newId?: string) => void;
   removeCohort: (cohortId: string) => void;
   setCohortComparison: (comparison?: CohortComparisonSelection) => void;
+  addComparison: (comparison: ComparisonSpec) => void;
+  updateComparison: (comparisonId: string, patch: Partial<Omit<ComparisonSpec, 'id' | 'createdAt'>>) => void;
+  duplicateComparison: (comparisonId: string, newId?: string) => void;
+  removeComparison: (comparisonId: string) => void;
+  setActiveComparison: (comparisonId?: string) => void;
   addBookmark: (bookmark: AnalyticalBookmark) => void;
   updateBookmark: (bookmarkId: string, patch: Partial<Pick<AnalyticalBookmark, 'name' | 'note'>>) => void;
   removeBookmark: (bookmarkId: string) => void;
@@ -224,6 +249,20 @@ interface AppState {
   addDashboardCard: (card: DashboardCard) => void;
   updateDashboardCard: (cardId: string, patch: Partial<Omit<DashboardCard, 'id' | 'kind'>>) => void;
   removeDashboardCard: (cardId: string) => void;
+  setExplainTitle: (title: string) => void;
+  addExplainSection: (section: ExplainSection) => void;
+  updateExplainSection: (sectionId: string, patch: Partial<Pick<ExplainSection, 'title'>>) => void;
+  reorderExplainSection: (sectionId: string, targetIndex: number) => void;
+  removeExplainSection: (sectionId: string) => void;
+  addExplainCard: (card: ExplainCard) => void;
+  updateExplainCard: (cardId: string, patch: Partial<Omit<ExplainCard, 'id' | 'kind'>>) => void;
+  reorderExplainCard: (cardId: string, sectionId: string, targetIndex: number) => void;
+  removeExplainCard: (cardId: string) => void;
+  addVariant: (variant: AnalysisVariant) => void;
+  branchVariant: (variantId: string, newId?: string) => void;
+  updateVariant: (variantId: string, patch: Partial<Omit<AnalysisVariant, 'id' | 'createdAt' | 'parentVariantId'>>) => void;
+  removeVariant: (variantId: string) => void;
+  setActivePattern: (patternId?: string) => void;
   addChatMessage: (role: 'user' | 'assistant' | 'system', content: string, data?: { kind?: string; toolName?: string; summary?: string; icon?: string }) => void;
   addToast: (toast: Omit<Toast, 'id'>) => void;
   removeToast: (id: string) => void;
@@ -296,7 +335,7 @@ const noopStorage: Storage = {
 
 const initialUIState: UIState = {
   activeRailTab: 'layers',
-  isPanelCollapsed: false,
+  isPanelCollapsed: typeof window !== 'undefined' && window.innerWidth < 768,
   drawerMode: 'open',
   drawerHeight: 320,
   activeDrawerTab: 'workflow',
@@ -316,6 +355,29 @@ const initialSettings: SettingsState = {
   openRouterModelId: 'openai/gpt-4o-mini',
 };
 
+const defaultExplainDocument = (): ExplainDocument => ({
+  title: 'Analysis explanation',
+  sections: [
+    { id: 'question', title: 'Question' },
+    { id: 'evidence', title: 'Evidence' },
+    { id: 'interpretation', title: 'Interpretation' },
+    { id: 'conclusion', title: 'Conclusion' },
+    { id: 'limitations', title: 'Limitations / Next steps' },
+  ],
+  cards: [],
+});
+
+const emptyVisualAnalytics = (): HydratedVisualAnalyticsState => ({
+  datasets: {},
+  charts: [],
+  kpis: [],
+  cohorts: [],
+  bookmarks: [],
+  comparisons: [],
+  explain: defaultExplainDocument(),
+  variants: [],
+});
+
 const datasetDescriptorForLayer = (layer: MapLayer): DatasetDescriptor => ({
   id: layer.id,
   name: layer.name,
@@ -327,6 +389,7 @@ const datasetDescriptorForLayer = (layer: MapLayer): DatasetDescriptor => ({
   rowIdQuality: 'map-feature-id',
   sourceUpdatedAt: layer.source.kind === 'duckdb-table' || layer.source.kind === 'duckdb-query' ? layer.source.renderVersion : layer.createdAt,
   spatial: true,
+  relationName: layer.source.kind === 'duckdb-table' || layer.source.kind === 'duckdb-query' ? layer.source.tableName : undefined,
 });
 
 const recordCurrentAnalysis = (state: AppState, action: HistoryAction) =>
@@ -365,7 +428,7 @@ export const useStore = create<AppState>()(persist((set, get) => ({
   layerFocusRequest: null,
   nodeSchemas: {},
   nodeExecutionStates: {},
-  visualAnalytics: { datasets: {}, charts: [], kpis: [], cohorts: [], bookmarks: [] },
+  visualAnalytics: emptyVisualAnalytics(),
   toasts: [],
   loadingOperations: {},
   ui: initialUIState,
@@ -449,6 +512,10 @@ export const useStore = create<AppState>()(persist((set, get) => ({
   })),
   setPresentationMode: (isPresentationMode) => set((state) => ({
     ui: { ...state.ui, isPresentationMode, workspaceMode: isPresentationMode ? 'board' : state.ui.workspaceMode },
+    visualAnalytics: {
+      ...state.visualAnalytics,
+      explain: { ...state.visualAnalytics.explain, presentationMode: isPresentationMode },
+    },
   })),
   requestLayerStyle: (layerId, field) => set((state) => ({
     selectedLayerId: layerId,
@@ -515,7 +582,7 @@ export const useStore = create<AppState>()(persist((set, get) => ({
     layerFocusRequest: null,
     nodeSchemas: {},
     nodeExecutionStates: {},
-    visualAnalytics: { datasets: {}, charts: [], kpis: [], cohorts: [], bookmarks: [] },
+    visualAnalytics: emptyVisualAnalytics(),
     restylingLayerIds: {},
     loadingOperations: {},
     ui: { ...get().ui, datasetOverviewLayerId: null, isCommandPaletteOpen: false, workspaceMode: 'explore', isPresentationMode: false },
@@ -1108,8 +1175,80 @@ export const useStore = create<AppState>()(persist((set, get) => ({
   }),
 
   setCohortComparison: (comparison) => set((state) => ({
-    visualAnalytics: { ...state.visualAnalytics, comparison },
+    visualAnalytics: (() => {
+      if (!comparison) return { ...state.visualAnalytics, comparison: undefined };
+      const cohortA = state.visualAnalytics.cohorts.find((item) => item.id === comparison.cohortAId);
+      const cohortB = comparison.cohortBId
+        ? state.visualAnalytics.cohorts.find((item) => item.id === comparison.cohortBId)
+        : undefined;
+      if (!cohortA) return { ...state.visualAnalytics, comparison };
+      const now = Date.now();
+      const spec: ComparisonSpec = {
+        id: `comparison-${now}`,
+        name: `${cohortA.name} vs ${cohortB?.name || 'remainder'}`,
+        operands: [
+          { id: 'a', label: cohortA.name, colour: cohortA.colour, datasetId: comparison.datasetId, scope: { kind: 'cohort', cohortId: cohortA.id, definition: structuredClone(cohortA.definition) } },
+          ...(cohortB ? [{ id: 'b', label: cohortB.name, colour: cohortB.colour, datasetId: comparison.datasetId, scope: { kind: 'cohort' as const, cohortId: cohortB.id, definition: structuredClone(cohortB.definition) } }] : []),
+        ],
+        alignment: { mode: 'aggregate-only' },
+        measures: [],
+        dimensions: [],
+        requestedViews: ['overview', 'distribution', 'categories'],
+        sourceVersions: { [comparison.datasetId]: state.datasetRegistry[comparison.datasetId]?.sourceVersion },
+        createdAt: now,
+        updatedAt: now,
+      };
+      return {
+        ...state.visualAnalytics,
+        comparison,
+        comparisons: [...state.visualAnalytics.comparisons, spec],
+        activeComparisonId: spec.id,
+      };
+    })(),
     analysisHistory: recordCurrentAnalysis(state, { label: comparison ? 'Compare cohorts' : 'Close cohort comparison' }),
+  })),
+
+  addComparison: (comparison) => set((state) => ({
+    visualAnalytics: {
+      ...state.visualAnalytics,
+      comparisons: [...state.visualAnalytics.comparisons.filter((item) => item.id !== comparison.id), comparison],
+      activeComparisonId: comparison.id,
+    },
+    analysisHistory: recordCurrentAnalysis(state, { label: 'Create comparison' }),
+  })),
+
+  updateComparison: (comparisonId, patch) => set((state) => ({
+    visualAnalytics: {
+      ...state.visualAnalytics,
+      comparisons: state.visualAnalytics.comparisons.map((item) => item.id === comparisonId
+        ? { ...item, ...patch, updatedAt: patch.updatedAt ?? Date.now() }
+        : item),
+    },
+    analysisHistory: recordCurrentAnalysis(state, { label: 'Edit comparison', coalesceKey: `comparison:${comparisonId}:edit` }),
+  })),
+
+  duplicateComparison: (comparisonId, newId = `comparison-${Date.now()}`) => set((state) => {
+    const comparison = state.visualAnalytics.comparisons.find((item) => item.id === comparisonId);
+    if (!comparison) return state;
+    const now = Date.now();
+    const duplicate: ComparisonSpec = structuredClone({ ...comparison, id: newId, name: `${comparison.name} copy`, createdAt: now, updatedAt: now });
+    return {
+      visualAnalytics: { ...state.visualAnalytics, comparisons: [...state.visualAnalytics.comparisons, duplicate], activeComparisonId: newId },
+      analysisHistory: recordCurrentAnalysis(state, { label: 'Duplicate comparison' }),
+    };
+  }),
+
+  removeComparison: (comparisonId) => set((state) => ({
+    visualAnalytics: {
+      ...state.visualAnalytics,
+      comparisons: state.visualAnalytics.comparisons.filter((item) => item.id !== comparisonId),
+      activeComparisonId: state.visualAnalytics.activeComparisonId === comparisonId ? undefined : state.visualAnalytics.activeComparisonId,
+    },
+    analysisHistory: recordCurrentAnalysis(state, { label: 'Remove comparison' }),
+  })),
+
+  setActiveComparison: (activeComparisonId) => set((state) => ({
+    visualAnalytics: { ...state.visualAnalytics, activeComparisonId },
   })),
 
   addBookmark: (bookmark) => set((state) => ({
@@ -1148,7 +1287,11 @@ export const useStore = create<AppState>()(persist((set, get) => ({
   }),
 
   setDashboardTitle: (title) => set((state) => ({
-    visualAnalytics: { ...state.visualAnalytics, dashboard: { title, cards: state.visualAnalytics.dashboard?.cards || [] } },
+    visualAnalytics: {
+      ...state.visualAnalytics,
+      dashboard: { title, cards: state.visualAnalytics.dashboard?.cards || [] },
+      explain: { ...state.visualAnalytics.explain, title },
+    },
   })),
 
   addDashboardCard: (card) => set((state) => ({
@@ -1157,6 +1300,19 @@ export const useStore = create<AppState>()(persist((set, get) => ({
       dashboard: {
         title: state.visualAnalytics.dashboard?.title || 'Analysis board',
         cards: [...(state.visualAnalytics.dashboard?.cards || []).filter((item) => item.id !== card.id), card],
+      },
+      explain: {
+        ...state.visualAnalytics.explain,
+        cards: [
+          ...state.visualAnalytics.explain.cards.filter((item) => item.id !== card.id),
+          {
+            ...card,
+            sectionId: 'evidence',
+            width: card.width === 2 ? 12 : 6,
+            behaviour: 'frozen',
+            provenance: { capturedAt: Date.now(), datasetIds: card.datasetId ? [card.datasetId] : [], sourceVersions: {}, filtersByDataset: {}, caveats: [] },
+          } as ExplainCard,
+        ],
       },
     },
   })),
@@ -1168,6 +1324,18 @@ export const useStore = create<AppState>()(persist((set, get) => ({
         title: state.visualAnalytics.dashboard?.title || 'Analysis board',
         cards: (state.visualAnalytics.dashboard?.cards || []).map((card) => card.id === cardId ? { ...card, ...patch } : card),
       },
+      explain: {
+        ...state.visualAnalytics.explain,
+        cards: state.visualAnalytics.explain.cards.map((card) => card.id === cardId ? {
+          ...card,
+          referenceId: patch.referenceId ?? card.referenceId,
+          datasetId: patch.datasetId ?? card.datasetId,
+          title: patch.title ?? card.title,
+          note: patch.note ?? card.note,
+          width: patch.width === 2 ? 12 : patch.width === 1 ? 6 : card.width,
+          height: patch.height ?? card.height,
+        } : card),
+      },
     },
   })),
 
@@ -1178,7 +1346,90 @@ export const useStore = create<AppState>()(persist((set, get) => ({
         title: state.visualAnalytics.dashboard?.title || 'Analysis board',
         cards: (state.visualAnalytics.dashboard?.cards || []).filter((card) => card.id !== cardId),
       },
+      explain: { ...state.visualAnalytics.explain, cards: state.visualAnalytics.explain.cards.filter((card) => card.id !== cardId) },
     },
+  })),
+
+  setExplainTitle: (title) => set((state) => ({
+    visualAnalytics: { ...state.visualAnalytics, explain: { ...state.visualAnalytics.explain, title } },
+    analysisHistory: recordCurrentAnalysis(state, { label: 'Rename explanation', coalesceKey: 'explain:title' }),
+  })),
+
+  addExplainSection: (section) => set((state) => ({
+    visualAnalytics: { ...state.visualAnalytics, explain: { ...state.visualAnalytics.explain, sections: [...state.visualAnalytics.explain.sections, section] } },
+    analysisHistory: recordCurrentAnalysis(state, { label: 'Add explanation section' }),
+  })),
+
+  updateExplainSection: (sectionId, patch) => set((state) => ({
+    visualAnalytics: { ...state.visualAnalytics, explain: { ...state.visualAnalytics.explain, sections: state.visualAnalytics.explain.sections.map((section) => section.id === sectionId ? { ...section, ...patch } : section) } },
+    analysisHistory: recordCurrentAnalysis(state, { label: 'Edit explanation section', coalesceKey: `explain-section:${sectionId}` }),
+  })),
+
+  reorderExplainSection: (sectionId, targetIndex) => set((state) => {
+    const sections = [...state.visualAnalytics.explain.sections];
+    const sourceIndex = sections.findIndex((section) => section.id === sectionId);
+    if (sourceIndex < 0) return state;
+    const [section] = sections.splice(sourceIndex, 1);
+    sections.splice(Math.max(0, Math.min(targetIndex, sections.length)), 0, section);
+    return { visualAnalytics: { ...state.visualAnalytics, explain: { ...state.visualAnalytics.explain, sections } }, analysisHistory: recordCurrentAnalysis(state, { label: 'Reorder explanation sections' }) };
+  }),
+
+  removeExplainSection: (sectionId) => set((state) => ({
+    visualAnalytics: { ...state.visualAnalytics, explain: { ...state.visualAnalytics.explain, sections: state.visualAnalytics.explain.sections.filter((section) => section.id !== sectionId), cards: state.visualAnalytics.explain.cards.filter((card) => card.sectionId !== sectionId) } },
+    analysisHistory: recordCurrentAnalysis(state, { label: 'Remove explanation section' }),
+  })),
+
+  addExplainCard: (card) => set((state) => ({
+    visualAnalytics: { ...state.visualAnalytics, explain: { ...state.visualAnalytics.explain, cards: [...state.visualAnalytics.explain.cards.filter((item) => item.id !== card.id), card] } },
+    analysisHistory: recordCurrentAnalysis(state, { label: 'Pin evidence' }),
+  })),
+
+  updateExplainCard: (cardId, patch) => set((state) => ({
+    visualAnalytics: { ...state.visualAnalytics, explain: { ...state.visualAnalytics.explain, cards: state.visualAnalytics.explain.cards.map((card) => card.id === cardId ? { ...card, ...patch } : card) } },
+    analysisHistory: recordCurrentAnalysis(state, { label: 'Edit evidence', coalesceKey: `explain-card:${cardId}` }),
+  })),
+
+  reorderExplainCard: (cardId, sectionId, targetIndex) => set((state) => {
+    const card = state.visualAnalytics.explain.cards.find((item) => item.id === cardId);
+    if (!card) return state;
+    const without = state.visualAnalytics.explain.cards.filter((item) => item.id !== cardId);
+    const sectionCards = without.filter((item) => item.sectionId === sectionId);
+    const insertionTarget = Math.max(0, Math.min(targetIndex, sectionCards.length));
+    const anchor = sectionCards[insertionTarget];
+    const index = anchor ? without.indexOf(anchor) : without.length;
+    without.splice(index, 0, { ...card, sectionId });
+    return { visualAnalytics: { ...state.visualAnalytics, explain: { ...state.visualAnalytics.explain, cards: without } }, analysisHistory: recordCurrentAnalysis(state, { label: 'Reorder evidence' }) };
+  }),
+
+  removeExplainCard: (cardId) => set((state) => ({
+    visualAnalytics: { ...state.visualAnalytics, explain: { ...state.visualAnalytics.explain, cards: state.visualAnalytics.explain.cards.filter((card) => card.id !== cardId) } },
+    analysisHistory: recordCurrentAnalysis(state, { label: 'Remove evidence' }),
+  })),
+
+  addVariant: (variant) => set((state) => ({
+    visualAnalytics: { ...state.visualAnalytics, variants: [...state.visualAnalytics.variants.filter((item) => item.id !== variant.id), variant] },
+    analysisHistory: recordCurrentAnalysis(state, { label: 'Create analysis variant' }),
+  })),
+
+  branchVariant: (variantId, newId = `variant-${Date.now()}`) => set((state) => {
+    const parent = state.visualAnalytics.variants.find((item) => item.id === variantId);
+    if (!parent) return state;
+    const branch: AnalysisVariant = structuredClone({ ...parent, id: newId, name: `${parent.name} branch`, parentVariantId: parent.id, workflowOutputDatasetId: undefined, createdAt: Date.now(), provenance: { ...parent.provenance, workflowNodeIds: [] } });
+    return { visualAnalytics: { ...state.visualAnalytics, variants: [...state.visualAnalytics.variants, branch] }, analysisHistory: recordCurrentAnalysis(state, { label: 'Branch analysis variant' }) };
+  }),
+
+  updateVariant: (variantId, patch) => set((state) => ({
+    visualAnalytics: { ...state.visualAnalytics, variants: state.visualAnalytics.variants.map((variant) => variant.id === variantId ? { ...variant, ...patch } : variant) },
+    analysisHistory: recordCurrentAnalysis(state, { label: 'Edit analysis variant', coalesceKey: `variant:${variantId}` }),
+  })),
+
+  removeVariant: (variantId) => set((state) => ({
+    visualAnalytics: { ...state.visualAnalytics, variants: state.visualAnalytics.variants.filter((variant) => variant.id !== variantId) },
+    analysisHistory: recordCurrentAnalysis(state, { label: 'Remove analysis variant' }),
+  })),
+
+  setActivePattern: (activePatternId) => set((state) => ({
+    visualAnalytics: { ...state.visualAnalytics, activePatternId },
   })),
 
   addChatMessage: (role, content, data) => set((state) => ({

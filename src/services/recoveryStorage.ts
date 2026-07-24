@@ -1,4 +1,4 @@
-import type { ProjectManifestV1 } from '../types/project';
+import type { ProjectManifest } from '../types/project';
 
 const DB_NAME = 'alur-recovery';
 const DB_VERSION = 1;
@@ -8,7 +8,7 @@ export const MAX_RECOVERY_SNAPSHOTS = 5;
 export type RecoverySnapshot = {
   id: string;
   createdAt: number;
-  manifest: ProjectManifestV1;
+  manifest: ProjectManifest;
 };
 
 const openRecoveryDb = () => new Promise<IDBDatabase>((resolve, reject) => {
@@ -42,7 +42,7 @@ const transactionDone = (transaction: IDBTransaction) => new Promise<void>((reso
 export const retainNewestSnapshots = (snapshots: RecoverySnapshot[], limit = MAX_RECOVERY_SNAPSHOTS) =>
   [...snapshots].sort((a, b) => b.createdAt - a.createdAt).slice(0, limit);
 
-export const saveRecoverySnapshot = async (manifest: ProjectManifestV1) => {
+export const saveRecoverySnapshot = async (manifest: ProjectManifest) => {
   const db = await openRecoveryDb();
   try {
     const transaction = db.transaction(STORE_NAME, 'readwrite');
@@ -87,4 +87,3 @@ export const deleteRecoverySnapshot = async (id: string) => {
     db.close();
   }
 };
-

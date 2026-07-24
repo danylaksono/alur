@@ -28,6 +28,11 @@ export type AnalysisSnapshot = {
   bookmarks: AnalyticalBookmark[];
   comparison?: CohortComparisonSelection;
   dashboard?: VisualAnalyticsState['dashboard'];
+  comparisons?: VisualAnalyticsState['comparisons'];
+  activeComparisonId?: string;
+  explain?: VisualAnalyticsState['explain'];
+  variants?: VisualAnalyticsState['variants'];
+  activePatternId?: string;
 };
 
 export type AnalysisHistoryEntry = {
@@ -85,6 +90,11 @@ export const captureAnalysisSnapshot = (source: SnapshotSource): AnalysisSnapsho
   bookmarks: clone(source.visualAnalytics.bookmarks),
   comparison: source.visualAnalytics.comparison ? clone(source.visualAnalytics.comparison) : undefined,
   dashboard: source.visualAnalytics.dashboard ? clone(source.visualAnalytics.dashboard) : undefined,
+  comparisons: clone(source.visualAnalytics.comparisons || []),
+  activeComparisonId: source.visualAnalytics.activeComparisonId,
+  explain: source.visualAnalytics.explain ? clone(source.visualAnalytics.explain) : undefined,
+  variants: clone(source.visualAnalytics.variants || []),
+  activePatternId: source.visualAnalytics.activePatternId,
 });
 
 export const recordAnalysisHistory = (
@@ -148,12 +158,12 @@ export const redoAnalysisHistory = (
   };
 };
 
-export const restoreAnalysisSnapshot = <T extends SnapshotLayer>(
+export const restoreAnalysisSnapshot = <T extends SnapshotLayer, A extends VisualAnalyticsState>(
   mapLayers: T[],
-  visualAnalytics: VisualAnalyticsState,
+  visualAnalytics: A,
   snapshot: AnalysisSnapshot,
   registeredDatasetIds: string[] = [],
-): { mapLayers: T[]; visualAnalytics: VisualAnalyticsState } => {
+): { mapLayers: T[]; visualAnalytics: A } => {
   const presentationById = new Map(snapshot.layerPresentation.map((layer) => [layer.id, layer]));
   const currentById = new Map(mapLayers.map((layer) => [layer.id, layer]));
   const orderedIds = [
@@ -211,6 +221,11 @@ export const restoreAnalysisSnapshot = <T extends SnapshotLayer>(
         ? clone(snapshot.comparison)
         : undefined,
       dashboard: snapshot.dashboard ? clone(snapshot.dashboard) : visualAnalytics.dashboard,
-    },
+      comparisons: clone(snapshot.comparisons || []).filter((comparison) => comparison.operands.every((operand) => availableDatasetIds.has(operand.datasetId))),
+      activeComparisonId: snapshot.activeComparisonId,
+      explain: snapshot.explain ? clone(snapshot.explain) : visualAnalytics.explain,
+      variants: clone(snapshot.variants || []).filter((variant) => availableDatasetIds.has(variant.baselineDatasetId)),
+      activePatternId: snapshot.activePatternId,
+    } as A,
   };
 };

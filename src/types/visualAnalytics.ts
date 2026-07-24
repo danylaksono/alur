@@ -13,8 +13,162 @@ export type VisualAnalyticsState = {
   kpis: KpiSpec[];
   cohorts: CohortSpec[];
   bookmarks: AnalyticalBookmark[];
+  comparisons?: ComparisonSpec[];
+  activeComparisonId?: string;
+  explain?: ExplainDocument;
+  variants?: AnalysisVariant[];
+  activePatternId?: string;
   comparison?: CohortComparisonSelection;
+  /** @deprecated v1 compatibility only. New projects use `explain`. */
   dashboard?: DashboardLayout;
+};
+
+export type ComparisonScope =
+  | { kind: 'whole-dataset' }
+  | { kind: 'filters'; filters: VisualFilter[] }
+  | { kind: 'cohort'; cohortId: string; definition: CohortSpec['definition'] }
+  | { kind: 'materialised-selection'; tableName: string; rowIds?: string[] }
+  | { kind: 'time-window'; field: string; start?: string; end?: string };
+
+export type ComparisonOperand = {
+  id: string;
+  label: string;
+  colour: string;
+  datasetId: string;
+  scope: ComparisonScope;
+  sourceVersion?: string | number;
+};
+
+export type ComparisonAlignment = {
+  mode: 'aggregate-only' | 'entity-keyed' | 'temporal' | 'spatial';
+  keyFields?: Record<string, string>;
+  timeFields?: Record<string, string>;
+  spatialFields?: Record<string, string>;
+};
+
+export type ComparisonMeasure = {
+  id: string;
+  label: string;
+  fields: Record<string, string | undefined>;
+  aggregation: KpiAggregation;
+  format?: KpiFormat;
+  unit?: string;
+  preferredDirection?: 'higher' | 'lower';
+};
+
+export type ComparisonView = 'overview' | 'distribution' | 'categories' | 'time' | 'map' | 'records';
+
+export type ComparisonSpec = {
+  id: string;
+  name: string;
+  operands: ComparisonOperand[];
+  alignment: ComparisonAlignment;
+  measures: ComparisonMeasure[];
+  dimensions: string[];
+  requestedViews: ComparisonView[];
+  sourceVersions: Record<string, string | number | undefined>;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type ComparisonValue = {
+  operandId: string;
+  value: number | null;
+  denominator: number;
+  missing: number;
+};
+
+export type ComparisonResult = {
+  specId: string;
+  summaries: Array<{ measureId: string; values: ComparisonValue[] }>;
+  distributions: Array<{ measureId: string; operandId: string; bins: Array<{ label: string; count: number; share: number }> }>;
+  categoryShares: Array<{ dimension: string; operandId: string; values: Array<{ label: string; count: number; share: number }> }>;
+  temporalSeries: Array<{ measureId: string; operandId: string; points: Array<{ period: string; value: number | null }> }>;
+  overlap?: Array<{ operandAId: string; operandBId: string; count: number }>;
+  alignedRecords?: Array<Record<string, unknown>>;
+  warnings: string[];
+  generatedAt: number;
+};
+
+export type EvidenceProvenance = {
+  capturedAt: number;
+  datasetIds: string[];
+  sourceVersions: Record<string, string | number | undefined>;
+  filtersByDataset: Record<string, VisualFilter[]>;
+  query?: string;
+  comparisonSpec?: ComparisonSpec;
+  caveats: string[];
+};
+
+export type ExplainCardKind = 'chart' | 'kpi' | 'table' | 'comparison' | 'map' | 'finding' | 'note' | 'section-intro';
+export type ExplainCard = {
+  id: string;
+  sectionId: string;
+  kind: ExplainCardKind;
+  referenceId?: string;
+  datasetId?: string;
+  title?: string;
+  note?: string;
+  claim?: string;
+  interpretation?: string;
+  caveat?: string;
+  conclusionStatus?: 'draft' | 'supported' | 'contested';
+  width: 3 | 4 | 6 | 8 | 12;
+  height: 'compact' | 'standard' | 'tall';
+  behaviour: 'frozen' | 'live';
+  frozenValues?: unknown;
+  provenance?: EvidenceProvenance;
+};
+
+export type ExplainSection = { id: string; title: string };
+export type ExplainDocument = {
+  title: string;
+  sections: ExplainSection[];
+  cards: ExplainCard[];
+  presentationMode?: boolean;
+};
+
+export type ScoreCriterion = {
+  field: string;
+  weight: number;
+  direction: 'higher' | 'lower';
+  normalisation: 'min-max' | 'z-score' | 'rank';
+};
+
+export type ScoreModelSpec = {
+  criteria: ScoreCriterion[];
+  missingValueTreatment: 'exclude' | 'zero' | 'mean';
+  sensitivity?: number[];
+};
+
+export type VariantOperation = {
+  id: string;
+  type: 'weighted-score' | 'ranked-selection' | 'value-change' | 'allocation' | 'phase-assignment' | 'remove-operation';
+  parameters: Record<string, unknown>;
+  assumptions?: string[];
+};
+
+export type AnalysisVariant = {
+  id: string;
+  name: string;
+  baselineDatasetId: string;
+  parentVariantId?: string;
+  workflowOutputDatasetId?: string;
+  parameters: Record<string, unknown>;
+  assumptions: string[];
+  operations: VariantOperation[];
+  createdAt: number;
+  provenance: { workflowNodeIds: string[]; sourceVersion?: string | number };
+};
+
+export type AnalysisPatternDefinition = {
+  id: string;
+  name: string;
+  description: string;
+  applicability: string[];
+  capabilitySlots: Array<{ id: string; label: string; description: string }>;
+  suggestedActions: string[];
+  recommendedViews: ComparisonView[];
 };
 
 export type DashboardCard = {

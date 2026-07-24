@@ -7,7 +7,6 @@ import { compileLayerStyle, geometryKindForLayer } from '../../utils/mapStyleCom
 import { featureIdFromMapFeature } from '../../utils/featureIdentity';
 import { FEATURE_ID_PROPERTY } from '../../types/visualAnalytics';
 import { LegendControl } from './LegendControl';
-import { BasemapControl } from './BasemapControl';
 import { LocationSearchControl } from './LocationSearchControl';
 import type { GeocodingResult } from '../../services/geocodingService';
 import { mvtTileUrl, registerMvtProtocol, registerMvtTileSource, unregisterMvtTileSource } from '../../services/mvtTileService';
@@ -156,12 +155,7 @@ export const MapView = () => {
       bearing: mapCamera.bearing,
       pitch: mapCamera.pitch,
     });
-    m.addControl(new maplibregl.NavigationControl(), 'top-right');
-    m.addControl(new maplibregl.FullscreenControl(), 'top-right');
     m.addControl(new maplibregl.ScaleControl({ unit: 'metric', maxWidth: 120 }), 'bottom-right');
-    if (typeof navigator !== 'undefined' && navigator.geolocation) {
-      m.addControl(new maplibregl.GeolocateControl({ positionOptions: { enableHighAccuracy: false }, trackUserLocation: false }), 'top-right');
-    }
     // Fires on the initial style load and after every setStyle — unlike
     // isStyleLoaded(), it is not perturbed by ongoing tile loads.
     m.on('style.load', () => { styleReady.current = true; });
@@ -931,7 +925,6 @@ export const MapView = () => {
       <div ref={mapContainer} className="w-full h-full" />
       <LocationSearchControl onSelect={focusSearchResult} onClear={clearSearchResult} />
       <LegendControl legends={visibleLegends} />
-      <BasemapControl />
       <MapInteractionToolbar
         selectionMode={selectionMode}
         hasLayer={mapLayers.some((layer) => layer.visible)}
@@ -940,6 +933,21 @@ export const MapView = () => {
         onHome={() => {
           const layerId = selectedLayerId || mapLayers.find((layer) => layer.visible)?.id;
           if (layerId) focusLayer(layerId);
+        }}
+        onZoomIn={() => map.current?.zoomIn({ duration: 180 })}
+        onZoomOut={() => map.current?.zoomOut({ duration: 180 })}
+        onGeolocate={() => {
+          if (!navigator.geolocation) { addToast({ type: 'warning', message: 'Geolocation is unavailable in this browser.' }); return; }
+          navigator.geolocation.getCurrentPosition(
+            ({ coords }) => map.current?.flyTo({ center: [coords.longitude, coords.latitude], zoom: Math.max(map.current?.getZoom() || 0, 13), duration: 700 }),
+            () => addToast({ type: 'warning', message: 'Could not access your location.' }),
+            { enableHighAccuracy: false },
+          );
+        }}
+        onFullscreen={() => {
+          const element = mapContainer.current?.parentElement;
+          if (!element) return;
+          if (document.fullscreenElement) void document.exitFullscreen(); else void element.requestFullscreen();
         }}
         onCopyCoordinates={() => {
           if (!coordinates) return;

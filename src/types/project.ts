@@ -5,7 +5,7 @@ import type { LayerVisualisation, LegendSpec } from './visualisation';
 import type { VisualAnalyticsState } from './visualAnalytics';
 import type { DatasetDescriptor } from './datasets';
 
-export const PROJECT_MANIFEST_VERSION = 1 as const;
+export const PROJECT_MANIFEST_VERSION = 2 as const;
 
 export type ProjectSourceDescriptor = {
   nodeId: string;
@@ -35,7 +35,7 @@ export type ProjectLayerPresentation = {
 
 export type ProjectManifestV1 = {
   kind: 'alur-project';
-  version: typeof PROJECT_MANIFEST_VERSION;
+  version: 1;
   appVersion: string;
   exportedAt: string;
   workflow: {
@@ -62,3 +62,13 @@ export type ProjectManifestV1 = {
   };
   savedTableViews: Record<string, unknown[]>;
 };
+
+export type ProjectManifestV2 = Omit<ProjectManifestV1, 'version' | 'workspace'> & {
+  version: typeof PROJECT_MANIFEST_VERSION;
+  workspace: Omit<ProjectManifestV1['workspace'], 'activeRailTab' | 'workspaceMode'> & {
+    activeRailTab: 'layers' | 'charts' | 'chat' | 'cohorts';
+    workspaceMode: 'explore' | 'compare' | 'explain' | 'board';
+  };
+};
+
+export type ProjectManifest = ProjectManifestV2;

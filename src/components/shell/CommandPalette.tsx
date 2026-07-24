@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
-import { BarChart3, Database, FilePlus2, Gauge, Layers, LayoutDashboard, MapPinned, Redo2, ScanSearch, Search, Sparkles, Table2, Terminal, Undo2, Users, Workflow, X } from 'lucide-react';
+import { BarChart3, Database, FilePlus2, Gauge, GitCompareArrows, Layers, LayoutDashboard, MapPinned, Redo2, ScanSearch, Search, Sparkles, Table2, Terminal, Undo2, Users, Workflow, X } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { useAnalyticsCommands } from '../../hooks/useAnalyticsCommands';
 import { metadataForLayer, preferredExplorationField } from '../../utils/datasetMetadata';
@@ -60,7 +60,8 @@ export const CommandPalette = () => {
       { id: 'workflow', label: 'Open Workflow', keywords: 'nodes pipeline dag', icon: Workflow, run: openDrawer('workflow') },
       { id: 'table', label: 'Open Table', keywords: 'rows attributes data', icon: Table2, run: openDrawer('table') },
       { id: 'sql', label: 'Open SQL', keywords: 'query duckdb code', icon: Terminal, run: openDrawer('sql') },
-      { id: 'board', label: 'Open dashboard board', keywords: 'presentation story layout', icon: LayoutDashboard, run: () => state.setWorkspaceMode('board') },
+      { id: 'compare', label: 'Open Compare workspace', keywords: 'comparison cohort alternative scenario', icon: GitCompareArrows, run: () => state.setWorkspaceMode('compare') },
+      { id: 'explain', label: 'Open Explain workspace', keywords: 'presentation story evidence board layout', icon: LayoutDashboard, run: () => state.setWorkspaceMode('explain') },
       { id: 'focus-layer', label: 'Zoom to active layer', keywords: 'map home extent fit', icon: MapPinned, disabled: !selectedLayerId, run: () => { if (selectedLayerId) state.focusLayer(selectedLayerId); } },
       { id: 'dataset-overview', label: 'Open dataset overview', keywords: 'profile quality fields missing distinct', icon: ScanSearch, disabled: !selectedLayerId, run: () => { if (selectedLayerId) state.setDatasetOverviewLayerId(selectedLayerId); } },
       { id: 'focus-selection', label: 'Zoom to selection', keywords: 'map selected extent fit', icon: MapPinned, disabled: !selectedLayerState?.selectedFeatureIds.length, run: async () => { if (selectedLayerId) await executeAnalyticsCommand({ type: 'focus-selection', datasetId: selectedLayerId }); } },

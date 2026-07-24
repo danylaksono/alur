@@ -59,7 +59,7 @@ export const FlowNodeShell = ({
           <Icon className="h-3.5 w-3.5" />
         </div>
         <div className="min-w-0">
-          <div className="text-[10px] font-semibold uppercase leading-tight tracking-wide text-slate-400">
+          <div className="text-[10px] font-semibold uppercase leading-tight tracking-wide text-slate-600">
             {label}
           </div>
           {title && (

@@ -18,12 +18,14 @@ export const LegendControl = ({ legends }: { legends: Array<{ layerId: string; l
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
   const [searches, setSearches] = useState<Record<string, string>>({});
+  const [panelCollapsed, setPanelCollapsed] = useState(false);
+  const hasSelection = Object.values(visualAnalytics.datasets).some((dataset) => dataset.selectedFeatureIds.length > 0);
   if (!legends.length) return null;
 
   return (
-    <aside className="pointer-events-auto absolute bottom-4 left-4 z-10 max-h-[52%] w-72 overflow-y-auto rounded-lg border border-slate-200 bg-white/95 p-3 text-[11px] shadow-lg backdrop-blur" aria-label="Map legends">
-      <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">Legend</div>
-      <div className="space-y-2">
+    <aside className={cn('pointer-events-auto absolute bottom-3 left-3 z-10 max-h-[52%] overflow-y-auto rounded-lg border border-slate-200 bg-white/95 text-[11px] shadow-lg backdrop-blur', hasSelection && 'max-xl:hidden', panelCollapsed ? 'w-auto p-1.5' : 'w-72 p-3')} aria-label="Map legends">
+      <button type="button" onClick={() => setPanelCollapsed(!panelCollapsed)} className={cn('flex w-full items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500', !panelCollapsed && 'mb-2')} aria-expanded={!panelCollapsed}>{panelCollapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />} Legend{panelCollapsed && <span className="rounded-full bg-slate-100 px-1.5">{legends.length}</span>}</button>
+      {!panelCollapsed && <div className="space-y-2">
         {legends.slice(0, 6).map(({ layerId, layerName, legend }) => {
           const filters = visualAnalytics.datasets[layerId]?.filters || [];
           const activeKeys = new Set(filters.map(visualFilterKey));
@@ -74,7 +76,7 @@ export const LegendControl = ({ legends }: { legends: Array<{ layerId: string; l
             </section>
           );
         })}
-      </div>
+      </div>}
     </aside>
   );
 };

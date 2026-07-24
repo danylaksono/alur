@@ -14,7 +14,7 @@ export const LeftPanel = () => {
   if (isPanelCollapsed) return null;
 
   return (
-    <aside className="z-30 flex w-96 shrink-0 flex-col overflow-hidden border-r bg-white">
+    <aside className="absolute inset-y-0 left-12 z-30 flex w-[calc(100%-3rem)] shrink-0 flex-col overflow-hidden border-r bg-white shadow-xl md:static md:w-96 md:shadow-none">
       {activeRailTab === 'layers' ? (
         <ErrorBoundary name="Layers Panel">
           <LayersTab />

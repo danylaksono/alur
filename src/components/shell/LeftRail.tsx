@@ -1,11 +1,10 @@
-import { BarChart3, Info, Layers, Sparkles, Users } from 'lucide-react';
+import { BarChart3, Info, Layers, Sparkles } from 'lucide-react';
 import { useStore, type RailTab } from '../../store/useStore';
 import { cn } from '../../utils/cn';
 
 const RAIL_TABS: Array<{ id: RailTab; icon: typeof Layers; label: string }> = [
-  { id: 'layers', icon: Layers, label: 'Layers' },
-  { id: 'charts', icon: BarChart3, label: 'Charts' },
-  { id: 'cohorts', icon: Users, label: 'Cohorts' },
+  { id: 'layers', icon: Layers, label: 'Data and layers' },
+  { id: 'charts', icon: BarChart3, label: 'Visualise' },
   { id: 'chat', icon: Sparkles, label: 'Copilot' },
 ];
 
@@ -19,6 +18,7 @@ export const LeftRail = () => {
 
   return (
     <nav className="z-40 flex w-12 shrink-0 flex-col items-center gap-1 border-r bg-white py-2">
+      <span className="sr-only" aria-label="Cohorts">Cohort management is available in Compare.</span>
       {RAIL_TABS.map(({ id, icon: Icon, label }) => {
         const isActive = activeRailTab === id && !isPanelCollapsed;
         return (

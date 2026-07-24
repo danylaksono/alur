@@ -1,9 +1,10 @@
 import packageJson from '../../package.json';
-import { useStore, type MapLayer, type WorkflowNode } from '../store/useStore';
-import type { VisualAnalyticsState } from '../types/visualAnalytics';
+import { useStore, type AppState, type MapLayer, type WorkflowNode } from '../store/useStore';
+import type { ExplainDocument, VisualAnalyticsState } from '../types/visualAnalytics';
 import {
   PROJECT_MANIFEST_VERSION,
   type ProjectLayerPresentation,
+  type ProjectManifest,
   type ProjectManifestV1,
   type ProjectSourceDescriptor,
 } from '../types/project';
@@ -93,6 +94,23 @@ const persistedAnalytics = (analytics: VisualAnalyticsState): VisualAnalyticsSta
   bookmarks: sanitiseValue(analytics.bookmarks) as VisualAnalyticsState['bookmarks'],
   comparison: sanitiseValue(analytics.comparison) as VisualAnalyticsState['comparison'],
   dashboard: sanitiseValue(analytics.dashboard) as VisualAnalyticsState['dashboard'],
+  comparisons: sanitiseValue(analytics.comparisons || []) as NonNullable<VisualAnalyticsState['comparisons']>,
+  activeComparisonId: analytics.activeComparisonId,
+  explain: sanitiseValue(analytics.explain || defaultExplain()) as ExplainDocument,
+  variants: sanitiseValue(analytics.variants || []) as NonNullable<VisualAnalyticsState['variants']>,
+  activePatternId: analytics.activePatternId,
+});
+
+const defaultExplain = (): ExplainDocument => ({
+  title: 'Analysis explanation',
+  sections: [
+    { id: 'question', title: 'Question' },
+    { id: 'evidence', title: 'Evidence' },
+    { id: 'interpretation', title: 'Interpretation' },
+    { id: 'conclusion', title: 'Conclusion' },
+    { id: 'limitations', title: 'Limitations / Next steps' },
+  ],
+  cards: [],
 });
 
 const normaliseAnalytics = (analytics: ProjectManifestV1['visualAnalytics'] | Record<string, unknown>): VisualAnalyticsState => {
@@ -105,6 +123,11 @@ const normaliseAnalytics = (analytics: ProjectManifestV1['visualAnalytics'] | Re
     bookmarks: value.bookmarks || [],
     comparison: value.comparison,
     dashboard: value.dashboard,
+    comparisons: value.comparisons || [],
+    activeComparisonId: value.activeComparisonId,
+    explain: value.explain || defaultExplain(),
+    variants: value.variants || [],
+    activePatternId: value.activePatternId,
   });
 };
 
@@ -118,7 +141,7 @@ const savedTableViews = () => {
   }
 };
 
-export const createProjectManifest = (state = useStore.getState(), exportedAt = new Date()): ProjectManifestV1 => ({
+export const createProjectManifest = (state = useStore.getState(), exportedAt = new Date()): ProjectManifest => ({
   kind: 'alur-project',
   version: PROJECT_MANIFEST_VERSION,
   appVersion: packageJson.version,
@@ -128,7 +151,7 @@ export const createProjectManifest = (state = useStore.getState(), exportedAt = 
     edges: sanitiseValue(state.edges) as typeof state.edges,
   },
   sources: state.nodes.map(sourceDescriptorForNode).filter((source): source is ProjectSourceDescriptor => Boolean(source)),
-  datasets: sanitiseValue(Object.values(state.datasetRegistry)) as ProjectManifestV1['datasets'],
+  datasets: sanitiseValue(Object.values(state.datasetRegistry)) as ProjectManifest['datasets'],
   layers: state.mapLayers.map(layerPresentation),
   visualAnalytics: persistedAnalytics(state.visualAnalytics),
   workspace: {
@@ -148,7 +171,7 @@ export const createProjectManifest = (state = useStore.getState(), exportedAt = 
   savedTableViews: savedTableViews(),
 });
 
-const validateManifest = (value: unknown): ProjectManifestV1 => {
+const validateManifest = (value: unknown): ProjectManifest => {
   if (!isRecord(value) || value.kind !== 'alur-project') throw new Error('This is not an ALUR project file.');
   if (typeof value.version !== 'number') throw new Error('The project version is missing.');
   if (value.version > PROJECT_MANIFEST_VERSION) throw new Error(`This project uses version ${value.version}, but this ALUR build supports up to version ${PROJECT_MANIFEST_VERSION}. Update ALUR to open it.`);
@@ -158,7 +181,7 @@ const validateManifest = (value: unknown): ProjectManifestV1 => {
   if (!isRecord(value.visualAnalytics) || !Array.isArray(value.visualAnalytics.charts) || !Array.isArray(value.visualAnalytics.kpis) || (!isRecord(value.visualAnalytics.datasets) && !isRecord(value.visualAnalytics.layers))) throw new Error('The project analytics configuration is invalid.');
   const workspace = value.workspace;
   if (!isRecord(workspace) || !BASEMAPS.some((basemap) => basemap.id === workspace.selectedBasemapId)) throw new Error('The project workspace settings are invalid.');
-  const manifest = value as unknown as ProjectManifestV1;
+  const manifest = value as unknown as ProjectManifest;
   return {
     ...manifest,
     visualAnalytics: normaliseAnalytics(manifest.visualAnalytics),
@@ -171,16 +194,79 @@ const validateManifest = (value: unknown): ProjectManifestV1 => {
   };
 };
 
+const migrateV1ToV2 = (value: Record<string, unknown>) => {
+  const workspace = isRecord(value.workspace) ? value.workspace : {};
+  const analytics = isRecord(value.visualAnalytics) ? value.visualAnalytics : {};
+  const dashboard = isRecord(analytics.dashboard) ? analytics.dashboard : undefined;
+  const dashboardCards = dashboard && Array.isArray(dashboard.cards) ? dashboard.cards : [];
+  const explain = defaultExplain();
+  explain.title = typeof dashboard?.title === 'string' ? dashboard.title : explain.title;
+  explain.cards = dashboardCards.filter(isRecord).map((card, index) => ({
+    id: typeof card.id === 'string' ? card.id : `legacy-card-${index + 1}`,
+    sectionId: 'evidence',
+    kind: card.kind === 'chart' || card.kind === 'kpi' || card.kind === 'table' || card.kind === 'note' ? card.kind : 'note',
+    referenceId: typeof card.referenceId === 'string' ? card.referenceId : undefined,
+    datasetId: typeof card.datasetId === 'string' ? card.datasetId : undefined,
+    title: typeof card.title === 'string' ? card.title : undefined,
+    note: typeof card.note === 'string' ? card.note : undefined,
+    width: card.width === 2 ? 12 : 6,
+    height: card.height === 'compact' || card.height === 'tall' ? card.height : 'standard',
+    behaviour: 'frozen',
+  }));
+  const legacyLayers = Array.isArray(value.layers) ? value.layers.filter(isRecord) : [];
+  const visibleLayerIds = legacyLayers.filter((layer) => layer.visible !== false).map((layer) => String(layer.id || '')).filter(Boolean);
+  if (visibleLayerIds.length) explain.cards.push({
+    id: 'legacy-map-view', sectionId: 'evidence', kind: 'map', title: 'Map view', width: 12, height: 'tall', behaviour: 'frozen',
+    frozenValues: { visibleLayerIds, camera: workspace.mapCamera },
+    provenance: { capturedAt: typeof value.exportedAt === 'string' ? Date.parse(value.exportedAt) || 0 : 0, datasetIds: visibleLayerIds, sourceVersions: {}, filtersByDataset: {}, caveats: ['Legacy map view migrated from the project presentation state.'] },
+  });
+
+  const comparisons: unknown[] = Array.isArray(analytics.comparisons) ? analytics.comparisons : [];
+  const legacyComparison = isRecord(analytics.comparison) ? analytics.comparison : undefined;
+  if (!comparisons.length && legacyComparison && typeof legacyComparison.datasetId === 'string' && typeof legacyComparison.cohortAId === 'string') {
+    const cohorts = Array.isArray(analytics.cohorts) ? analytics.cohorts.filter(isRecord) : [];
+    const cohortA = cohorts.find((item) => item.id === legacyComparison.cohortAId);
+    const cohortB = cohorts.find((item) => item.id === legacyComparison.cohortBId);
+    const now = typeof value.exportedAt === 'string' ? Date.parse(value.exportedAt) || 0 : 0;
+    if (cohortA) comparisons.push({
+      id: 'migrated-cohort-comparison',
+      name: `${String(cohortA.name || 'Cohort A')} vs ${String(cohortB?.name || 'remainder')}`,
+      operands: [cohortA, cohortB].filter(Boolean).map((cohort, index) => ({
+        id: index === 0 ? 'a' : 'b',
+        label: String(cohort?.name || `Operand ${index + 1}`),
+        colour: String(cohort?.colour || (index === 0 ? '#2563eb' : '#e11d48')),
+        datasetId: legacyComparison.datasetId,
+        scope: { kind: 'cohort', cohortId: cohort?.id, definition: cohort?.definition },
+      })),
+      alignment: { mode: 'aggregate-only' },
+      measures: [], dimensions: [], requestedViews: ['overview', 'distribution', 'categories'],
+      sourceVersions: {}, createdAt: now, updatedAt: now,
+    });
+  }
+
+  return {
+    ...value,
+    version: 2,
+    visualAnalytics: { ...analytics, comparisons, activeComparisonId: comparisons.length ? (comparisons[0] as Record<string, unknown>).id : undefined, explain: isRecord(analytics.explain) ? analytics.explain : explain, variants: Array.isArray(analytics.variants) ? analytics.variants : [] },
+    workspace: {
+      ...workspace,
+      activeRailTab: workspace.activeRailTab === 'cohorts' ? 'layers' : workspace.activeRailTab || 'layers',
+      workspaceMode: workspace.workspaceMode === 'board' ? 'explain' : workspace.workspaceMode || 'explore',
+    },
+  };
+};
+
 /** Sequential migration entry point. Version 0 was the short-lived pre-manifest prototype. */
 export const migrateProjectManifest = (value: unknown): unknown => {
   if (!isRecord(value) || typeof value.version !== 'number') return value;
+  if (value.version === 1) return migrateV1ToV2(value);
   if (value.version !== 0) return value;
   const legacyWorkspace = isRecord(value.workspace) ? value.workspace : {};
   const legacyWorkflow = isRecord(value.workflow) ? value.workflow : {};
-  return {
+  const migratedV1: Record<string, unknown> = {
     ...value,
     kind: 'alur-project',
-    version: PROJECT_MANIFEST_VERSION,
+    version: 1,
     appVersion: typeof value.appVersion === 'string' ? value.appVersion : '0.0.0',
     exportedAt: typeof value.exportedAt === 'string' ? value.exportedAt : new Date(0).toISOString(),
     workflow: {
@@ -207,6 +293,7 @@ export const migrateProjectManifest = (value: unknown): unknown => {
     },
     savedTableViews: isRecord(value.savedTableViews) ? value.savedTableViews : {},
   };
+  return migratedV1;
 };
 
 export const parseProjectManifest = (text: string) => {
@@ -219,15 +306,15 @@ export const parseProjectManifest = (text: string) => {
   return validateManifest(migrateProjectManifest(parsed));
 };
 
-export const serialiseProjectManifest = (manifest: ProjectManifestV1) => JSON.stringify(validateManifest(manifest), null, 2);
+export const serialiseProjectManifest = (manifest: ProjectManifest) => JSON.stringify(validateManifest(manifest), null, 2);
 
 export const downloadProjectManifest = (manifest = createProjectManifest(), projectName = 'alur-project') => {
   const fileName = `${safeFilename(projectName, 'alur-project')}-${filenameTimestamp(new Date(manifest.exportedAt))}.alur.json`;
   downloadText(serialiseProjectManifest(manifest), fileName, 'application/json;charset=utf-8');
 };
 
-export const applyProjectManifest = (manifest: ProjectManifestV1) => {
-  const valid = validateManifest(manifest);
+export const applyProjectManifest = (manifest: ProjectManifest | ProjectManifestV1) => {
+  const valid = validateManifest(migrateProjectManifest(manifest));
   useStore.getState().resetWorkspace();
   useStore.setState((state) => ({
     nodes: valid.workflow.nodes.map(sanitiseNode),
@@ -239,7 +326,7 @@ export const applyProjectManifest = (manifest: ProjectManifestV1) => {
     selectedLayerId: null,
     manualSQL: valid.workspace.manualSQL,
     isManualSQL: valid.workspace.isManualSQL,
-    visualAnalytics: normaliseAnalytics(valid.visualAnalytics),
+    visualAnalytics: normaliseAnalytics(valid.visualAnalytics) as AppState['visualAnalytics'],
     nodeSchemas: {},
     nodeExecutionStates: {},
     loadingOperations: {},
@@ -266,7 +353,7 @@ export const applyProjectManifest = (manifest: ProjectManifestV1) => {
   return valid.sources;
 };
 
-export const applyRelinkedLayerPresentation = (sourceNodeId: string, layerId: string, manifest: ProjectManifestV1) => {
+export const applyRelinkedLayerPresentation = (sourceNodeId: string, layerId: string, manifest: ProjectManifest | ProjectManifestV1) => {
   const presentation = manifest.layers.find((layer) => layer.sourceNodeId === sourceNodeId || layer.id === layerId);
   if (!presentation) return;
   useStore.setState((state) => ({

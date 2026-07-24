@@ -128,7 +128,7 @@ export const LayerManager = ({ onEditStyle }: { onEditStyle?: (layerId: string) 
                       <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-xs font-semibold leading-tight text-slate-800">{layer.name}</span>
-                        <span className="block truncate text-[10px] uppercase leading-tight tracking-wide text-slate-400">
+                        <span className="block truncate text-[10px] uppercase leading-tight tracking-wide text-slate-600">
                           {KIND_LABEL[layer.sourceKind || 'workflow']} · {sourceName(layer)}
                         </span>
                       </span>
@@ -139,7 +139,7 @@ export const LayerManager = ({ onEditStyle }: { onEditStyle?: (layerId: string) 
                         title="Rendering layer…"
                       />
                     )}
-                    <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500">
+                    <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700">
                       {layer.visualisation?.kind || layer.featureCount.toLocaleString()}
                     </span>
                   </div>
@@ -202,6 +202,7 @@ export const LayerManager = ({ onEditStyle }: { onEditStyle?: (layerId: string) 
                       onChange={(event) => updateMapLayer(layer.id, { opacity: Number(event.target.value) })}
                       className="ml-1.5 min-w-0 flex-1 accent-slate-700"
                       title={`Opacity: ${Math.round(layer.opacity * 100)}%`}
+                      aria-label={`Opacity: ${Math.round(layer.opacity * 100)}%`}
                     />
                   </div>
 

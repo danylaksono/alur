@@ -1,5 +1,5 @@
 import { useRef, useState, type ChangeEvent } from 'react';
-import { ClipboardPaste, FilePlus2, FileUp, LayoutDashboard, Link2, Loader2, Map, Redo2, RotateCcw, Save, Search, Settings, Undo2, X } from 'lucide-react';
+import { ClipboardPaste, FilePlus2, FileText, FileUp, GitCompareArrows, Link2, Loader2, Map, MoreHorizontal, Redo2, RotateCcw, Save, Search, Settings, Undo2, X } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { ingestClipboardText, ingestFile, ingestUrl } from '../../services/dataIngestion';
 import { cn } from '../../utils/cn';
@@ -11,7 +11,7 @@ import {
   parseProjectManifest,
   sourceMatchesFile,
 } from '../../services/projectService';
-import type { ProjectManifestV1, ProjectSourceDescriptor } from '../../types/project';
+import type { ProjectManifest, ProjectSourceDescriptor } from '../../types/project';
 
 export const Header = () => {
   const duckdbReady = useStore((s) => s.duckdbReady);
@@ -30,13 +30,14 @@ export const Header = () => {
   const projectInputRef = useRef<HTMLInputElement>(null);
   const relinkInputRef = useRef<HTMLInputElement>(null);
   const relinkTargetRef = useRef<ProjectSourceDescriptor | null>(null);
-  const [importedProject, setImportedProject] = useState<ProjectManifestV1 | null>(null);
+  const [importedProject, setImportedProject] = useState<ProjectManifest | null>(null);
   const [missingSources, setMissingSources] = useState<ProjectSourceDescriptor[]>([]);
   const [isRelinkOpen, setRelinkOpen] = useState(false);
   const [isAddDataOpen, setAddDataOpen] = useState(false);
   const [dataUrl, setDataUrl] = useState('');
   const [clipboardText, setClipboardText] = useState('');
   const [isRemoteLoading, setRemoteLoading] = useState(false);
+  const [isMobileMenuOpen, setMobileMenuOpen] = useState(false);
   const undoLabel = analysisHistory.past[analysisHistory.past.length - 1]?.label;
   const redoLabel = analysisHistory.future[0]?.label;
 
@@ -131,14 +132,14 @@ export const Header = () => {
   };
 
   return (
-    <header className="z-50 flex h-14 shrink-0 items-center justify-between border-b border-slate-200/80 bg-white px-4 shadow-[0_1px_0_rgba(15,23,42,0.02)]">
-      <div className="flex items-center gap-2.5" aria-label="ALUR interactive visual analytics">
+    <header className="z-50 flex h-14 shrink-0 items-center justify-between border-b border-slate-200/80 bg-white px-2 shadow-[0_1px_0_rgba(15,23,42,0.02)] md:px-4">
+      <div className="flex items-center gap-2.5" role="group" aria-label="ALUR interactive visual analytics">
         <img
           src="/alur-mark.svg"
           alt=""
           className="h-9 w-9"
         />
-        <div>
+        <div className="hidden sm:block">
           <h1 className="text-[15px] font-extrabold leading-none tracking-[0.16em] text-slate-900">ALUR</h1>
           <p className="mt-1 text-[10px] font-medium leading-none tracking-wide text-slate-500">
             Interactive visual analytics
@@ -148,9 +149,11 @@ export const Header = () => {
 
       <div className="flex items-center gap-2">
         <div className="hidden items-center rounded-lg border border-slate-200 bg-slate-50 p-0.5 md:flex" aria-label="Workspace mode">
-          <button type="button" onClick={() => setWorkspaceMode('explore')} aria-pressed={workspaceMode === 'explore'} className={cn('flex h-7 items-center gap-1 rounded-md px-2 text-[10px] font-bold', workspaceMode === 'explore' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400')}><Map className="h-3 w-3" /> Explore</button>
-          <button type="button" onClick={() => setWorkspaceMode('board')} aria-pressed={workspaceMode === 'board'} className={cn('flex h-7 items-center gap-1 rounded-md px-2 text-[10px] font-bold', workspaceMode === 'board' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400')}><LayoutDashboard className="h-3 w-3" /> Board</button>
+          <button type="button" onClick={() => setWorkspaceMode('explore')} aria-pressed={workspaceMode === 'explore'} className={cn('flex h-7 items-center gap-1 rounded-md px-2 text-[10px] font-bold', workspaceMode === 'explore' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-600')}><Map className="h-3 w-3" /> Explore</button>
+          <button type="button" onClick={() => setWorkspaceMode('compare')} aria-pressed={workspaceMode === 'compare'} className={cn('flex h-7 items-center gap-1 rounded-md px-2 text-[10px] font-bold', workspaceMode === 'compare' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-600')}><GitCompareArrows className="h-3 w-3" /> Compare</button>
+          <button type="button" onClick={() => setWorkspaceMode('explain')} aria-pressed={workspaceMode === 'explain' || workspaceMode === 'board'} className={cn('flex h-7 items-center gap-1 rounded-md px-2 text-[10px] font-bold', workspaceMode === 'explain' || workspaceMode === 'board' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-600')}><FileText className="h-3 w-3" /> Explain</button>
         </div>
+        <select value={workspaceMode === 'board' ? 'explain' : workspaceMode} onChange={(event) => setWorkspaceMode(event.target.value as 'explore' | 'compare' | 'explain')} className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-[10px] font-bold text-slate-700 md:hidden" aria-label="Workspace mode"><option value="explore">Explore</option><option value="compare">Compare</option><option value="explain">Explain</option></select>
         <span
           className={cn(
             'mr-2 hidden items-center gap-1.5 text-[11px] text-muted-foreground md:flex',
@@ -165,7 +168,7 @@ export const Header = () => {
           <span
             className={cn(
               'hidden text-[10px] font-medium lg:inline',
-              recoverySave.status === 'error' ? 'text-rose-500' : 'text-slate-400',
+              recoverySave.status === 'error' ? 'text-rose-600' : 'text-slate-600',
             )}
             title={recoverySave.savedAt ? `Recovery saved ${new Date(recoverySave.savedAt).toLocaleString()}` : 'Local crash recovery status'}
             aria-live="polite"
@@ -207,7 +210,7 @@ export const Header = () => {
           </button>
         </div>
 
-        <div className="flex items-center overflow-hidden rounded-lg border border-slate-200 bg-white">
+        <div className="hidden items-center overflow-hidden rounded-lg border border-slate-200 bg-white md:flex">
           <button
             type="button"
             onClick={() => downloadProjectManifest(createProjectManifest())}
@@ -243,10 +246,11 @@ export const Header = () => {
           type="button"
           onClick={() => setAddDataOpen(true)}
           disabled={!duckdbReady}
-          className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex items-center gap-1.5 rounded-lg bg-primary px-2.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-50 md:px-3 md:py-1.5"
+          aria-label="Add data"
         >
           <FilePlus2 className="h-3.5 w-3.5" />
-          Add data
+          <span className="hidden md:inline">Add data</span>
         </button>
         <input
           id="alur-file-input"
@@ -261,7 +265,7 @@ export const Header = () => {
         <button
           type="button"
           onClick={handleNewProject}
-          className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+          className="hidden items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50 xl:flex"
           title="Clear the workspace and start fresh"
         >
           <RotateCcw className="h-3.5 w-3.5" />
@@ -271,11 +275,12 @@ export const Header = () => {
         <button
           type="button"
           onClick={() => setSettingsOpen(true)}
-          className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+          className="hidden rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 md:block"
           title="Settings"
         >
           <Settings className="h-4 w-4" />
         </button>
+        <div className="relative md:hidden"><button type="button" onClick={() => setMobileMenuOpen(!isMobileMenuOpen)} className="rounded-lg border border-slate-200 p-2 text-slate-500" aria-label="Project actions" aria-expanded={isMobileMenuOpen}><MoreHorizontal className="h-4 w-4" /></button>{isMobileMenuOpen && <div className="absolute right-0 top-10 z-[100] w-44 rounded-lg border border-slate-200 bg-white p-1 shadow-xl"><button type="button" disabled={!hasWork} onClick={() => { downloadProjectManifest(createProjectManifest()); setMobileMenuOpen(false); }} className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-[11px] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-30"><Save className="h-3.5 w-3.5" /> Save project</button><button type="button" onClick={() => { projectInputRef.current?.click(); setMobileMenuOpen(false); }} className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-[11px] font-semibold text-slate-600 hover:bg-slate-50"><FileUp className="h-3.5 w-3.5" /> Open project</button><button type="button" onClick={() => { handleNewProject(); setMobileMenuOpen(false); }} className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-[11px] font-semibold text-slate-600 hover:bg-slate-50"><RotateCcw className="h-3.5 w-3.5" /> New project</button><button type="button" onClick={() => { setSettingsOpen(true); setMobileMenuOpen(false); }} className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-[11px] font-semibold text-slate-600 hover:bg-slate-50"><Settings className="h-3.5 w-3.5" /> Settings</button></div>}</div>
       </div>
       <input ref={relinkInputRef} type="file" className="hidden" onChange={handleRelink} />
 

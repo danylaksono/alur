@@ -17,16 +17,20 @@ import { SettingsDialog } from './SettingsDialog';
 import { AboutDialog } from './AboutDialog';
 import { GlobalLoadingOverlay } from '../GlobalLoadingOverlay';
 import { CommandPalette } from './CommandPalette';
-import { KpiShelf } from '../Visualisation/KpiShelf';
 import { DatasetOverviewDialog } from '../Visualisation/DatasetOverviewDialog';
 import { RecoveryDialog } from './RecoveryDialog';
-import { DashboardBoard } from '../Dashboard/DashboardBoard';
+import { CompareWorkspace } from '../Compare/CompareWorkspace';
+import { ExplainWorkspace } from '../Explain/ExplainWorkspace';
+import { AnalysisContextBar } from './AnalysisContextBar';
+import { EvidenceTray } from './EvidenceTray';
 
 export const AppShell = () => {
   const drawerMode = useStore((s) => s.ui.drawerMode);
   const isGlobalLoading = useStore((s) => Object.keys(s.loadingOperations).length > 0);
   const isMaximized = drawerMode === 'maximized';
-  const isBoard = useStore((s) => s.ui.workspaceMode === 'board');
+  const workspaceMode = useStore((s) => s.ui.workspaceMode);
+  const isExplain = workspaceMode === 'explain' || workspaceMode === 'board';
+  const isCompare = workspaceMode === 'compare';
   const isPresenting = useStore((s) => s.ui.isPresentationMode);
   const [isDragOver, setIsDragOver] = useState(false);
 
@@ -56,20 +60,21 @@ export const AppShell = () => {
 
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-background" aria-busy={isGlobalLoading}>
-      <Header />
-      {!isBoard && <KpiShelf />}
+      {!isPresenting && <Header />}
+      {!isExplain && <AnalysisContextBar />}
 
-      <div className="flex min-h-0 flex-1">
-        {!isBoard && <LeftRail />}
-        {!isBoard && <LeftPanel />}
+      <div className="relative flex min-h-0 flex-1">
+        {!isExplain && !isCompare && <LeftRail />}
+        {!isExplain && !isCompare && <LeftPanel />}
 
-        <main className={isBoard ? 'grid min-h-0 min-w-0 flex-1 auto-rows-min grid-cols-1 gap-4 overflow-y-auto bg-slate-100 p-4 lg:grid-cols-2' : 'flex min-h-0 min-w-0 flex-1 flex-col'}>
-          {isBoard && <DashboardBoard />}
+        {isCompare && <CompareWorkspace />}
+        {isExplain && <ExplainWorkspace />}
+        {!isCompare && !isExplain && <main className="flex min-h-0 min-w-0 flex-1 flex-col">
           {/* The map stays mounted at all times; a maximized drawer just squeezes
               it to a sliver instead of unmounting (map init is expensive). */}
+          <div className="relative flex min-h-0 overflow-hidden" style={{ flexGrow: isMaximized ? 0 : 1, flexBasis: isMaximized ? 2 : '0%' }}>
           <div
-            className={isBoard ? 'relative col-span-full min-h-[28rem] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm' : 'relative min-h-0 overflow-hidden'}
-            style={!isBoard ? { flexGrow: isMaximized ? 0 : 1, flexBasis: isMaximized ? 2 : '0%' } : undefined}
+            className="relative min-h-0 min-w-0 flex-1 overflow-hidden"
             onDragOver={handleDragOver}
             onDragLeave={() => setIsDragOver(false)}
             onDrop={handleDrop}
@@ -85,7 +90,6 @@ export const AppShell = () => {
               <MapView />
             </ErrorBoundary>
             <MapEmptyState />
-            {!isPresenting && <ContextInspector />}
             {isDragOver && (
               <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center border-2 border-dashed border-primary bg-primary/5">
                 <span className="rounded-lg bg-white px-4 py-2 text-xs font-semibold text-primary shadow">
@@ -94,9 +98,12 @@ export const AppShell = () => {
               </div>
             )}
           </div>
+          <ContextInspector />
+          </div>
 
-          {!isBoard && <BottomDrawer />}
-        </main>
+          <EvidenceTray />
+          <BottomDrawer />
+        </main>}
       </div>
 
       <SettingsDialog />
