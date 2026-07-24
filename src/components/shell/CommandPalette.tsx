@@ -60,7 +60,7 @@ export const CommandPalette = () => {
       { id: 'workflow', label: 'Open Workflow', keywords: 'nodes pipeline dag', icon: Workflow, run: openDrawer('workflow') },
       { id: 'table', label: 'Open Table', keywords: 'rows attributes data', icon: Table2, run: openDrawer('table') },
       { id: 'sql', label: 'Open SQL', keywords: 'query duckdb code', icon: Terminal, run: openDrawer('sql') },
-      { id: 'compare', label: 'Open Compare workspace', keywords: 'comparison cohort alternative scenario', icon: GitCompareArrows, run: () => state.setWorkspaceMode('compare') },
+      { id: 'analyse', label: 'Open Analyse workspace', keywords: 'analyse identify inspect compare rank relate associate group delineate cohort scenario', icon: GitCompareArrows, run: () => state.setWorkspaceMode('compare') },
       { id: 'explain', label: 'Open Explain workspace', keywords: 'presentation story evidence board layout', icon: LayoutDashboard, run: () => state.setWorkspaceMode('explain') },
       { id: 'focus-layer', label: 'Zoom to active layer', keywords: 'map home extent fit', icon: MapPinned, disabled: !selectedLayerId, run: () => { if (selectedLayerId) state.focusLayer(selectedLayerId); } },
       { id: 'dataset-overview', label: 'Open dataset overview', keywords: 'profile quality fields missing distinct', icon: ScanSearch, disabled: !selectedLayerId, run: () => { if (selectedLayerId) state.setDatasetOverviewLayerId(selectedLayerId); } },

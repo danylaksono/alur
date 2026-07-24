@@ -14,7 +14,8 @@ const loadSample = async (page: Page) => {
 };
 
 const switchMode = async (page: Page, mode: 'explore' | 'compare' | 'explain') => {
-  const button = page.getByRole('button', { name: new RegExp(`^${mode}$`, 'i') }).first();
+  const label = mode === 'compare' ? 'analyse' : mode;
+  const button = page.getByRole('button', { name: new RegExp(`^${label}$`, 'i') }).first();
   if (await button.isVisible()) { await button.focus(); await page.keyboard.press('Enter'); }
   else await page.locator('select[aria-label="Workspace mode"]').selectOption(mode);
 };
@@ -53,8 +54,16 @@ test('@a11y populated Explore, Compare, Explain, and inspector workflows', async
 
   await test.step('two and four operand Compare', async () => {
     await switchMode(page, 'compare');
+    await expect(page.getByRole('heading', { name: 'What would you like to understand?' })).toBeVisible();
+    await expect(page.getByText('Spatial Intervention Loop')).toHaveCount(0);
+    await expect(page.getByText(/Scenario tools/)).toBeHidden();
+    await page.screenshot({ path: testInfo.outputPath('analyse-home.png'), fullPage: true });
+    const analyseResults = await new AxeBuilder({ page }).analyze();
+    expect(analyseResults.violations.filter((violation) => ['serious', 'critical'].includes(violation.impact || ''))).toEqual([]);
+    await page.getByRole('button', { name: /Compare groups/ }).click();
     await expect(page.getByRole('heading', { name: 'Comparison sessions' })).toBeVisible();
-    await expect(page.getByText(/2 operands/)).toBeVisible();
+    await expect(page.getByText(/Comparing 2 groups/)).toBeVisible();
+    await expect(page.getByText('Common scale · denominator shown').first()).toBeVisible({ timeout: 30_000 });
     await page.screenshot({ path: testInfo.outputPath('compare-two-operands.png'), fullPage: true });
     if (testInfo.project.name === 'desktop') {
       await page.getByRole('tab', { name: 'Map', exact: true }).click();
@@ -63,6 +72,7 @@ test('@a11y populated Explore, Compare, Explain, and inspector workflows', async
       await page.waitForTimeout(500);
       await page.screenshot({ path: testInfo.outputPath('compare-synchronised-maps.png'), fullPage: true });
 
+      await page.getByText('Advanced comparison options', { exact: true }).click();
       await page.getByLabel('Comparison alignment').selectOption('entity-keyed');
       const rowId = await page.evaluate(() => Object.values((window as unknown as { __alurStore: { getState: () => { datasetRegistry: Record<string, { rowIdColumn: string }> } } }).__alurStore.getState().datasetRegistry)[0]?.rowIdColumn);
       const keySelectors = page.getByLabel(/entity key$/i);
@@ -89,7 +99,7 @@ test('@a11y populated Explore, Compare, Explain, and inspector workflows', async
     }
     await page.getByRole('button', { name: '+ Add' }).click();
     await page.getByRole('button', { name: '+ Add' }).click();
-    await expect(page.getByText(/4 operands/)).toBeVisible();
+    await expect(page.getByText(/Comparing 4 groups/)).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath('compare-four-operands.png'), fullPage: true });
     const results = await new AxeBuilder({ page }).analyze();
     expect(results.violations.filter((violation) => ['serious', 'critical'].includes(violation.impact || ''))).toEqual([]);
@@ -98,11 +108,29 @@ test('@a11y populated Explore, Compare, Explain, and inspector workflows', async
   await test.step('Explain reasoning structure and presentation exit', async () => {
     await switchMode(page, 'explain');
     await expect(page.getByLabel('Section title').first()).toHaveValue('Question');
-    if (testInfo.project.name === 'desktop') await expect(page.locator('[data-comparison-map-ready="true"]')).toHaveCount(1, { timeout: 30_000 });
+    if (testInfo.project.name === 'mobile') {
+      await page.getByRole('button', { name: 'Outline', exact: true }).click();
+      await expect(page.locator('aside[aria-label="Explanation outline"]:visible')).toBeVisible();
+      await page.getByRole('button', { name: 'Close outline' }).click();
+    }
+    if (testInfo.project.name === 'desktop') {
+      await expect(page.locator('[data-comparison-map-ready="true"]')).toHaveCount(1, { timeout: 30_000 });
+      await page.locator('article[aria-label$=" card"]').first().focus();
+      const inspector = page.locator('aside[aria-label="Evidence inspector"]:visible');
+      await expect(inspector).toBeVisible();
+      await inspector.getByLabel('What this shows').fill('Energy consumption is spatially consistent across the two captured cohorts.');
+      await page.getByRole('button', { name: 'Add', exact: true }).click();
+      await page.getByRole('button', { name: 'Add finding' }).click();
+      await inspector.getByLabel('Claim').fill('The compared cohorts show no material spatial difference in this measure.');
+      await inspector.getByLabel('Section').selectOption('conclusion');
+      await inspector.locator('select').filter({ has: page.locator('option[value="supports"]') }).selectOption('supports');
+      await page.screenshot({ path: testInfo.outputPath('explain-authoring.png'), fullPage: true });
+    }
     const results = await new AxeBuilder({ page }).analyze();
     expect(results.violations.filter((violation) => ['serious', 'critical'].includes(violation.impact || ''))).toEqual([]);
-    await page.getByRole('button', { name: 'Present' }).click();
+    await page.getByRole('button', { name: 'Present', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Exit presentation' })).toBeVisible();
+    if (testInfo.project.name === 'desktop') await expect(page.locator('[data-comparison-map-ready="true"]')).toHaveCount(1, { timeout: 30_000 });
     await page.screenshot({ path: testInfo.outputPath('explain.png'), fullPage: true });
   });
 });

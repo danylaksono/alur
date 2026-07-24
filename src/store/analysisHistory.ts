@@ -32,7 +32,6 @@ export type AnalysisSnapshot = {
   activeComparisonId?: string;
   explain?: VisualAnalyticsState['explain'];
   variants?: VisualAnalyticsState['variants'];
-  activePatternId?: string;
 };
 
 export type AnalysisHistoryEntry = {
@@ -94,7 +93,6 @@ export const captureAnalysisSnapshot = (source: SnapshotSource): AnalysisSnapsho
   activeComparisonId: source.visualAnalytics.activeComparisonId,
   explain: source.visualAnalytics.explain ? clone(source.visualAnalytics.explain) : undefined,
   variants: clone(source.visualAnalytics.variants || []),
-  activePatternId: source.visualAnalytics.activePatternId,
 });
 
 export const recordAnalysisHistory = (
@@ -225,7 +223,6 @@ export const restoreAnalysisSnapshot = <T extends SnapshotLayer, A extends Visua
       activeComparisonId: snapshot.activeComparisonId,
       explain: snapshot.explain ? clone(snapshot.explain) : visualAnalytics.explain,
       variants: clone(snapshot.variants || []).filter((variant) => availableDatasetIds.has(variant.baselineDatasetId)),
-      activePatternId: snapshot.activePatternId,
     } as A,
   };
 };

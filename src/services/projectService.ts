@@ -98,17 +98,16 @@ const persistedAnalytics = (analytics: VisualAnalyticsState): VisualAnalyticsSta
   activeComparisonId: analytics.activeComparisonId,
   explain: sanitiseValue(analytics.explain || defaultExplain()) as ExplainDocument,
   variants: sanitiseValue(analytics.variants || []) as NonNullable<VisualAnalyticsState['variants']>,
-  activePatternId: analytics.activePatternId,
 });
 
 const defaultExplain = (): ExplainDocument => ({
   title: 'Analysis explanation',
   sections: [
-    { id: 'question', title: 'Question' },
-    { id: 'evidence', title: 'Evidence' },
-    { id: 'interpretation', title: 'Interpretation' },
-    { id: 'conclusion', title: 'Conclusion' },
-    { id: 'limitations', title: 'Limitations / Next steps' },
+    { id: 'question', title: 'Question', purpose: 'State the decision, hypothesis, or analytical question.' },
+    { id: 'evidence', title: 'Evidence', purpose: 'Present the strongest observations with denominators and context.' },
+    { id: 'interpretation', title: 'Interpretation', purpose: 'Explain what the evidence means and connect competing signals.' },
+    { id: 'conclusion', title: 'Conclusion', purpose: 'State the answer, confidence, and decision implication.' },
+    { id: 'limitations', title: 'Limitations / Next steps', purpose: 'Record uncertainty, missing evidence, and the next analytical action.' },
   ],
   cards: [],
 });
@@ -127,7 +126,6 @@ const normaliseAnalytics = (analytics: ProjectManifestV1['visualAnalytics'] | Re
     activeComparisonId: value.activeComparisonId,
     explain: value.explain || defaultExplain(),
     variants: value.variants || [],
-    activePatternId: value.activePatternId,
   });
 };
 

@@ -250,8 +250,9 @@ export interface AppState {
   updateDashboardCard: (cardId: string, patch: Partial<Omit<DashboardCard, 'id' | 'kind'>>) => void;
   removeDashboardCard: (cardId: string) => void;
   setExplainTitle: (title: string) => void;
+  updateExplainDocument: (patch: Partial<Pick<ExplainDocument, 'audience' | 'summary'>>) => void;
   addExplainSection: (section: ExplainSection) => void;
-  updateExplainSection: (sectionId: string, patch: Partial<Pick<ExplainSection, 'title'>>) => void;
+  updateExplainSection: (sectionId: string, patch: Partial<Omit<ExplainSection, 'id'>>) => void;
   reorderExplainSection: (sectionId: string, targetIndex: number) => void;
   removeExplainSection: (sectionId: string) => void;
   addExplainCard: (card: ExplainCard) => void;
@@ -262,7 +263,6 @@ export interface AppState {
   branchVariant: (variantId: string, newId?: string) => void;
   updateVariant: (variantId: string, patch: Partial<Omit<AnalysisVariant, 'id' | 'createdAt' | 'parentVariantId'>>) => void;
   removeVariant: (variantId: string) => void;
-  setActivePattern: (patternId?: string) => void;
   addChatMessage: (role: 'user' | 'assistant' | 'system', content: string, data?: { kind?: string; toolName?: string; summary?: string; icon?: string }) => void;
   addToast: (toast: Omit<Toast, 'id'>) => void;
   removeToast: (id: string) => void;
@@ -358,11 +358,11 @@ const initialSettings: SettingsState = {
 const defaultExplainDocument = (): ExplainDocument => ({
   title: 'Analysis explanation',
   sections: [
-    { id: 'question', title: 'Question' },
-    { id: 'evidence', title: 'Evidence' },
-    { id: 'interpretation', title: 'Interpretation' },
-    { id: 'conclusion', title: 'Conclusion' },
-    { id: 'limitations', title: 'Limitations / Next steps' },
+    { id: 'question', title: 'Question', purpose: 'State the decision, hypothesis, or analytical question.' },
+    { id: 'evidence', title: 'Evidence', purpose: 'Present the strongest observations with denominators and context.' },
+    { id: 'interpretation', title: 'Interpretation', purpose: 'Explain what the evidence means and connect competing signals.' },
+    { id: 'conclusion', title: 'Conclusion', purpose: 'State the answer, confidence, and decision implication.' },
+    { id: 'limitations', title: 'Limitations / Next steps', purpose: 'Record uncertainty, missing evidence, and the next analytical action.' },
   ],
   cards: [],
 });
@@ -1366,6 +1366,11 @@ export const useStore = create<AppState>()(persist((set, get) => ({
     analysisHistory: recordCurrentAnalysis(state, { label: 'Rename explanation', coalesceKey: 'explain:title' }),
   })),
 
+  updateExplainDocument: (patch) => set((state) => ({
+    visualAnalytics: { ...state.visualAnalytics, explain: { ...state.visualAnalytics.explain, ...patch } },
+    analysisHistory: recordCurrentAnalysis(state, { label: 'Edit explanation context', coalesceKey: 'explain:context' }),
+  })),
+
   addExplainSection: (section) => set((state) => ({
     visualAnalytics: { ...state.visualAnalytics, explain: { ...state.visualAnalytics.explain, sections: [...state.visualAnalytics.explain.sections, section] } },
     analysisHistory: recordCurrentAnalysis(state, { label: 'Add explanation section' }),
@@ -1437,10 +1442,6 @@ export const useStore = create<AppState>()(persist((set, get) => ({
   removeVariant: (variantId) => set((state) => ({
     visualAnalytics: { ...state.visualAnalytics, variants: state.visualAnalytics.variants.filter((variant) => variant.id !== variantId) },
     analysisHistory: recordCurrentAnalysis(state, { label: 'Remove analysis variant' }),
-  })),
-
-  setActivePattern: (activePatternId) => set((state) => ({
-    visualAnalytics: { ...state.visualAnalytics, activePatternId },
   })),
 
   addChatMessage: (role, content, data) => set((state) => ({

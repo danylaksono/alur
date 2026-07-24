@@ -93,4 +93,12 @@ describe('projectService', () => {
     const restored = parseProjectManifest(serialiseProjectManifest(createProjectManifest()));
     expect(restored.workspace.activeRailTab).toBe('cohorts');
   });
+
+  it('quietly discards legacy analysis-pattern state', () => {
+    const current = createProjectManifest();
+    const legacy = { ...current, visualAnalytics: { ...current.visualAnalytics, activePatternId: 'spatial-intervention-loop' } };
+    const restored = parseProjectManifest(JSON.stringify(legacy));
+    expect(restored.visualAnalytics).not.toHaveProperty('activePatternId');
+    expect(serialiseProjectManifest(restored)).not.toContain('spatial-intervention-loop');
+  });
 });

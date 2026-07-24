@@ -1,5 +1,5 @@
 import { useRef, useState, type ChangeEvent } from 'react';
-import { ClipboardPaste, FilePlus2, FileText, FileUp, GitCompareArrows, Link2, Loader2, Map, MoreHorizontal, Redo2, RotateCcw, Save, Search, Settings, Undo2, X } from 'lucide-react';
+import { BarChart3, ClipboardPaste, FilePlus2, FileText, FileUp, Link2, Loader2, Map, MoreHorizontal, Redo2, RotateCcw, Save, Search, Settings, Undo2, X } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { ingestClipboardText, ingestFile, ingestUrl } from '../../services/dataIngestion';
 import { cn } from '../../utils/cn';
@@ -150,10 +150,10 @@ export const Header = () => {
       <div className="flex items-center gap-2">
         <div className="hidden items-center rounded-lg border border-slate-200 bg-slate-50 p-0.5 md:flex" aria-label="Workspace mode">
           <button type="button" onClick={() => setWorkspaceMode('explore')} aria-pressed={workspaceMode === 'explore'} className={cn('flex h-7 items-center gap-1 rounded-md px-2 text-[10px] font-bold', workspaceMode === 'explore' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-600')}><Map className="h-3 w-3" /> Explore</button>
-          <button type="button" onClick={() => setWorkspaceMode('compare')} aria-pressed={workspaceMode === 'compare'} className={cn('flex h-7 items-center gap-1 rounded-md px-2 text-[10px] font-bold', workspaceMode === 'compare' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-600')}><GitCompareArrows className="h-3 w-3" /> Compare</button>
+          <button type="button" onClick={() => setWorkspaceMode('compare')} aria-pressed={workspaceMode === 'compare'} className={cn('flex h-7 items-center gap-1 rounded-md px-2 text-[10px] font-bold', workspaceMode === 'compare' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-600')}><BarChart3 className="h-3 w-3" /> Analyse</button>
           <button type="button" onClick={() => setWorkspaceMode('explain')} aria-pressed={workspaceMode === 'explain' || workspaceMode === 'board'} className={cn('flex h-7 items-center gap-1 rounded-md px-2 text-[10px] font-bold', workspaceMode === 'explain' || workspaceMode === 'board' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-600')}><FileText className="h-3 w-3" /> Explain</button>
         </div>
-        <select value={workspaceMode === 'board' ? 'explain' : workspaceMode} onChange={(event) => setWorkspaceMode(event.target.value as 'explore' | 'compare' | 'explain')} className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-[10px] font-bold text-slate-700 md:hidden" aria-label="Workspace mode"><option value="explore">Explore</option><option value="compare">Compare</option><option value="explain">Explain</option></select>
+        <select value={workspaceMode === 'board' ? 'explain' : workspaceMode} onChange={(event) => setWorkspaceMode(event.target.value as 'explore' | 'compare' | 'explain')} className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-[10px] font-bold text-slate-700 md:hidden" aria-label="Workspace mode"><option value="explore">Explore</option><option value="compare">Analyse</option><option value="explain">Explain</option></select>
         <span
           className={cn(
             'mr-2 hidden items-center gap-1.5 text-[11px] text-muted-foreground md:flex',

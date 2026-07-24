@@ -50,6 +50,23 @@ describe('generic comparison service', () => {
     expect(query).not.toHaveBeenCalled();
   });
 
+  it('allows an identical request to retry immediately after an obsolete request is cancelled', async () => {
+    let releaseFirstQuery: (() => void) | undefined;
+    query.mockImplementationOnce(() => new Promise((resolve) => {
+      releaseFirstQuery = () => resolve({ toArray: () => [{ denominator: 10, m0: 10, missing0: 0 }] });
+    })).mockResolvedValue({ toArray: () => [{ denominator: 10, m0: 10, missing0: 0 }] });
+    const comparison = spec(2);
+    const datasets = { d0: dataset('d0'), d1: dataset('d1') };
+    const obsolete = new AbortController();
+    const first = queryComparison(comparison, datasets, obsolete.signal);
+    obsolete.abort();
+    const retry = queryComparison(comparison, datasets, new AbortController().signal);
+    releaseFirstQuery?.();
+
+    await expect(first).rejects.toMatchObject({ name: 'AbortError' });
+    await expect(retry).resolves.toMatchObject({ summaries: [{ values: expect.any(Array) }] });
+  });
+
   it('returns a bounded entity alignment preview with explicit B minus A deltas and overlap', async () => {
     query.mockImplementation(async (sql: string) => ({ toArray: () => {
       if (sql.includes('aligned_total')) return [{ alignment_key: 'entity-1', aligned_total: 2, present0: true, present1: true, o0m0: 5, o1m0: 8 }];

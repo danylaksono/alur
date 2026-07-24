@@ -19,7 +19,7 @@ import { GlobalLoadingOverlay } from '../GlobalLoadingOverlay';
 import { CommandPalette } from './CommandPalette';
 import { DatasetOverviewDialog } from '../Visualisation/DatasetOverviewDialog';
 import { RecoveryDialog } from './RecoveryDialog';
-import { CompareWorkspace } from '../Compare/CompareWorkspace';
+import { AnalyseWorkspace } from '../Analyse/AnalyseWorkspace';
 import { ExplainWorkspace } from '../Explain/ExplainWorkspace';
 import { AnalysisContextBar } from './AnalysisContextBar';
 import { EvidenceTray } from './EvidenceTray';
@@ -30,7 +30,7 @@ export const AppShell = () => {
   const isMaximized = drawerMode === 'maximized';
   const workspaceMode = useStore((s) => s.ui.workspaceMode);
   const isExplain = workspaceMode === 'explain' || workspaceMode === 'board';
-  const isCompare = workspaceMode === 'compare';
+  const isAnalyse = workspaceMode === 'compare';
   const isPresenting = useStore((s) => s.ui.isPresentationMode);
   const [isDragOver, setIsDragOver] = useState(false);
 
@@ -64,12 +64,12 @@ export const AppShell = () => {
       {!isExplain && <AnalysisContextBar />}
 
       <div className="relative flex min-h-0 flex-1">
-        {!isExplain && !isCompare && <LeftRail />}
-        {!isExplain && !isCompare && <LeftPanel />}
+        {!isExplain && !isAnalyse && <LeftRail />}
+        {!isExplain && !isAnalyse && <LeftPanel />}
 
-        {isCompare && <CompareWorkspace />}
+        {isAnalyse && <AnalyseWorkspace />}
         {isExplain && <ExplainWorkspace />}
-        {!isCompare && !isExplain && <main className="flex min-h-0 min-w-0 flex-1 flex-col">
+        {!isAnalyse && !isExplain && <main className="flex min-h-0 min-w-0 flex-1 flex-col">
           {/* The map stays mounted at all times; a maximized drawer just squeezes
               it to a sliver instead of unmounting (map init is expensive). */}
           <div className="relative flex min-h-0 overflow-hidden" style={{ flexGrow: isMaximized ? 0 : 1, flexBasis: isMaximized ? 2 : '0%' }}>

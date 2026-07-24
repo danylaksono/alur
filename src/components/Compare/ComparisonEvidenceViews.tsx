@@ -64,6 +64,7 @@ const ComparisonMapCell = ({
   selectedKey,
   onCameraChange,
   onSelectKey,
+  interactive,
 }: {
   title: string;
   accent: string;
@@ -74,6 +75,7 @@ const ComparisonMapCell = ({
   selectedKey?: string;
   onCameraChange: (camera: Camera) => void;
   onSelectKey?: (key: string) => void;
+  interactive: boolean;
 }) => {
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
@@ -83,12 +85,14 @@ const ComparisonMapCell = ({
 
   useEffect(() => {
     if (!container.current) return;
+    setReady(false);
     const instance = new maplibregl.Map({
       container: container.current,
       style: getBasemap(selectedBasemapId).styleUrl,
       center: [camera.longitude, camera.latitude],
       zoom: camera.zoom,
       attributionControl: { compact: true },
+      interactive,
     });
     map.current = instance;
     const sourceId = 'comparison-source';
@@ -99,7 +103,7 @@ const ComparisonMapCell = ({
       instance.addLayer({ id: layerIds[0], type: 'fill', source: sourceId, filter: ['==', ['geometry-type'], 'Polygon'], paint: { 'fill-color': colour, 'fill-opacity': 0.78, 'fill-outline-color': '#334155' } });
       instance.addLayer({ id: layerIds[1], type: 'line', source: sourceId, filter: ['==', ['geometry-type'], 'LineString'], paint: { 'line-color': colour, 'line-width': 3 } });
       instance.addLayer({ id: layerIds[2], type: 'circle', source: sourceId, filter: ['==', ['geometry-type'], 'Point'], paint: { 'circle-color': colour, 'circle-radius': 5, 'circle-stroke-color': '#fff', 'circle-stroke-width': 1 } });
-      instance.on('click', (event) => {
+      if (interactive) instance.on('click', (event) => {
         const feature = instance.queryRenderedFeatures(event.point, { layers: layerIds })[0];
         const key = feature?.properties?.__alur_key;
         if (key === undefined || key === null) return;
@@ -123,7 +127,7 @@ const ComparisonMapCell = ({
     const observer = new ResizeObserver(() => instance.resize());
     observer.observe(container.current);
     return () => { observer.disconnect(); instance.remove(); map.current = null; };
-  }, [selectedBasemapId, data, range.min, range.max, difference, accent]);
+  }, [selectedBasemapId, data, range.min, range.max, difference, accent, interactive]);
 
   useEffect(() => {
     const instance = map.current;
@@ -149,7 +153,7 @@ const ComparisonMapCell = ({
   return <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
     <header className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
       <span className="truncate text-xs font-bold text-slate-700"><i className="mr-1.5 inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: accent }} />{title}</span>
-      <span className="text-[9px] font-semibold text-slate-600">Shared navigation</span>
+      <span className="text-[9px] font-semibold text-slate-600">{interactive ? 'Shared navigation' : 'Captured view'}</span>
     </header>
     <div ref={container} data-comparison-map-ready={ready ? 'true' : 'false'} className="h-72 w-full bg-slate-100" aria-label={`${title} comparison map`} />
   </section>;
@@ -167,7 +171,7 @@ const differenceCollection = (spec: ComparisonSpec, result: ComparisonResult): G
   };
 };
 
-export const ComparisonMapEvidence = ({ spec, result, differenceEligible, selectedKey, onSelectKey, mode, onModeChange }: {
+export const ComparisonMapEvidence = ({ spec, result, differenceEligible, selectedKey, onSelectKey, mode, onModeChange, interactive = true }: {
   spec: ComparisonSpec;
   result: ComparisonResult;
   differenceEligible: boolean;
@@ -175,6 +179,7 @@ export const ComparisonMapEvidence = ({ spec, result, differenceEligible, select
   onSelectKey?: (key: string) => void;
   mode?: 'multiples' | 'difference';
   onModeChange?: (mode: 'multiples' | 'difference') => void;
+  interactive?: boolean;
 }) => {
   const [uncontrolledMode, setUncontrolledMode] = useState<'multiples' | 'difference'>('multiples');
   const activeMode = mode ?? uncontrolledMode;
@@ -189,7 +194,7 @@ export const ComparisonMapEvidence = ({ spec, result, differenceEligible, select
   const range = useMemo(() => valueRange(collections), [collections]);
   if (!samples.length) return <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center text-xs text-slate-600">No bounded spatial samples are available. Enable Map in the comparison views and ensure the spatial source has a geometry column.</div>;
   return <div className="space-y-3">
-    <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
+    {interactive && <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
       <div className="flex rounded-lg bg-slate-100 p-1" role="group" aria-label="Comparison map mode">
         <button type="button" onClick={() => setMode('multiples')} className={cn('rounded-md px-3 py-1.5 text-[10px] font-bold', activeMode === 'multiples' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600')}>Small multiples</button>
         <button type="button" disabled={!differenceEligible || !difference} onClick={() => setMode('difference')} className={cn('rounded-md px-3 py-1.5 text-[10px] font-bold disabled:opacity-35', activeMode === 'difference' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600')}>Difference B − A</button>
@@ -199,13 +204,13 @@ export const ComparisonMapEvidence = ({ spec, result, differenceEligible, select
         <button type="button" onClick={() => setCamera((current) => ({ ...current, zoom: current.zoom - 1 }))} className="border-l border-slate-200 p-2 text-slate-600" aria-label="Zoom all comparison maps out"><Minus className="h-3.5 w-3.5" /></button>
         <button type="button" onClick={() => setCamera(home)} className="border-l border-slate-200 p-2 text-slate-600" aria-label="Fit all comparison maps"><Focus className="h-3.5 w-3.5" /></button>
       </div>
-    </div>
+    </div>}
     <div className={cn('grid gap-3', activeMode === 'multiples' && samples.length > 1 ? 'lg:grid-cols-2' : 'grid-cols-1')}>
       {activeMode === 'difference' && difference
-        ? <ComparisonMapCell title={`${spec.operands[1]?.label} − ${spec.operands[0]?.label}`} accent="#475569" data={difference} range={range} difference camera={camera} selectedKey={selectedKey} onCameraChange={setCamera} onSelectKey={onSelectKey} />
+        ? <ComparisonMapCell title={`${spec.operands[1]?.label} − ${spec.operands[0]?.label}`} accent="#475569" data={difference} range={range} difference camera={camera} selectedKey={selectedKey} onCameraChange={setCamera} onSelectKey={onSelectKey} interactive={interactive} />
         : samples.map((sample) => {
           const operand = spec.operands.find((item) => item.id === sample.operandId)!;
-          return <ComparisonMapCell key={sample.operandId} title={operand.label} accent={operand.colour} data={sample.features} range={range} difference={false} camera={camera} selectedKey={selectedKey} onCameraChange={setCamera} onSelectKey={onSelectKey} />;
+          return <ComparisonMapCell key={sample.operandId} title={operand.label} accent={operand.colour} data={sample.features} range={range} difference={false} camera={camera} selectedKey={selectedKey} onCameraChange={setCamera} onSelectKey={onSelectKey} interactive={interactive} />;
         })}
     </div>
     <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-900 px-3 py-2 text-[10px] text-white">

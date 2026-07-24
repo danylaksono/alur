@@ -17,7 +17,6 @@ export type VisualAnalyticsState = {
   activeComparisonId?: string;
   explain?: ExplainDocument;
   variants?: AnalysisVariant[];
-  activePatternId?: string;
   comparison?: CohortComparisonSelection;
   /** @deprecated v1 compatibility only. New projects use `explain`. */
   dashboard?: DashboardLayout;
@@ -121,6 +120,8 @@ export type EvidenceProvenance = {
 };
 
 export type ExplainCardKind = 'chart' | 'kpi' | 'table' | 'comparison' | 'map' | 'finding' | 'note' | 'section-intro';
+export type ExplainEvidenceRole = 'supports' | 'contradicts' | 'context';
+export type ExplainEvidenceLink = { cardId: string; role: ExplainEvidenceRole; note?: string };
 export type ExplainCard = {
   id: string;
   sectionId: string;
@@ -130,21 +131,34 @@ export type ExplainCard = {
   comparisonMapMode?: 'multiples' | 'difference';
   datasetId?: string;
   title?: string;
+  /** Editorial explanation attached to the visual, separate from its title. */
+  takeaway?: string;
+  caption?: string;
   note?: string;
   claim?: string;
   interpretation?: string;
   caveat?: string;
   conclusionStatus?: 'draft' | 'supported' | 'contested';
+  confidence?: 'tentative' | 'moderate' | 'strong';
+  evidenceLinks?: ExplainEvidenceLink[];
   width: 3 | 4 | 6 | 8 | 12;
   height: 'compact' | 'standard' | 'tall';
   behaviour: 'frozen' | 'live';
+  presentationInteraction?: 'captured' | 'interactive';
   frozenValues?: unknown;
   provenance?: EvidenceProvenance;
 };
 
-export type ExplainSection = { id: string; title: string };
+export type ExplainSection = {
+  id: string;
+  title: string;
+  purpose?: string;
+  presentationVisibility?: 'auto' | 'always' | 'hidden';
+};
 export type ExplainDocument = {
   title: string;
+  audience?: string;
+  summary?: string;
   sections: ExplainSection[];
   cards: ExplainCard[];
   presentationMode?: boolean;
@@ -181,16 +195,6 @@ export type AnalysisVariant = {
   operations: VariantOperation[];
   createdAt: number;
   provenance: { workflowNodeIds: string[]; sourceVersion?: string | number };
-};
-
-export type AnalysisPatternDefinition = {
-  id: string;
-  name: string;
-  description: string;
-  applicability: string[];
-  capabilitySlots: Array<{ id: string; label: string; description: string }>;
-  suggestedActions: string[];
-  recommendedViews: ComparisonView[];
 };
 
 export type DashboardCard = {

@@ -10,7 +10,7 @@ import type {
 } from '../types/visualAnalytics';
 import { compileVisualFiltersWhereClause, quoteIdentifier } from '../utils/visualFilterSql';
 
-const resultCache = new Map<string, Promise<ComparisonResult>>();
+const resultCache = new Map<string, ComparisonResult>();
 export const ALIGNED_RECORD_LIMIT = 250;
 export const SPATIAL_SAMPLE_LIMIT = 1500;
 const toNumber = (value: unknown) => value === null || value === undefined ? null : Number(value);
@@ -310,16 +310,13 @@ const runComparison = async (
   return { specId: spec.id, summaries, distributions, categoryShares, temporalSeries, overlap, alignedRecords, alignedRecordCount, alignedRecordsTruncated, spatialSamples, differenceSpatialSample: differenceSpatialSample || undefined, warnings: [...new Set(warnings)], generatedAt: Date.now() };
 };
 
-export const queryComparison = (spec: ComparisonSpec, datasets: Record<string, DatasetDescriptor>, signal?: AbortSignal) => {
+export const queryComparison = async (spec: ComparisonSpec, datasets: Record<string, DatasetDescriptor>, signal?: AbortSignal) => {
   const key = comparisonCacheKey(spec, datasets);
   const cached = resultCache.get(key);
   if (cached) return cached;
-  const request = runComparison(spec, datasets, signal).catch((error) => {
-    resultCache.delete(key);
-    throw error;
-  });
-  resultCache.set(key, request);
-  return request;
+  const result = await runComparison(spec, datasets, signal);
+  if (!signal?.aborted) resultCache.set(key, result);
+  return result;
 };
 
 export const clearComparisonCache = () => resultCache.clear();

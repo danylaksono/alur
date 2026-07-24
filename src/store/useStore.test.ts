@@ -357,6 +357,33 @@ describe('layer state', () => {
     expect(useStore.getState().selectedLayerId).toBeNull();
   });
 
+  it('authors an explanation with editorial context and linked evidence', () => {
+    const store = useStore.getState();
+    store.updateExplainDocument({ audience: 'Local planners', summary: 'Compare intervention outcomes.' });
+    store.updateExplainSection('evidence', { purpose: 'Show only evidence needed to assess the claim.' });
+    store.addExplainCard({
+      id: 'map-evidence', sectionId: 'evidence', kind: 'map', title: 'Intervention footprint',
+      takeaway: 'The intervention is concentrated in the north.', width: 12, height: 'standard', behaviour: 'frozen',
+      provenance: { capturedAt: 1, datasetIds: ['areas'], sourceVersions: { areas: 1 }, filtersByDataset: {}, caveats: [] },
+    });
+    store.addExplainCard({
+      id: 'finding', sectionId: 'interpretation', kind: 'finding', claim: 'Northern areas receive most of the intervention.',
+      conclusionStatus: 'supported', confidence: 'moderate', evidenceLinks: [{ cardId: 'map-evidence', role: 'supports' }],
+      width: 6, height: 'compact', behaviour: 'frozen',
+    });
+    store.reorderExplainCard('finding', 'conclusion', 0);
+
+    const explain = useStore.getState().visualAnalytics.explain;
+    expect(explain).toMatchObject({ audience: 'Local planners', summary: 'Compare intervention outcomes.' });
+    expect(explain.sections.find((section) => section.id === 'evidence')?.purpose).toContain('assess the claim');
+    expect(explain.cards.find((card) => card.id === 'finding')).toMatchObject({
+      sectionId: 'conclusion', confidence: 'moderate', evidenceLinks: [{ cardId: 'map-evidence', role: 'supports' }],
+    });
+
+    store.undoAnalysis();
+    expect(useStore.getState().visualAnalytics.explain.cards.find((card) => card.id === 'finding')?.sectionId).toBe('interpretation');
+  });
+
   it('saves and resizes dashboard cards independently of presentation mode', () => {
     const store = useStore.getState();
     store.setWorkspaceMode('board');
