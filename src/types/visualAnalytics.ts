@@ -1,6 +1,6 @@
 export const FEATURE_ID_PROPERTY = '_alur_feature_id';
 
-export type LayerFeatureSelection = {
+export type DatasetInteractionState = {
   hoveredFeatureId?: string;
   highlightedFeatureIds?: string[];
   selectedFeatureIds: string[];
@@ -8,11 +8,129 @@ export type LayerFeatureSelection = {
 };
 
 export type VisualAnalyticsState = {
-  layers: Record<string, LayerFeatureSelection>;
+  datasets: Record<string, DatasetInteractionState>;
   charts: VisualChartSpec[];
+  kpis: KpiSpec[];
+  cohorts: CohortSpec[];
+  bookmarks: AnalyticalBookmark[];
+  comparison?: CohortComparisonSelection;
+  dashboard?: DashboardLayout;
 };
 
-export type VisualChartType = 'bar' | 'donut' | 'rose' | 'histogram' | 'scatter';
+export type DashboardCard = {
+  id: string;
+  kind: 'chart' | 'kpi' | 'table' | 'note';
+  referenceId?: string;
+  datasetId?: string;
+  title?: string;
+  note?: string;
+  width: 1 | 2;
+  height: 'compact' | 'standard' | 'tall';
+};
+
+export type DashboardLayout = {
+  title: string;
+  cards: DashboardCard[];
+};
+
+export type CohortSpec = {
+  id: string;
+  datasetId: string;
+  name: string;
+  colour: string;
+  definition:
+    | { kind: 'filters'; filters: VisualFilter[] }
+    | { kind: 'selection-table'; tableName: string };
+  createdAt: number;
+};
+
+export type CohortComparisonSelection = {
+  datasetId: string;
+  cohortAId: string;
+  cohortBId?: string;
+  compareToRemainder?: boolean;
+};
+
+export type AnalyticalBookmark = {
+  id: string;
+  name: string;
+  note?: string;
+  createdAt: number;
+  datasetId: string | null;
+  filtersByDataset: Record<string, VisualFilter[]>;
+  cohorts: CohortSpec[];
+  mapCamera: { longitude: number; latitude: number; zoom: number; bearing: number; pitch: number };
+  charts: VisualChartSpec[];
+  kpis: KpiSpec[];
+};
+
+export type CohortNumericComparison = {
+  field: string;
+  aCount: number;
+  bCount: number;
+  aMissing: number;
+  bMissing: number;
+  aMean: number | null;
+  bMean: number | null;
+  effectSize: number | null;
+  bins: Array<{ label: string; aCount: number; bCount: number }>;
+};
+
+export type CohortCategoryComparison = {
+  field: string;
+  values: Array<{ label: string; aCount: number; bCount: number; aShare: number; bShare: number; shareDifference: number }>;
+};
+
+export type CohortTemporalComparison = {
+  field: string;
+  grain: 'month';
+  points: Array<{ period: string; aCount: number; bCount: number }>;
+};
+
+export type CohortComparisonResult = {
+  totalRows: number;
+  aRows: number;
+  bRows: number;
+  overlapRows: number;
+  aOnlyRows: number;
+  bOnlyRows: number;
+  denominatorNote: string;
+  missingValueNote: string;
+  numeric: CohortNumericComparison[];
+  categorical: CohortCategoryComparison[];
+  temporal?: CohortTemporalComparison;
+};
+
+export type KpiAggregation = 'count' | 'sum' | 'avg' | 'min' | 'max';
+export type KpiComparison = 'none' | 'total' | 'previous-period' | 'cohort';
+export type KpiFormat = 'number' | 'compact' | 'percent' | 'currency';
+
+export type KpiSpec = {
+  id: string;
+  datasetId: string;
+  title: string;
+  field?: string;
+  aggregation: KpiAggregation;
+  comparison: KpiComparison;
+  format?: KpiFormat;
+  unit?: string;
+  source?: import('./datasets').DatasetSource;
+};
+
+export type KpiResult = {
+  specId: string;
+  value: number | null;
+  comparisonValue: number | null;
+  delta: number | null;
+  activeRows: number;
+  totalRows: number;
+  comparisonAvailable: boolean;
+  comparisonNote?: string;
+};
+
+export type VisualChartType = 'bar' | 'donut' | 'rose' | 'histogram' | 'scatter' | 'line' | 'area';
+
+export type TimeGrain = 'auto' | 'hour' | 'day' | 'week' | 'month' | 'quarter' | 'year';
 
 export type VisualChartAggregation = 'count' | 'sum' | 'avg' | 'min' | 'max';
 
@@ -34,6 +152,12 @@ export type VisualChartSpec = {
   aggregation: VisualChartAggregation;
   paletteId: string;
   maxCategories: number;
+  timeGrain?: TimeGrain;
+  seriesField?: string;
+  showPoints?: boolean;
+  /** When false (the default), periods without observations break the line. */
+  connectMissing?: boolean;
+  source?: import('./datasets').DatasetSource;
 };
 
 export type VisualChartDatum = {
@@ -55,6 +179,35 @@ export type VisualChartResult = {
   totalRows: number;
   filteredRows: number;
   data: VisualChartDatum[];
+};
+
+export type VisualTemporalPoint = {
+  bucketStart: string;
+  bucketEnd: string;
+  label: string;
+  value: number | null;
+  count: number;
+  totalValue: number | null;
+  totalCount: number;
+};
+
+export type VisualTemporalSeries = {
+  key: string;
+  label: string;
+  color: string;
+  points: VisualTemporalPoint[];
+};
+
+export type VisualTemporalResult = {
+  chartId: string;
+  grain: Exclude<TimeGrain, 'auto'>;
+  totalRows: number;
+  filteredRows: number;
+  minDate: string;
+  maxDate: string;
+  series: VisualTemporalSeries[];
+  /** True when values outside the top-N series are combined into “Other”. */
+  hasOtherSeries: boolean;
 };
 
 export type VisualScatterPoint = {
@@ -83,6 +236,7 @@ export type VisualFilter =
       field: string;
       values: string[];
       includeNull?: boolean;
+      mode?: 'include' | 'exclude';
     }
   | {
       kind: 'range';
@@ -90,6 +244,7 @@ export type VisualFilter =
       min?: number;
       max?: number;
       includeNull?: boolean;
+      mode?: 'include' | 'exclude';
     }
   | {
       kind: 'temporal';
@@ -97,6 +252,26 @@ export type VisualFilter =
       start?: string;
       end?: string;
       includeNull?: boolean;
+      mode?: 'include' | 'exclude';
+    }
+  | {
+      kind: 'text';
+      field: string;
+      operator: 'contains' | 'starts_with' | 'ends_with' | 'equals';
+      value: string;
+      caseSensitive?: boolean;
+      mode?: 'include' | 'exclude';
+    }
+  | {
+      kind: 'boolean';
+      field: string;
+      value: boolean;
+      mode?: 'include' | 'exclude';
+    }
+  | {
+      kind: 'null';
+      field: string;
+      isNull: boolean;
     };
 
 export type SelectionDivergence =
@@ -123,9 +298,7 @@ export type SelectionExplanation = {
   fields: SelectionDivergence[];
 };
 
-export type LayerSummaryMetric = {
-  field: string;
-  kind: 'numeric';
+export type LayerSummaryStatistic = {
   count: number;
   min: number | null;
   max: number | null;
@@ -133,9 +306,17 @@ export type LayerSummaryMetric = {
   sum: number | null;
 };
 
+export type LayerSummaryMetric = {
+  field: string;
+  kind: 'numeric';
+  selected: LayerSummaryStatistic;
+  active: LayerSummaryStatistic;
+  total: LayerSummaryStatistic;
+};
+
 export type LayerSummaryCategory = {
   field: string;
-  values: Array<{ label: string; count: number }>;
+  values: Array<{ label: string; selectedCount: number; activeCount: number; totalCount: number }>;
 };
 
 export type LayerAnalyticsSummary = {

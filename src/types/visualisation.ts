@@ -29,12 +29,23 @@ export type LegendItem = {
   /** Bivariate grid position (0-2), row-major. */
   row?: number;
   column?: number;
+  count?: number;
+  percentage?: number;
 };
 
 export type LegendSpec = {
   title: string;
   kind: VisualisationKind;
   items: LegendItem[];
+  classification?: {
+    method: ClassificationMethod;
+    breaks?: number[];
+  };
+  palette?: {
+    name: string;
+    colorBlindSafe: boolean;
+    warnings: string[];
+  };
 };
 
 export type SimpleVisualisation = {
@@ -65,6 +76,7 @@ export type CategoricalVisualisation = {
   otherColor: string;
   nullColor: string;
   opacity: number;
+  totalCount?: number;
 };
 
 export type GraduatedSymbolVisualisation = {

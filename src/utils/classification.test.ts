@@ -50,11 +50,17 @@ describe('classification utilities', () => {
       palette: ['#fee2e2', '#ef4444', '#7f1d1d'],
     });
     expect(choropleth.kind).toBe('choropleth');
+    expect(buildLegend(choropleth)).toMatchObject({
+      classification: { method: 'quantile' },
+      palette: { name: 'Custom', colorBlindSafe: false },
+    });
     expect(buildLegend(choropleth).items.at(-1)?.label).toBe('No data');
 
     const categorical = profileGeoJsonField(fc([{ borough: 'Camden' }, { borough: 'Hackney' }]), 'borough');
     if (categorical.kind !== 'categorical') throw new Error('expected categorical profile');
     const categories = buildCategoricalVisualisation({ field: 'borough', profile: categorical });
-    expect(buildLegend(categories).items.map((item) => item.label)).toContain('Other');
+    const categoryLegend = buildLegend(categories);
+    expect(categoryLegend.items.map((item) => item.label)).toContain('Other');
+    expect(categoryLegend.items[0]).toMatchObject({ count: 1, percentage: 0.5 });
   });
 });

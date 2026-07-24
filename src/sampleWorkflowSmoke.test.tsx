@@ -137,7 +137,7 @@ describe('sample visual analytics workflow smoke test', () => {
     expect(shellHtml).toContain('Workflow');
     expect(shellHtml).toContain('Table');
     expect(shellHtml).toContain('SQL');
-    expect(shellHtml).toContain('Execute Workflow');
+    expect(shellHtml).toContain('Loading workflow editor');
 
     const workflowHtml = renderToString(<WorkflowTab />);
     expect(workflowHtml).toContain('Data Input');

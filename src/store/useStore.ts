@@ -14,11 +14,23 @@ import {
 import { DEFAULT_BASEMAP_ID, type BasemapId } from '../utils/basemaps';
 import type { LayerVisualisation, LegendSpec } from '../types/visualisation';
 import { ensureFeatureIds } from '../utils/featureIdentity';
-import type { VisualAnalyticsState, VisualChartSpec, VisualFilter } from '../types/visualAnalytics';
+import type { AnalyticalBookmark, CohortComparisonSelection, CohortSpec, DashboardCard, KpiSpec, VisualAnalyticsState, VisualChartSpec, VisualFilter } from '../types/visualAnalytics';
 import type { MvtTileSource } from '../services/duckdb';
 import type { LayerSource } from '../types/layers';
 import type { LayerBounds } from '../types/layers';
+import { DATASET_SOURCE_VERSION, type DatasetDescriptor } from '../types/datasets';
 import { migrateLocalStorageKey } from '../utils/storageMigration';
+import {
+  captureAnalysisSnapshot,
+  emptyAnalysisHistory,
+  recordAnalysisHistory,
+  redoAnalysisHistory,
+  restoreAnalysisSnapshot,
+  undoAnalysisHistory,
+  type AnalysisHistoryState,
+  type HistoryAction,
+} from './analysisHistory';
+import { chartDatasetId, chartDatasetSource, kpiDatasetSource } from '../utils/datasetSource';
 
 export type NodeExecutionState = {
   status: 'idle' | 'running' | 'done' | 'error';
@@ -89,6 +101,13 @@ export type UIState = {
   activeDrawerTab: DrawerTab;
   isSettingsOpen: boolean;
   isAboutOpen: boolean;
+  isCommandPaletteOpen: boolean;
+  datasetOverviewLayerId: string | null;
+  layerStyleRequest?: { layerId: string; field?: string; requestedAt: number };
+  recoverySave: { status: 'idle' | 'saving' | 'saved' | 'error'; savedAt?: number };
+  mapCamera: { longitude: number; latitude: number; zoom: number; bearing: number; pitch: number };
+  workspaceMode: 'explore' | 'board';
+  isPresentationMode: boolean;
 };
 
 export type SettingsState = {
@@ -113,6 +132,7 @@ interface AppState {
   duckdbReady: boolean;
   selectedBasemapId: BasemapId;
   mapLayers: MapLayer[];
+  datasetRegistry: Record<string, DatasetDescriptor>;
   chatMessages: ChatMessage[];
   manualSQL: string;
   isManualSQL: boolean;
@@ -128,6 +148,7 @@ interface AppState {
   settings: SettingsState;
   /** Layers whose map source/tiles are currently re-rendering after a style or filter change. */
   restylingLayerIds: Record<string, true>;
+  analysisHistory: AnalysisHistoryState;
 
   setActiveRailTab: (tab: RailTab) => void;
   togglePanelCollapsed: () => void;
@@ -137,6 +158,13 @@ interface AppState {
   openDrawerTab: (tab: DrawerTab) => void;
   setSettingsOpen: (open: boolean) => void;
   setAboutOpen: (open: boolean) => void;
+  setCommandPaletteOpen: (open: boolean) => void;
+  setDatasetOverviewLayerId: (layerId: string | null) => void;
+  setRecoverySave: (status: UIState['recoverySave']) => void;
+  setMapCamera: (camera: UIState['mapCamera']) => void;
+  setWorkspaceMode: (mode: UIState['workspaceMode']) => void;
+  setPresentationMode: (presenting: boolean) => void;
+  requestLayerStyle: (layerId: string, field?: string) => void;
   updateSettings: (patch: Partial<SettingsState>) => void;
   setDuckDBReady: (ready: boolean) => void;
   setSelectedBasemapId: (id: BasemapId) => void;
@@ -159,6 +187,9 @@ interface AppState {
   removeNode: (id: string) => void;
   duplicateNode: (id: string, newId?: string, position?: { x: number; y: number }) => void;
   addMapLayer: (layer: NewMapLayer) => void;
+  registerDataset: (dataset: DatasetDescriptor) => void;
+  rebindDataset: (fromDatasetId: string, dataset: DatasetDescriptor) => void;
+  removeDataset: (datasetId: string) => void;
   removeMapLayer: (layerId: string) => void;
   toggleMapLayerVisibility: (layerId: string) => void;
   updateMapLayer: (layerId: string, patch: Partial<Pick<MapLayer, 'visible' | 'opacity' | 'color' | 'name' | 'clusterRadius' | 'clusterMaxZoom' | 'dotDensityLayerId' | 'hexbinLayerId'>>) => void;
@@ -176,12 +207,32 @@ interface AppState {
   addChart: (chart: VisualChartSpec) => void;
   updateChart: (chartId: string, patch: Partial<Omit<VisualChartSpec, 'id'>>) => void;
   removeChart: (chartId: string) => void;
+  addKpi: (kpi: KpiSpec) => void;
+  updateKpi: (kpiId: string, patch: Partial<Omit<KpiSpec, 'id' | 'datasetId'>>) => void;
+  removeKpi: (kpiId: string) => void;
+  reorderKpi: (kpiId: string, targetIndex: number) => void;
+  addCohort: (cohort: CohortSpec) => void;
+  updateCohort: (cohortId: string, patch: Partial<Pick<CohortSpec, 'name' | 'colour'>>) => void;
+  duplicateCohort: (cohortId: string, newId?: string) => void;
+  removeCohort: (cohortId: string) => void;
+  setCohortComparison: (comparison?: CohortComparisonSelection) => void;
+  addBookmark: (bookmark: AnalyticalBookmark) => void;
+  updateBookmark: (bookmarkId: string, patch: Partial<Pick<AnalyticalBookmark, 'name' | 'note'>>) => void;
+  removeBookmark: (bookmarkId: string) => void;
+  restoreBookmark: (bookmarkId: string) => void;
+  setDashboardTitle: (title: string) => void;
+  addDashboardCard: (card: DashboardCard) => void;
+  updateDashboardCard: (cardId: string, patch: Partial<Omit<DashboardCard, 'id' | 'kind'>>) => void;
+  removeDashboardCard: (cardId: string) => void;
   addChatMessage: (role: 'user' | 'assistant' | 'system', content: string, data?: { kind?: string; toolName?: string; summary?: string; icon?: string }) => void;
   addToast: (toast: Omit<Toast, 'id'>) => void;
   removeToast: (id: string) => void;
   startLoadingOperation: (operation: Omit<LoadingOperation, 'startedAt'>) => void;
   updateLoadingOperation: (id: string, patch: Partial<Omit<LoadingOperation, 'id' | 'startedAt'>>) => void;
   finishLoadingOperation: (id: string) => void;
+  undoAnalysis: () => void;
+  redoAnalysis: () => void;
+  clearAnalysisHistory: () => void;
 }
 
 export type NewMapLayer = Omit<MapLayer, 'visible' | 'opacity' | 'createdAt' | 'featureCount' | 'styleVersion' | 'source'> &
@@ -251,11 +302,52 @@ const initialUIState: UIState = {
   activeDrawerTab: 'workflow',
   isSettingsOpen: false,
   isAboutOpen: false,
+  isCommandPaletteOpen: false,
+  datasetOverviewLayerId: null,
+  layerStyleRequest: undefined,
+  recoverySave: { status: 'idle' },
+  mapCamera: { longitude: 0, latitude: 20, zoom: 1.5, bearing: 0, pitch: 0 },
+  workspaceMode: 'explore',
+  isPresentationMode: false,
 };
 
 const initialSettings: SettingsState = {
   openRouterApiKey: '',
   openRouterModelId: 'openai/gpt-4o-mini',
+};
+
+const datasetDescriptorForLayer = (layer: MapLayer): DatasetDescriptor => ({
+  id: layer.id,
+  name: layer.name,
+  sourceVersion: DATASET_SOURCE_VERSION,
+  source: { kind: 'layer', layerId: layer.id },
+  fields: layer.source.fields,
+  rowCount: layer.featureCount,
+  rowIdColumn: layer.source.kind === 'duckdb-table' || layer.source.kind === 'duckdb-query' ? layer.source.featureIdColumn : '_alur_feature_id',
+  rowIdQuality: 'map-feature-id',
+  sourceUpdatedAt: layer.source.kind === 'duckdb-table' || layer.source.kind === 'duckdb-query' ? layer.source.renderVersion : layer.createdAt,
+  spatial: true,
+});
+
+const recordCurrentAnalysis = (state: AppState, action: HistoryAction) =>
+  recordAnalysisHistory(state.analysisHistory, captureAnalysisSnapshot(state), action);
+
+const PRESENTATION_PATCH_KEYS = new Set([
+  'visible',
+  'opacity',
+  'color',
+  'name',
+  'clusterRadius',
+  'clusterMaxZoom',
+]);
+
+const historyActionForMapPatch = (layerId: string, patch: Record<string, unknown>): HistoryAction | null => {
+  const keys = Object.keys(patch).filter((key) => PRESENTATION_PATCH_KEYS.has(key));
+  if (!keys.length) return null;
+  if (keys.length === 1 && keys[0] === 'opacity') {
+    return { label: 'Change layer opacity', coalesceKey: `layer:${layerId}:opacity` };
+  }
+  return { label: 'Edit layer presentation', coalesceKey: `layer:${layerId}:${keys.sort().join(',')}` };
 };
 
 export const useStore = create<AppState>()(persist((set, get) => ({
@@ -264,6 +356,7 @@ export const useStore = create<AppState>()(persist((set, get) => ({
   duckdbReady: false,
   selectedBasemapId: DEFAULT_BASEMAP_ID,
   mapLayers: [],
+  datasetRegistry: {},
   chatMessages: initialChatMessages,
   manualSQL: '',
   isManualSQL: false,
@@ -272,12 +365,13 @@ export const useStore = create<AppState>()(persist((set, get) => ({
   layerFocusRequest: null,
   nodeSchemas: {},
   nodeExecutionStates: {},
-  visualAnalytics: { layers: {}, charts: [] },
+  visualAnalytics: { datasets: {}, charts: [], kpis: [], cohorts: [], bookmarks: [] },
   toasts: [],
   loadingOperations: {},
   ui: initialUIState,
   settings: initialSettings,
   restylingLayerIds: {},
+  analysisHistory: emptyAnalysisHistory(),
 
   setLayerRestyling: (layerId, restyling) => set((state) => {
     const isRestyling = Boolean(state.restylingLayerIds[layerId]);
@@ -337,6 +431,34 @@ export const useStore = create<AppState>()(persist((set, get) => ({
   setAboutOpen: (open) => set((state) => ({
     ui: { ...state.ui, isAboutOpen: open },
   })),
+  setCommandPaletteOpen: (open) => set((state) => ({
+    ui: { ...state.ui, isCommandPaletteOpen: open },
+  })),
+  setDatasetOverviewLayerId: (layerId) => set((state) => ({
+    selectedLayerId: layerId || state.selectedLayerId,
+    ui: { ...state.ui, datasetOverviewLayerId: layerId },
+  })),
+  setRecoverySave: (recoverySave) => set((state) => ({
+    ui: { ...state.ui, recoverySave },
+  })),
+  setMapCamera: (mapCamera) => set((state) => ({
+    ui: { ...state.ui, mapCamera },
+  })),
+  setWorkspaceMode: (workspaceMode) => set((state) => ({
+    ui: { ...state.ui, workspaceMode, isPresentationMode: false },
+  })),
+  setPresentationMode: (isPresentationMode) => set((state) => ({
+    ui: { ...state.ui, isPresentationMode, workspaceMode: isPresentationMode ? 'board' : state.ui.workspaceMode },
+  })),
+  requestLayerStyle: (layerId, field) => set((state) => ({
+    selectedLayerId: layerId,
+    ui: {
+      ...state.ui,
+      activeRailTab: 'layers',
+      isPanelCollapsed: false,
+      layerStyleRequest: { layerId, field, requestedAt: Date.now() },
+    },
+  })),
   updateSettings: (patch) => set((state) => ({
     settings: { ...state.settings, ...patch },
   })),
@@ -384,6 +506,7 @@ export const useStore = create<AppState>()(persist((set, get) => ({
     edges: [],
     selectedBasemapId: DEFAULT_BASEMAP_ID,
     mapLayers: [],
+    datasetRegistry: {},
     chatMessages: initialChatMessages,
     manualSQL: '',
     isManualSQL: false,
@@ -392,10 +515,32 @@ export const useStore = create<AppState>()(persist((set, get) => ({
     layerFocusRequest: null,
     nodeSchemas: {},
     nodeExecutionStates: {},
-    visualAnalytics: { layers: {}, charts: [] },
+    visualAnalytics: { datasets: {}, charts: [], kpis: [], cohorts: [], bookmarks: [] },
     restylingLayerIds: {},
     loadingOperations: {},
+    ui: { ...get().ui, datasetOverviewLayerId: null, isCommandPaletteOpen: false, workspaceMode: 'explore', isPresentationMode: false },
+    analysisHistory: emptyAnalysisHistory(),
   }),
+
+  undoAnalysis: () => set((state) => {
+    const transition = undoAnalysisHistory(state.analysisHistory, captureAnalysisSnapshot(state));
+    if (!transition) return state;
+    return {
+      ...restoreAnalysisSnapshot(state.mapLayers, state.visualAnalytics, transition.snapshot, Object.keys(state.datasetRegistry)),
+      analysisHistory: transition.history,
+    };
+  }),
+
+  redoAnalysis: () => set((state) => {
+    const transition = redoAnalysisHistory(state.analysisHistory, captureAnalysisSnapshot(state));
+    if (!transition) return state;
+    return {
+      ...restoreAnalysisSnapshot(state.mapLayers, state.visualAnalytics, transition.snapshot, Object.keys(state.datasetRegistry)),
+      analysisHistory: transition.history,
+    };
+  }),
+
+  clearAnalysisHistory: () => set({ analysisHistory: emptyAnalysisHistory() }),
 
   onNodesChange: (changes) => {
     const removedNodeIds = new Set(
@@ -415,11 +560,24 @@ export const useStore = create<AppState>()(persist((set, get) => ({
       nodes: nextNodes,
       edges: get().edges.filter((edge) => nextNodeIds.has(edge.source) && nextNodeIds.has(edge.target)),
       mapLayers: nextLayers,
+      datasetRegistry: Object.fromEntries(Object.entries(get().datasetRegistry).filter(([, dataset]) => (
+        dataset.source.kind === 'layer' ? nextLayerIds.has(dataset.source.layerId) : dataset.source.kind !== 'workflow-node' || nextNodeIds.has(dataset.source.nodeId)
+      ))),
       visualAnalytics: {
-        layers: Object.fromEntries(
-          Object.entries(get().visualAnalytics.layers).filter(([layerId]) => nextLayerIds.has(layerId))
+        ...get().visualAnalytics,
+        datasets: Object.fromEntries(
+          Object.entries(get().visualAnalytics.datasets).filter(([layerId]) => nextLayerIds.has(layerId))
         ),
-        charts: get().visualAnalytics.charts.filter((chart) => nextLayerIds.has(chart.layerId)),
+        charts: get().visualAnalytics.charts.filter((chart) => {
+          const source = chartDatasetSource(chart);
+          return source.kind === 'layer' ? nextLayerIds.has(source.layerId) : source.kind !== 'workflow-node' || nextNodeIds.has(source.nodeId);
+        }),
+        kpis: get().visualAnalytics.kpis.filter((kpi) => {
+          const source = kpiDatasetSource(kpi);
+          return source.kind === 'layer' ? nextLayerIds.has(source.layerId) : source.kind !== 'workflow-node' || nextNodeIds.has(source.nodeId);
+        }),
+        cohorts: get().visualAnalytics.cohorts.filter((cohort) => nextLayerIds.has(cohort.datasetId) || Boolean(get().datasetRegistry[cohort.datasetId])),
+        comparison: get().visualAnalytics.comparison && (nextLayerIds.has(get().visualAnalytics.comparison!.datasetId) || Boolean(get().datasetRegistry[get().visualAnalytics.comparison!.datasetId])) ? get().visualAnalytics.comparison : undefined,
       },
       selectedNodeId: get().selectedNodeId && nextNodeIds.has(get().selectedNodeId!)
         ? get().selectedNodeId
@@ -429,6 +587,7 @@ export const useStore = create<AppState>()(persist((set, get) => ({
         : null,
       nodeSchemas: removeRecordKeys(get().nodeSchemas, removedNodeIds),
       nodeExecutionStates: removeRecordKeys(get().nodeExecutionStates, removedNodeIds),
+      ...(removedNodeIds.size ? { analysisHistory: emptyAnalysisHistory() } : {}),
     });
   },
 
@@ -469,20 +628,33 @@ export const useStore = create<AppState>()(persist((set, get) => ({
         .filter((layer) => layer.sourceNodeId === id || (tableName && layer.id === tableName))
         .map((layer) => layer.id)
     );
-    const visualAnalyticsLayers = removeRecordKeys(state.visualAnalytics.layers, removedLayerIds);
+    const visualAnalyticsLayers = removeRecordKeys(state.visualAnalytics.datasets, removedLayerIds);
+    const removedDatasetIds = new Set(Object.values(state.datasetRegistry)
+      .filter((dataset) => dataset.source.kind === 'workflow-node' && dataset.source.nodeId === id)
+      .map((dataset) => dataset.id));
+    removedLayerIds.forEach((layerId) => removedDatasetIds.add(layerId));
 
     return {
       nodes: state.nodes.filter((n) => n.id !== id),
       edges: state.edges.filter((edge) => edge.source !== id && edge.target !== id),
       mapLayers,
+      datasetRegistry: removeRecordKeys(state.datasetRegistry, removedDatasetIds),
       visualAnalytics: {
-        layers: visualAnalyticsLayers,
-        charts: state.visualAnalytics.charts.filter((chart) => !removedLayerIds.has(chart.layerId)),
+        ...state.visualAnalytics,
+        datasets: removeRecordKeys(visualAnalyticsLayers, removedDatasetIds),
+        charts: state.visualAnalytics.charts.filter((chart) => {
+          const source = chartDatasetSource(chart);
+          return source.kind === 'workflow-node' ? source.nodeId !== id : !removedDatasetIds.has(source.kind === 'layer' ? source.layerId : source.datasetId);
+        }),
+        kpis: state.visualAnalytics.kpis.filter((kpi) => !removedDatasetIds.has(kpi.datasetId)),
+        cohorts: state.visualAnalytics.cohorts.filter((cohort) => !removedDatasetIds.has(cohort.datasetId)),
+        comparison: state.visualAnalytics.comparison && removedDatasetIds.has(state.visualAnalytics.comparison.datasetId) ? undefined : state.visualAnalytics.comparison,
       },
       selectedNodeId: state.selectedNodeId === id ? null : state.selectedNodeId,
       selectedLayerId: state.selectedLayerId && layerIds.has(state.selectedLayerId) ? state.selectedLayerId : null,
       nodeSchemas: removeRecordKeys(state.nodeSchemas, removedIds),
       nodeExecutionStates: removeRecordKeys(state.nodeExecutionStates, removedIds),
+      analysisHistory: emptyAnalysisHistory(),
     };
   }),
 
@@ -513,12 +685,65 @@ export const useStore = create<AppState>()(persist((set, get) => ({
     const nextLayer = hydrateLayer(layer, previous);
     return {
       mapLayers: [...state.mapLayers.filter((item) => item.id !== layer.id), nextLayer],
+      datasetRegistry: { ...state.datasetRegistry, [nextLayer.id]: datasetDescriptorForLayer(nextLayer) },
       // Only auto-select genuinely new layers; updates (style bumps, re-materialization)
       // must not hijack whatever the user currently has selected.
       selectedLayerId: previous ? state.selectedLayerId : nextLayer.id,
       selectedNodeId: previous ? state.selectedNodeId : nextLayer.sourceNodeId ?? state.selectedNodeId,
+      analysisHistory: previous ? state.analysisHistory : emptyAnalysisHistory(),
     };
   }),
+
+  registerDataset: (dataset) => set((state) => ({
+    datasetRegistry: { ...state.datasetRegistry, [dataset.id]: dataset },
+  })),
+
+  rebindDataset: (fromDatasetId, dataset) => set((state) => {
+    if (fromDatasetId === dataset.id) return { datasetRegistry: { ...state.datasetRegistry, [dataset.id]: dataset } };
+    const previousInteraction = state.visualAnalytics.datasets[fromDatasetId];
+    const currentInteraction = state.visualAnalytics.datasets[dataset.id];
+    const datasets = removeRecordKeys(state.visualAnalytics.datasets, new Set([fromDatasetId]));
+    if (previousInteraction || currentInteraction) datasets[dataset.id] = currentInteraction || previousInteraction;
+    const migrateBookmark = (bookmark: AnalyticalBookmark): AnalyticalBookmark => {
+      const filtersByDataset = { ...bookmark.filtersByDataset };
+      if (filtersByDataset[fromDatasetId] && !filtersByDataset[dataset.id]) filtersByDataset[dataset.id] = filtersByDataset[fromDatasetId];
+      delete filtersByDataset[fromDatasetId];
+      return {
+        ...bookmark,
+        datasetId: bookmark.datasetId === fromDatasetId ? dataset.id : bookmark.datasetId,
+        filtersByDataset,
+        cohorts: bookmark.cohorts.map((cohort) => cohort.datasetId === fromDatasetId ? { ...cohort, datasetId: dataset.id } : cohort),
+        charts: bookmark.charts.map((chart) => chartDatasetId(chart) === fromDatasetId ? { ...chart, source: dataset.source, tableName: dataset.relationName } : chart),
+        kpis: bookmark.kpis.map((kpi) => kpi.datasetId === fromDatasetId ? { ...kpi, datasetId: dataset.id, source: dataset.source } : kpi),
+      };
+    };
+    return {
+      datasetRegistry: { ...removeRecordKeys(state.datasetRegistry, new Set([fromDatasetId])), [dataset.id]: dataset },
+      visualAnalytics: {
+        ...state.visualAnalytics,
+        datasets,
+        charts: state.visualAnalytics.charts.map((chart) => chartDatasetId(chart) === fromDatasetId ? { ...chart, source: dataset.source, tableName: dataset.relationName } : chart),
+        kpis: state.visualAnalytics.kpis.map((kpi) => kpi.datasetId === fromDatasetId ? { ...kpi, datasetId: dataset.id, source: dataset.source } : kpi),
+        cohorts: state.visualAnalytics.cohorts.map((cohort) => cohort.datasetId === fromDatasetId ? { ...cohort, datasetId: dataset.id } : cohort),
+        bookmarks: state.visualAnalytics.bookmarks.map(migrateBookmark),
+        comparison: state.visualAnalytics.comparison?.datasetId === fromDatasetId ? { ...state.visualAnalytics.comparison, datasetId: dataset.id } : state.visualAnalytics.comparison,
+      },
+    };
+  }),
+
+  removeDataset: (datasetId) => set((state) => ({
+    datasetRegistry: removeRecordKeys(state.datasetRegistry, new Set([datasetId])),
+    visualAnalytics: {
+      ...state.visualAnalytics,
+      datasets: removeRecordKeys(state.visualAnalytics.datasets, new Set([datasetId])),
+      charts: state.visualAnalytics.charts.filter((chart) => {
+        const source = chart.source;
+        return source?.kind === 'layer' ? source.layerId !== datasetId : source?.kind ? source.datasetId !== datasetId : chart.layerId !== datasetId;
+      }),
+      kpis: state.visualAnalytics.kpis.filter((kpi) => kpi.datasetId !== datasetId),
+      cohorts: state.visualAnalytics.cohorts.filter((cohort) => cohort.datasetId !== datasetId),
+    },
+  })),
 
   removeMapLayer: (layerId) => set((state) => {
     const layer = state.mapLayers.find((item) => item.id === layerId);
@@ -533,59 +758,100 @@ export const useStore = create<AppState>()(persist((set, get) => ({
         .map((item) => item.dotDensityLayerId === layerId || item.hexbinLayerId === layerId
           ? { ...item, dotDensityLayerId: undefined, hexbinLayerId: undefined, visualisation: undefined, legend: undefined }
           : item),
+      datasetRegistry: removeRecordKeys(state.datasetRegistry, keysToRemove),
       visualAnalytics: {
-        layers: removeRecordKeys(state.visualAnalytics.layers, keysToRemove),
+        ...state.visualAnalytics,
+        datasets: removeRecordKeys(state.visualAnalytics.datasets, keysToRemove),
         charts: state.visualAnalytics.charts.filter((chart) => !keysToRemove.has(chart.layerId)),
+        kpis: state.visualAnalytics.kpis.filter((kpi) => !keysToRemove.has(kpi.datasetId)),
+        cohorts: state.visualAnalytics.cohorts.filter((cohort) => !keysToRemove.has(cohort.datasetId)),
+        comparison: state.visualAnalytics.comparison && keysToRemove.has(state.visualAnalytics.comparison.datasetId) ? undefined : state.visualAnalytics.comparison,
       },
       selectedLayerId: state.selectedLayerId === layerId ? null : state.selectedLayerId,
+      analysisHistory: emptyAnalysisHistory(),
     };
   }),
 
-  toggleMapLayerVisibility: (layerId) => set((state) => ({
-    mapLayers: state.mapLayers.map((layer) =>
-      layer.id === layerId ? { ...layer, visible: !layer.visible } : layer
-    ),
-  })),
+  toggleMapLayerVisibility: (layerId) => set((state) => {
+    if (!state.mapLayers.some((layer) => layer.id === layerId)) return state;
+    return {
+      mapLayers: state.mapLayers.map((layer) =>
+        layer.id === layerId ? { ...layer, visible: !layer.visible } : layer
+      ),
+      analysisHistory: recordCurrentAnalysis(state, {
+        label: 'Toggle layer visibility',
+      }),
+    };
+  }),
 
-  updateMapLayer: (layerId, patch) => set((state) => ({
-    mapLayers: state.mapLayers.map((layer) =>
-      layer.id === layerId ? { ...layer, ...patch, styleVersion: layer.styleVersion + 1 } : layer
-    ),
-  })),
+  updateMapLayer: (layerId, patch) => set((state) => {
+    const layer = state.mapLayers.find((candidate) => candidate.id === layerId);
+    if (!layer) return state;
+    const unchanged = Object.entries(patch).every(([key, value]) =>
+      sameJson((layer as unknown as Record<string, unknown>)[key], value));
+    if (unchanged) return state;
+    const action = historyActionForMapPatch(layerId, patch);
+    return {
+      mapLayers: state.mapLayers.map((candidate) =>
+        candidate.id === layerId ? { ...candidate, ...patch, styleVersion: candidate.styleVersion + 1 } : candidate
+      ),
+      ...(action ? { analysisHistory: recordCurrentAnalysis(state, action) } : {}),
+    };
+  }),
 
-  updateLayerVisualisation: (layerId, visualisation, legend) => set((state) => ({
-    mapLayers: state.mapLayers.map((layer) => {
-      if (layer.id !== layerId) return layer;
-      if (sameJson(layer.visualisation, visualisation) && sameJson(layer.legend, legend)) return layer;
-      return { ...layer, visualisation, legend, styleVersion: layer.styleVersion + 1 };
-    }),
-  })),
+  updateLayerVisualisation: (layerId, visualisation, legend) => set((state) => {
+    const layer = state.mapLayers.find((candidate) => candidate.id === layerId);
+    if (!layer || (sameJson(layer.visualisation, visualisation) && sameJson(layer.legend, legend))) return state;
+    return {
+      mapLayers: state.mapLayers.map((candidate) =>
+        candidate.id === layerId
+          ? { ...candidate, visualisation, legend, styleVersion: candidate.styleVersion + 1 }
+          : candidate),
+      analysisHistory: recordCurrentAnalysis(state, {
+        label: 'Style layer',
+        coalesceKey: `layer:${layerId}:visualisation`,
+      }),
+    };
+  }),
 
-  clearLayerVisualisation: (layerId) => set((state) => ({
-    mapLayers: state.mapLayers.map((layer) => {
-      if (layer.id !== layerId) return layer;
-      if (!layer.visualisation && !layer.legend) return layer;
-      const { visualisation: _visualisation, legend: _legend, ...rest } = layer;
-      return { ...rest, styleVersion: layer.styleVersion + 1 };
-    }),
-  })),
+  clearLayerVisualisation: (layerId) => set((state) => {
+    const layer = state.mapLayers.find((candidate) => candidate.id === layerId);
+    if (!layer?.visualisation && !layer?.legend) return state;
+    return {
+      mapLayers: state.mapLayers.map((candidate) => {
+        if (candidate.id !== layerId) return candidate;
+        const { visualisation: _visualisation, legend: _legend, ...rest } = candidate;
+        return { ...rest, styleVersion: candidate.styleVersion + 1 };
+      }),
+      analysisHistory: recordCurrentAnalysis(state, {
+        label: 'Clear layer style',
+      }),
+    };
+  }),
 
   reorderMapLayer: (layerId, targetIndex) => set((state) => {
     const sourceIndex = state.mapLayers.findIndex((layer) => layer.id === layerId);
     if (sourceIndex < 0) return {};
+    const boundedTarget = Math.max(0, Math.min(targetIndex, state.mapLayers.length - 1));
+    if (sourceIndex === boundedTarget) return state;
     const nextLayers = [...state.mapLayers];
     const [layer] = nextLayers.splice(sourceIndex, 1);
-    nextLayers.splice(Math.max(0, Math.min(targetIndex, nextLayers.length)), 0, layer);
-    return { mapLayers: nextLayers };
+    nextLayers.splice(Math.max(0, Math.min(boundedTarget, nextLayers.length)), 0, layer);
+    return {
+      mapLayers: nextLayers,
+      analysisHistory: recordCurrentAnalysis(state, {
+        label: 'Reorder layers',
+      }),
+    };
   }),
 
   setHoveredFeature: (layerId, featureId) => set((state) => {
-    const current = state.visualAnalytics.layers[layerId] || { selectedFeatureIds: [], filters: [] };
+    const current = state.visualAnalytics.datasets[layerId] || { selectedFeatureIds: [], filters: [] };
     return {
       visualAnalytics: {
         ...state.visualAnalytics,
-        layers: {
-          ...state.visualAnalytics.layers,
+        datasets: {
+          ...state.visualAnalytics.datasets,
           [layerId]: {
             ...current,
             hoveredFeatureId: featureId || undefined,
@@ -596,12 +862,12 @@ export const useStore = create<AppState>()(persist((set, get) => ({
   }),
 
   setHighlightedFeatures: (layerId, featureIds) => set((state) => {
-    const current = state.visualAnalytics.layers[layerId] || { selectedFeatureIds: [], filters: [] };
+    const current = state.visualAnalytics.datasets[layerId] || { selectedFeatureIds: [], filters: [] };
     return {
       visualAnalytics: {
         ...state.visualAnalytics,
-        layers: {
-          ...state.visualAnalytics.layers,
+        datasets: {
+          ...state.visualAnalytics.datasets,
           [layerId]: {
             ...current,
             highlightedFeatureIds: featureIds,
@@ -612,7 +878,7 @@ export const useStore = create<AppState>()(persist((set, get) => ({
   }),
 
   toggleSelectedFeature: (layerId, featureId) => set((state) => {
-    const current = state.visualAnalytics.layers[layerId] || { selectedFeatureIds: [], filters: [] };
+    const current = state.visualAnalytics.datasets[layerId] || { selectedFeatureIds: [], filters: [] };
     const selected = new Set(current.selectedFeatureIds);
     if (selected.has(featureId)) {
       selected.delete(featureId);
@@ -623,102 +889,295 @@ export const useStore = create<AppState>()(persist((set, get) => ({
       selectedLayerId: layerId,
       visualAnalytics: {
         ...state.visualAnalytics,
-        layers: {
-          ...state.visualAnalytics.layers,
+        datasets: {
+          ...state.visualAnalytics.datasets,
           [layerId]: {
             ...current,
             selectedFeatureIds: [...selected],
           },
         },
       },
+      analysisHistory: recordCurrentAnalysis(state, {
+        label: 'Change selection',
+      }),
     };
   }),
 
   setFeatureSelection: (layerId, featureIds) => set((state) => {
-    const current = state.visualAnalytics.layers[layerId] || { selectedFeatureIds: [], filters: [] };
+    const current = state.visualAnalytics.datasets[layerId] || { selectedFeatureIds: [], filters: [] };
     const selectedFeatureIds = [...new Set(featureIds.map(String).filter(Boolean))];
+    if (sameJson(current.selectedFeatureIds, selectedFeatureIds)) return state;
     return {
       visualAnalytics: {
         ...state.visualAnalytics,
-        layers: {
-          ...state.visualAnalytics.layers,
+        datasets: {
+          ...state.visualAnalytics.datasets,
           [layerId]: {
             ...current,
             selectedFeatureIds,
           },
         },
       },
+      analysisHistory: recordCurrentAnalysis(state, {
+        label: 'Change selection',
+      }),
     };
   }),
 
   clearFeatureSelection: (layerId) => set((state) => {
-    const current = state.visualAnalytics.layers[layerId] || { selectedFeatureIds: [], filters: [] };
+    const current = state.visualAnalytics.datasets[layerId] || { selectedFeatureIds: [], filters: [] };
+    if (!current.selectedFeatureIds.length) return state;
     return {
       visualAnalytics: {
         ...state.visualAnalytics,
-        layers: {
-          ...state.visualAnalytics.layers,
+        datasets: {
+          ...state.visualAnalytics.datasets,
           [layerId]: {
             ...current,
             selectedFeatureIds: [],
           },
         },
       },
+      analysisHistory: recordCurrentAnalysis(state, {
+        label: 'Clear selection',
+      }),
     };
   }),
 
   setLayerFilters: (layerId, filters) => set((state) => {
-    const current = state.visualAnalytics.layers[layerId] || { selectedFeatureIds: [], filters: [] };
+    const current = state.visualAnalytics.datasets[layerId] || { selectedFeatureIds: [], filters: [] };
+    if (sameJson(current.filters, filters)) return state;
     return {
       visualAnalytics: {
         ...state.visualAnalytics,
-        layers: {
-          ...state.visualAnalytics.layers,
+        datasets: {
+          ...state.visualAnalytics.datasets,
           [layerId]: {
             ...current,
             filters,
           },
         },
       },
+      analysisHistory: recordCurrentAnalysis(state, {
+        label: 'Change filters',
+        coalesceKey: `layer:${layerId}:filters`,
+      }),
     };
   }),
 
   clearLayerFilters: (layerId) => set((state) => {
-    const current = state.visualAnalytics.layers[layerId] || { selectedFeatureIds: [], filters: [] };
+    const current = state.visualAnalytics.datasets[layerId] || { selectedFeatureIds: [], filters: [] };
+    if (!current.filters.length) return state;
     return {
       visualAnalytics: {
         ...state.visualAnalytics,
-        layers: {
-          ...state.visualAnalytics.layers,
+        datasets: {
+          ...state.visualAnalytics.datasets,
           [layerId]: {
             ...current,
             filters: [],
           },
         },
       },
+      analysisHistory: recordCurrentAnalysis(state, {
+        label: 'Clear filters',
+      }),
     };
   }),
 
   addChart: (chart) => set((state) => ({
     visualAnalytics: {
       ...state.visualAnalytics,
-      charts: [...state.visualAnalytics.charts, chart],
+      charts: [...state.visualAnalytics.charts, { ...chart, source: chartDatasetSource(chart) }],
+    },
+    analysisHistory: recordCurrentAnalysis(state, {
+      label: 'Add chart',
+    }),
+  })),
+
+  updateChart: (chartId, patch) => set((state) => {
+    const chart = state.visualAnalytics.charts.find((candidate) => candidate.id === chartId);
+    if (!chart) return state;
+    const next = { ...chart, ...patch };
+    if (sameJson(chart, next)) return state;
+    return {
+      visualAnalytics: {
+        ...state.visualAnalytics,
+        charts: state.visualAnalytics.charts.map((candidate) => candidate.id === chartId ? next : candidate),
+      },
+      analysisHistory: recordCurrentAnalysis(state, {
+        label: 'Edit chart',
+        coalesceKey: `chart:${chartId}:edit`,
+      }),
+    };
+  }),
+
+  removeChart: (chartId) => set((state) => {
+    if (!state.visualAnalytics.charts.some((chart) => chart.id === chartId)) return state;
+    return {
+      visualAnalytics: {
+        ...state.visualAnalytics,
+        charts: state.visualAnalytics.charts.filter((chart) => chart.id !== chartId),
+      },
+      analysisHistory: recordCurrentAnalysis(state, {
+        label: 'Remove chart',
+      }),
+    };
+  }),
+
+  addKpi: (kpi) => set((state) => {
+    if ((!state.datasetRegistry[kpi.datasetId] && !state.mapLayers.some((layer) => layer.id === kpi.datasetId)) || state.visualAnalytics.kpis.some((item) => item.id === kpi.id)) return state;
+    return {
+      visualAnalytics: { ...state.visualAnalytics, kpis: [...state.visualAnalytics.kpis, { ...kpi, source: kpiDatasetSource(kpi) }] },
+      analysisHistory: recordCurrentAnalysis(state, { label: 'Pin metric' }),
+    };
+  }),
+
+  updateKpi: (kpiId, patch) => set((state) => {
+    const kpi = state.visualAnalytics.kpis.find((item) => item.id === kpiId);
+    if (!kpi) return state;
+    const next = { ...kpi, ...patch };
+    if (sameJson(kpi, next)) return state;
+    return {
+      visualAnalytics: { ...state.visualAnalytics, kpis: state.visualAnalytics.kpis.map((item) => item.id === kpiId ? next : item) },
+      analysisHistory: recordCurrentAnalysis(state, { label: 'Edit metric', coalesceKey: `kpi:${kpiId}:edit` }),
+    };
+  }),
+
+  removeKpi: (kpiId) => set((state) => {
+    if (!state.visualAnalytics.kpis.some((item) => item.id === kpiId)) return state;
+    return {
+      visualAnalytics: { ...state.visualAnalytics, kpis: state.visualAnalytics.kpis.filter((item) => item.id !== kpiId) },
+      analysisHistory: recordCurrentAnalysis(state, { label: 'Remove metric' }),
+    };
+  }),
+
+  reorderKpi: (kpiId, targetIndex) => set((state) => {
+    const sourceIndex = state.visualAnalytics.kpis.findIndex((item) => item.id === kpiId);
+    if (sourceIndex < 0) return state;
+    const next = [...state.visualAnalytics.kpis];
+    const [kpi] = next.splice(sourceIndex, 1);
+    next.splice(Math.max(0, Math.min(targetIndex, next.length)), 0, kpi);
+    if (sameJson(next, state.visualAnalytics.kpis)) return state;
+    return {
+      visualAnalytics: { ...state.visualAnalytics, kpis: next },
+      analysisHistory: recordCurrentAnalysis(state, { label: 'Reorder metrics' }),
+    };
+  }),
+
+  addCohort: (cohort) => set((state) => {
+    if (state.visualAnalytics.cohorts.some((item) => item.id === cohort.id)) return state;
+    return {
+      visualAnalytics: { ...state.visualAnalytics, cohorts: [...state.visualAnalytics.cohorts, cohort] },
+      analysisHistory: recordCurrentAnalysis(state, { label: 'Save cohort' }),
+    };
+  }),
+
+  updateCohort: (cohortId, patch) => set((state) => {
+    const cohort = state.visualAnalytics.cohorts.find((item) => item.id === cohortId);
+    if (!cohort) return state;
+    const next = { ...cohort, ...patch };
+    if (sameJson(cohort, next)) return state;
+    return {
+      visualAnalytics: { ...state.visualAnalytics, cohorts: state.visualAnalytics.cohorts.map((item) => item.id === cohortId ? next : item) },
+      analysisHistory: recordCurrentAnalysis(state, { label: 'Edit cohort', coalesceKey: `cohort:${cohortId}:edit` }),
+    };
+  }),
+
+  duplicateCohort: (cohortId, newId = `cohort-${Date.now()}`) => set((state) => {
+    const cohort = state.visualAnalytics.cohorts.find((item) => item.id === cohortId);
+    if (!cohort || state.visualAnalytics.cohorts.some((item) => item.id === newId)) return state;
+    const duplicate = { ...cohort, id: newId, name: `${cohort.name} copy`, createdAt: Date.now() };
+    return {
+      visualAnalytics: { ...state.visualAnalytics, cohorts: [...state.visualAnalytics.cohorts, duplicate] },
+      analysisHistory: recordCurrentAnalysis(state, { label: 'Duplicate cohort' }),
+    };
+  }),
+
+  removeCohort: (cohortId) => set((state) => {
+    if (!state.visualAnalytics.cohorts.some((item) => item.id === cohortId)) return state;
+    const comparison = state.visualAnalytics.comparison;
+    return {
+      visualAnalytics: {
+        ...state.visualAnalytics,
+        cohorts: state.visualAnalytics.cohorts.filter((item) => item.id !== cohortId),
+        comparison: comparison?.cohortAId === cohortId || comparison?.cohortBId === cohortId ? undefined : comparison,
+      },
+      analysisHistory: recordCurrentAnalysis(state, { label: 'Remove cohort' }),
+    };
+  }),
+
+  setCohortComparison: (comparison) => set((state) => ({
+    visualAnalytics: { ...state.visualAnalytics, comparison },
+    analysisHistory: recordCurrentAnalysis(state, { label: comparison ? 'Compare cohorts' : 'Close cohort comparison' }),
+  })),
+
+  addBookmark: (bookmark) => set((state) => ({
+    visualAnalytics: { ...state.visualAnalytics, bookmarks: [...state.visualAnalytics.bookmarks.filter((item) => item.id !== bookmark.id), bookmark] },
+  })),
+
+  updateBookmark: (bookmarkId, patch) => set((state) => ({
+    visualAnalytics: { ...state.visualAnalytics, bookmarks: state.visualAnalytics.bookmarks.map((item) => item.id === bookmarkId ? { ...item, ...patch } : item) },
+  })),
+
+  removeBookmark: (bookmarkId) => set((state) => ({
+    visualAnalytics: { ...state.visualAnalytics, bookmarks: state.visualAnalytics.bookmarks.filter((item) => item.id !== bookmarkId) },
+  })),
+
+  restoreBookmark: (bookmarkId) => set((state) => {
+    const bookmark = state.visualAnalytics.bookmarks.find((item) => item.id === bookmarkId);
+    if (!bookmark) return state;
+    const datasetIds = new Set([...Object.keys(state.visualAnalytics.datasets), ...Object.keys(bookmark.filtersByDataset)]);
+    const datasets = Object.fromEntries([...datasetIds].map((datasetId) => {
+      const interaction = state.visualAnalytics.datasets[datasetId] || { selectedFeatureIds: [], filters: [] };
+      return [datasetId, { ...interaction, filters: bookmark.filtersByDataset[datasetId] || [] }];
+    }));
+    return {
+      selectedLayerId: bookmark.datasetId,
+      ui: { ...state.ui, mapCamera: bookmark.mapCamera },
+      visualAnalytics: {
+        ...state.visualAnalytics,
+        datasets,
+        charts: bookmark.charts,
+        kpis: bookmark.kpis,
+        cohorts: bookmark.cohorts,
+        comparison: undefined,
+      },
+      analysisHistory: recordCurrentAnalysis(state, { label: `Restore bookmark ${bookmark.name}` }),
+    };
+  }),
+
+  setDashboardTitle: (title) => set((state) => ({
+    visualAnalytics: { ...state.visualAnalytics, dashboard: { title, cards: state.visualAnalytics.dashboard?.cards || [] } },
+  })),
+
+  addDashboardCard: (card) => set((state) => ({
+    visualAnalytics: {
+      ...state.visualAnalytics,
+      dashboard: {
+        title: state.visualAnalytics.dashboard?.title || 'Analysis board',
+        cards: [...(state.visualAnalytics.dashboard?.cards || []).filter((item) => item.id !== card.id), card],
+      },
     },
   })),
 
-  updateChart: (chartId, patch) => set((state) => ({
+  updateDashboardCard: (cardId, patch) => set((state) => ({
     visualAnalytics: {
       ...state.visualAnalytics,
-      charts: state.visualAnalytics.charts.map((chart) =>
-        chart.id === chartId ? { ...chart, ...patch } : chart
-      ),
+      dashboard: {
+        title: state.visualAnalytics.dashboard?.title || 'Analysis board',
+        cards: (state.visualAnalytics.dashboard?.cards || []).map((card) => card.id === cardId ? { ...card, ...patch } : card),
+      },
     },
   })),
 
-  removeChart: (chartId) => set((state) => ({
+  removeDashboardCard: (cardId) => set((state) => ({
     visualAnalytics: {
       ...state.visualAnalytics,
-      charts: state.visualAnalytics.charts.filter((chart) => chart.id !== chartId),
+      dashboard: {
+        title: state.visualAnalytics.dashboard?.title || 'Analysis board',
+        cards: (state.visualAnalytics.dashboard?.cards || []).filter((card) => card.id !== cardId),
+      },
     },
   })),
 

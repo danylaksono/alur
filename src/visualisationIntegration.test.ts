@@ -308,31 +308,31 @@ describe('integration: visualisation pipeline', () => {
     });
 
     useStore.getState().setHoveredFeature('int-layer', 'feat-1');
-    expect(useStore.getState().visualAnalytics.layers['int-layer']?.hoveredFeatureId).toBe('feat-1');
+    expect(useStore.getState().visualAnalytics.datasets['int-layer']?.hoveredFeatureId).toBe('feat-1');
 
     useStore.getState().toggleSelectedFeature('int-layer', 'feat-1');
-    expect(useStore.getState().visualAnalytics.layers['int-layer']?.selectedFeatureIds).toContain('feat-1');
+    expect(useStore.getState().visualAnalytics.datasets['int-layer']?.selectedFeatureIds).toContain('feat-1');
 
     useStore.getState().toggleSelectedFeature('int-layer', 'feat-2');
-    expect(useStore.getState().visualAnalytics.layers['int-layer']?.selectedFeatureIds).toHaveLength(2);
+    expect(useStore.getState().visualAnalytics.datasets['int-layer']?.selectedFeatureIds).toHaveLength(2);
 
     useStore.getState().clearFeatureSelection('int-layer');
-    expect(useStore.getState().visualAnalytics.layers['int-layer']?.selectedFeatureIds).toHaveLength(0);
+    expect(useStore.getState().visualAnalytics.datasets['int-layer']?.selectedFeatureIds).toHaveLength(0);
 
     useStore.getState().setLayerFilters('int-layer', [
       { kind: 'category', field: 'borough', values: ['Camden'] },
       { kind: 'range', field: 'need', min: 10, max: 50 },
     ]);
-    const filters = useStore.getState().visualAnalytics.layers['int-layer']?.filters || [];
+    const filters = useStore.getState().visualAnalytics.datasets['int-layer']?.filters || [];
     expect(filters).toHaveLength(2);
     expect(filters[0].kind).toBe('category');
     expect(filters[1].kind).toBe('range');
 
     useStore.getState().clearLayerFilters('int-layer');
-    expect((useStore.getState().visualAnalytics.layers['int-layer']?.filters || []).length).toBe(0);
+    expect((useStore.getState().visualAnalytics.datasets['int-layer']?.filters || []).length).toBe(0);
 
     useStore.getState().setHoveredFeature('int-layer', null);
-    expect(useStore.getState().visualAnalytics.layers['int-layer']?.hoveredFeatureId).toBeUndefined();
+    expect(useStore.getState().visualAnalytics.datasets['int-layer']?.hoveredFeatureId).toBeUndefined();
   });
 
   // ── Layer management with clustering and companion layers ──
@@ -369,8 +369,8 @@ describe('integration: visualisation pipeline', () => {
     const state = useStore.getState();
     expect(state.mapLayers.find((l) => l.id === 'poly-layer')).toBeUndefined();
     expect(state.mapLayers.find((l) => l.id === 'poly-layer-dots')).toBeUndefined();
-    expect(state.visualAnalytics.layers['poly-layer']).toBeUndefined();
-    expect(state.visualAnalytics.layers['poly-layer-dots']).toBeUndefined();
+    expect(state.visualAnalytics.datasets['poly-layer']).toBeUndefined();
+    expect(state.visualAnalytics.datasets['poly-layer-dots']).toBeUndefined();
   });
 
   // ── Feature identity ──

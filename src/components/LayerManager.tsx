@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Download, Eye, EyeOff, Focus, GripVertical, Palette, Trash2, Layers } from 'lucide-react';
+import { Download, Eye, EyeOff, Focus, GripVertical, Palette, ScanSearch, Trash2, Layers } from 'lucide-react';
 import { useStore, type MapLayer } from '../store/useStore';
 import { cn } from '../utils/cn';
 import { downloadMapStyleExport } from '../utils/mapStyleExport';
@@ -34,6 +34,7 @@ export const LayerManager = ({ onEditStyle }: { onEditStyle?: (layerId: string) 
   const removeMapLayer = useStore((s) => s.removeMapLayer);
   const clearFeatureSelection = useStore((s) => s.clearFeatureSelection);
   const clearLayerFilters = useStore((s) => s.clearLayerFilters);
+  const setDatasetOverviewLayerId = useStore((s) => s.setDatasetOverviewLayerId);
   const styledLayerCount = mapLayers.filter((layer) => layer.visualisation || layer.legend || layer.color).length;
 
   const sourceName = (layer: MapLayer) => {
@@ -77,8 +78,8 @@ export const LayerManager = ({ onEditStyle }: { onEditStyle?: (layerId: string) 
               const index = mapLayers.findIndex((item) => item.id === layer.id);
               const isSelected = selectedLayerId === layer.id;
               const color = layer.color || fallbackColor(index);
-              const selectedFeatureCount = visualAnalytics.layers[layer.id]?.selectedFeatureIds.length || 0;
-              const filterCount = visualAnalytics.layers[layer.id]?.filters.length || 0;
+              const selectedFeatureCount = visualAnalytics.datasets[layer.id]?.selectedFeatureIds.length || 0;
+              const filterCount = visualAnalytics.datasets[layer.id]?.filters.length || 0;
               const isDragTarget = draggedLayerId && draggedLayerId !== layer.id;
 
               return (
@@ -159,6 +160,15 @@ export const LayerManager = ({ onEditStyle }: { onEditStyle?: (layerId: string) 
                         <Palette className="h-3.5 w-3.5" />
                       </button>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => setDatasetOverviewLayerId(layer.id)}
+                      className="rounded p-1 text-slate-500 transition-colors hover:bg-sky-50 hover:text-sky-700"
+                      title="Open dataset overview"
+                      aria-label={`Overview of ${layer.name}`}
+                    >
+                      <ScanSearch className="h-3.5 w-3.5" />
+                    </button>
                     <button
                       type="button"
                       onClick={() => toggleMapLayerVisibility(layer.id)}

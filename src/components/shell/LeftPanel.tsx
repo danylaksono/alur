@@ -1,8 +1,10 @@
+import { lazy, Suspense } from 'react';
 import { useStore } from '../../store/useStore';
-import { Chat } from '../Chat';
 import { ChartPanel } from '../Charts/ChartPanel';
 import { ErrorBoundary } from '../ErrorBoundary';
 import { LayersTab } from './LayersTab';
+
+const Chat = lazy(() => import('../Chat').then((module) => ({ default: module.Chat })));
 
 export const LeftPanel = () => {
   const activeRailTab = useStore((s) => s.ui.activeRailTab);
@@ -22,7 +24,7 @@ export const LeftPanel = () => {
         </ErrorBoundary>
       ) : (
         <ErrorBoundary name="Chat">
-          <Chat />
+          <Suspense fallback={<div className="p-4 text-xs text-slate-400" role="status">Loading copilot…</div>}><Chat /></Suspense>
         </ErrorBoundary>
       )}
     </aside>

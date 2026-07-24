@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useStore } from '../../store/useStore';
@@ -6,7 +6,6 @@ import { getBasemap } from '../../utils/basemaps';
 import { compileLayerStyle, geometryKindForLayer } from '../../utils/mapStyleCompiler';
 import { featureIdFromMapFeature } from '../../utils/featureIdentity';
 import { FEATURE_ID_PROPERTY } from '../../types/visualAnalytics';
-import type { VisualFilter } from '../../types/visualAnalytics';
 import { LegendControl } from './LegendControl';
 import { BasemapControl } from './BasemapControl';
 import { LocationSearchControl } from './LocationSearchControl';
@@ -25,6 +24,9 @@ import {
 import type { GlyphGridVisualisation } from '../../types/visualisation';
 import { requiredMapTileProperties } from '../../utils/mapTileProperties';
 import { queryLayerFeatureDetails } from '../../services/visualAnalyticsService';
+import { MapInteractionToolbar } from './MapInteractionToolbar';
+import { combineFeatureSelection, featureIdsFromRenderedFeatures, screenSelectionBox, type SelectionOperation } from '../../utils/mapSelection';
+import { applyCohortComparisonPaint, compileMapFilter } from '../../utils/mapFilterCompiler';
 
 function getLayerBounds(geojson: GeoJSON.FeatureCollection) {
   const coords: [number, number][] = [];
@@ -93,45 +95,6 @@ const popupHtml = (layerName: string, properties: Record<string, unknown> | null
     : ''}`;
 };
 
-const compileMapFilter = (filters: VisualFilter[]) => {
-  const expressions = filters.map((filter) => {
-    if (filter.kind === 'category') {
-      const categoryExpression: unknown[] = ['in', ['to-string', ['get', filter.field]], ['literal', filter.values]];
-      if (filter.includeNull) {
-        return ['any', categoryExpression, ['!', ['has', filter.field]], ['==', ['get', filter.field], null]];
-      }
-      return categoryExpression;
-    }
-
-    if (filter.kind === 'temporal') {
-      const temporalPredicates: unknown[] = [];
-      if (filter.start) temporalPredicates.push(['>=', ['to-string', ['get', filter.field]], filter.start]);
-      if (filter.end) temporalPredicates.push(['<=', ['to-string', ['get', filter.field]], filter.end]);
-      const temporalExpression = temporalPredicates.length > 1 ? ['all', ...temporalPredicates] : temporalPredicates[0];
-      if (filter.includeNull) {
-        return temporalExpression
-          ? ['any', temporalExpression, ['!', ['has', filter.field]], ['==', ['get', filter.field], null]]
-          : ['any', ['!', ['has', filter.field]], ['==', ['get', filter.field], null]];
-      }
-      return temporalExpression;
-    }
-
-    const rangePredicates: unknown[] = [];
-    if (filter.min !== undefined) rangePredicates.push(['>=', ['to-number', ['get', filter.field]], filter.min]);
-    if (filter.max !== undefined) rangePredicates.push(['<=', ['to-number', ['get', filter.field]], filter.max]);
-    const rangeExpression = rangePredicates.length > 1 ? ['all', ...rangePredicates] : rangePredicates[0];
-    if (filter.includeNull) {
-      return rangeExpression
-        ? ['any', rangeExpression, ['!', ['has', filter.field]], ['==', ['get', filter.field], null]]
-        : ['any', ['!', ['has', filter.field]], ['==', ['get', filter.field], null]];
-    }
-    return rangeExpression;
-  }).filter(Boolean);
-
-  if (!expressions.length) return null;
-  return expressions.length === 1 ? expressions[0] : ['all', ...expressions];
-};
-
 const optionalLayerProps = (props: Record<string, unknown>) =>
   Object.fromEntries(Object.entries(props).filter(([, value]) => value !== undefined));
 
@@ -148,6 +111,7 @@ export const MapView = () => {
   const styleReady = useRef(false);
   const glyphLayers = useRef<Map<string, { layer: ScreenGridLayerGL<GlyphPoint, number, number[]>; key: string }>>(new Map());
   const glyphPointCache = useRef<Map<string, { key: string; promise: Promise<GlyphPoint[]> }>>(new Map());
+  const selectionDrag = useRef<{ start: { x: number; y: number }; operation: SelectionOperation } | null>(null);
   type LayerEventName = 'click' | 'mousemove' | 'mouseleave';
   const layerEventHandlers = useRef<Map<string, Array<{ event: LayerEventName; mapLayerId: string; fn: (...args: any[]) => void }>>>(new Map());
 
@@ -162,6 +126,12 @@ export const MapView = () => {
   const setHoveredFeature = useStore((s) => s.setHoveredFeature);
   const toggleSelectedFeature = useStore((s) => s.toggleSelectedFeature);
   const setFeatureSelection = useStore((s) => s.setFeatureSelection);
+  const focusLayer = useStore((s) => s.focusLayer);
+  const addToast = useStore((s) => s.addToast);
+  const mapCamera = useStore((s) => s.ui.mapCamera);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectionBox, setSelectionBox] = useState<[[number, number], [number, number]] | null>(null);
+  const [coordinates, setCoordinates] = useState('');
   const visibleLegends = mapLayers
     .filter((layer) => layer.visible && layer.legend)
     .map((layer) => ({
@@ -170,7 +140,7 @@ export const MapView = () => {
       legend: layer.legend!,
     }));
   const layerFilterKey = JSON.stringify(
-    Object.fromEntries(mapLayers.map((layer) => [layer.id, visualAnalytics.layers[layer.id]?.filters || []])),
+    Object.fromEntries(mapLayers.map((layer) => [layer.id, visualAnalytics.datasets[layer.id]?.filters || []])),
   );
 
   // Init map once
@@ -181,10 +151,17 @@ export const MapView = () => {
       container: mapContainer.current,
       style: getBasemap(selectedBasemapId).styleUrl,
       // Blank-canvas start: world view until the first layer focuses the map.
-      center: [0, 20],
-      zoom: 1.5,
+      center: [mapCamera.longitude, mapCamera.latitude],
+      zoom: mapCamera.zoom,
+      bearing: mapCamera.bearing,
+      pitch: mapCamera.pitch,
     });
     m.addControl(new maplibregl.NavigationControl(), 'top-right');
+    m.addControl(new maplibregl.FullscreenControl(), 'top-right');
+    m.addControl(new maplibregl.ScaleControl({ unit: 'metric', maxWidth: 120 }), 'bottom-right');
+    if (typeof navigator !== 'undefined' && navigator.geolocation) {
+      m.addControl(new maplibregl.GeolocateControl({ positionOptions: { enableHighAccuracy: false }, trackUserLocation: false }), 'top-right');
+    }
     // Fires on the initial style load and after every setStyle — unlike
     // isStyleLoaded(), it is not perturbed by ongoing tile loads.
     m.on('style.load', () => { styleReady.current = true; });
@@ -204,6 +181,27 @@ export const MapView = () => {
       requestAnimationFrame(() => map.current?.resize());
     });
     resizeObserver.observe(mapContainer.current);
+    let coordinateFrame = 0;
+    const updateCoordinates = (event: maplibregl.MapMouseEvent) => {
+      cancelAnimationFrame(coordinateFrame);
+      coordinateFrame = requestAnimationFrame(() => {
+        setCoordinates(`${event.lngLat.lng.toFixed(5)}, ${event.lngLat.lat.toFixed(5)}`);
+      });
+    };
+    const clearCoordinates = () => setCoordinates('');
+    m.on('mousemove', updateCoordinates);
+    m.on('mouseout', clearCoordinates);
+    const storeCamera = () => {
+      const center = m.getCenter();
+      useStore.getState().setMapCamera({
+        longitude: center.lng,
+        latitude: center.lat,
+        zoom: m.getZoom(),
+        bearing: m.getBearing(),
+        pitch: m.getPitch(),
+      });
+    };
+    m.on('moveend', storeCamera);
 
     // Per-layer restyle indicator: mark while a layer's source loads tiles,
     // clear everything once the map settles. setLayerRestyling suppresses
@@ -228,6 +226,10 @@ export const MapView = () => {
 
     return () => {
       resizeObserver.disconnect();
+      cancelAnimationFrame(coordinateFrame);
+      m.off('mousemove', updateCoordinates);
+      m.off('mouseout', clearCoordinates);
+      m.off('moveend', storeCamera);
       locationMarker.current?.remove();
       locationMarker.current = null;
       m.remove();
@@ -235,6 +237,118 @@ export const MapView = () => {
       popup.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    const m = map.current;
+    if (!m) return;
+    const center = m.getCenter();
+    if (
+      Math.abs(center.lng - mapCamera.longitude) < 1e-7
+      && Math.abs(center.lat - mapCamera.latitude) < 1e-7
+      && Math.abs(m.getZoom() - mapCamera.zoom) < 1e-7
+      && Math.abs(m.getBearing() - mapCamera.bearing) < 1e-7
+      && Math.abs(m.getPitch() - mapCamera.pitch) < 1e-7
+    ) return;
+    m.jumpTo({
+      center: [mapCamera.longitude, mapCamera.latitude],
+      zoom: mapCamera.zoom,
+      bearing: mapCamera.bearing,
+      pitch: mapCamera.pitch,
+    });
+  }, [mapCamera]);
+
+  useEffect(() => {
+    const m = map.current;
+    if (!m) return;
+    const canvas = m.getCanvas();
+    if (!selectionMode) {
+      selectionDrag.current = null;
+      setSelectionBox(null);
+      canvas.style.cursor = '';
+      if (!m.dragPan.isEnabled()) m.dragPan.enable();
+      return;
+    }
+
+    popup.current?.remove();
+    m.dragPan.disable();
+    canvas.style.cursor = 'crosshair';
+
+    const pointForEvent = (event: PointerEvent) => {
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: Math.max(0, Math.min(rect.width, event.clientX - rect.left)),
+        y: Math.max(0, Math.min(rect.height, event.clientY - rect.top)),
+      };
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const start = pointForEvent(event);
+      selectionDrag.current = {
+        start,
+        operation: event.altKey ? 'subtract' : event.shiftKey ? 'add' : 'replace',
+      };
+      canvas.setPointerCapture(event.pointerId);
+      setSelectionBox(screenSelectionBox(start, start));
+    };
+    const onPointerMove = (event: PointerEvent) => {
+      const drag = selectionDrag.current;
+      if (!drag) return;
+      event.preventDefault();
+      setSelectionBox(screenSelectionBox(drag.start, pointForEvent(event)));
+    };
+    const finishSelection = (event: PointerEvent) => {
+      const drag = selectionDrag.current;
+      selectionDrag.current = null;
+      if (!drag) return;
+      const end = pointForEvent(event);
+      const box = screenSelectionBox(drag.start, end);
+      setSelectionBox(null);
+      if (Math.abs(box[1][0] - box[0][0]) < 3 || Math.abs(box[1][1] - box[0][1]) < 3) return;
+
+      const state = useStore.getState();
+      const layer = state.mapLayers.find((candidate) => candidate.id === state.selectedLayerId)
+        || state.mapLayers.find((candidate) => candidate.visible);
+      if (!layer) return;
+      const mapLayerId = `input-layer-${layer.id}`;
+      if (!m.getLayer(mapLayerId)) return;
+      const features = m.queryRenderedFeatures(box, { layers: [mapLayerId] });
+      const incoming = featureIdsFromRenderedFeatures(features);
+      if (incoming.length > 25_000) {
+        addToast({ type: 'warning', message: 'That box contains more than 25,000 visible features. Zoom in and select a smaller area.' });
+        return;
+      }
+      const current = state.visualAnalytics.datasets[layer.id]?.selectedFeatureIds || [];
+      setFeatureSelection(layer.id, combineFeatureSelection(current, incoming, drag.operation));
+      selectLayer(layer.id);
+      addToast({
+        type: 'info',
+        message: incoming.length
+          ? `${incoming.length.toLocaleString()} visible features ${drag.operation === 'replace' ? 'selected' : drag.operation === 'add' ? 'added' : 'removed'}.`
+          : 'No selectable visible features were found in that box.',
+      });
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setSelectionMode(false);
+    };
+
+    canvas.addEventListener('pointerdown', onPointerDown, true);
+    canvas.addEventListener('pointermove', onPointerMove, true);
+    canvas.addEventListener('pointerup', finishSelection, true);
+    canvas.addEventListener('pointercancel', finishSelection, true);
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      canvas.removeEventListener('pointerdown', onPointerDown, true);
+      canvas.removeEventListener('pointermove', onPointerMove, true);
+      canvas.removeEventListener('pointerup', finishSelection, true);
+      canvas.removeEventListener('pointercancel', finishSelection, true);
+      window.removeEventListener('keydown', onKeyDown);
+      selectionDrag.current = null;
+      canvas.style.cursor = '';
+      if (!m.dragPan.isEnabled()) m.dragPan.enable();
+    };
+  }, [selectionMode, addToast, selectLayer, setFeatureSelection]);
 
   useEffect(() => {
     const m = map.current;
@@ -321,7 +435,7 @@ export const MapView = () => {
         const sourceId = `input-source-${layer.id}`;
         const layerId = `input-layer-${layer.id}`;
         const layerGeoKind = geometryKindForLayer(layer);
-        const layerFilters = visualAnalytics.layers[layer.id]?.filters || [];
+        const layerFilters = visualAnalytics.datasets[layer.id]?.filters || [];
         const baseMvtSource = mvtSourceForLayer(layer);
         const tileFilterFields = new Set(baseMvtSource?.propertyColumns || []);
         const tileFilters = layerFilters.filter((filter) => tileFilterFields.has(filter.field));
@@ -467,13 +581,16 @@ export const MapView = () => {
 
           if (m.getLayer(layerId)) m.removeLayer(layerId);
           const compiled = compileLayerStyle(layer, { index: idx });
+          const comparisonPaint = layer.id === visualAnalytics.comparison?.datasetId
+            ? applyCohortComparisonPaint(compiled.paint, visualAnalytics.cohorts, visualAnalytics.comparison, visualAnalytics.datasets[layer.id]?.filters || [])
+            : compiled.paint;
           m.addLayer({
             id: layerId,
             type: compiled.type as any,
             source: sourceId,
             ...(sourceLayer ? { 'source-layer': sourceLayer } : {}),
             filter: ['!', ['has', 'point_count']],
-            paint: compiled.paint as any,
+            paint: comparisonPaint as any,
             ...optionalLayerProps({ layout: compiled.layout as any }),
           } as any);
 
@@ -508,12 +625,15 @@ export const MapView = () => {
         } else {
           if (m.getLayer(layerId)) m.removeLayer(layerId);
           const compiled = compileLayerStyle(layer, { index: idx });
+          const comparisonPaint = layer.id === visualAnalytics.comparison?.datasetId
+            ? applyCohortComparisonPaint(compiled.paint, visualAnalytics.cohorts, visualAnalytics.comparison, visualAnalytics.datasets[layer.id]?.filters || [])
+            : compiled.paint;
           m.addLayer({
             id: layerId,
             type: compiled.type as any,
             source: sourceId,
             ...(sourceLayer ? { 'source-layer': sourceLayer } : {}),
-            paint: compiled.paint as any,
+            paint: comparisonPaint as any,
             ...optionalLayerProps({ layout: compiled.layout as any }),
           } as any);
 
@@ -554,7 +674,7 @@ export const MapView = () => {
           // base layer keeps feature clicks from competing with cell clicks.
           const glyphActive = layer.visualisation?.kind === 'glyph_grid';
           m.setLayoutProperty(layerId, 'visibility', layer.visible && !glyphActive ? 'visible' : 'none');
-          m.setFilter(layerId, compileMapFilter(layerFilters) as any);
+          m.setFilter(layerId, (layer.id === visualAnalytics.comparison?.datasetId ? null : compileMapFilter(layerFilters)) as any);
         }
 
         if (layer.sourceNodeId) {
@@ -601,7 +721,7 @@ export const MapView = () => {
       });
 
       for (const [layerId, { layer, vis }] of wanted) {
-        const filters = visualAnalytics.layers[layerId]?.filters || [];
+        const filters = visualAnalytics.datasets[layerId]?.filters || [];
         const dataKey = glyphPointDataKey({ layer, filters, vis });
         const key = JSON.stringify({ dataKey, vis });
         const existing = glyphLayers.current.get(layerId);
@@ -663,7 +783,7 @@ export const MapView = () => {
       const vectorSourceLayer = mvtSourceForLayer(layer)?.layerName;
 
       const previous = previousFeatureState.current.get(layer.id) || { highlightedFeatureIds: new Set<string>(), selectedFeatureIds: new Set<string>() };
-      const current = visualAnalytics.layers[layer.id] || { selectedFeatureIds: [] };
+      const current = visualAnalytics.datasets[layer.id] || { selectedFeatureIds: [] };
       const nextSelected = new Set(current.selectedFeatureIds);
       const nextHighlighted = new Set(current.highlightedFeatureIds || []);
 
@@ -715,7 +835,7 @@ export const MapView = () => {
       const glyphActive = layer.visualisation?.kind === 'glyph_grid';
 
       m.setLayoutProperty(layerId, 'visibility', layer.visible && !glyphActive ? 'visible' : 'none');
-      m.setFilter(layerId, compileMapFilter(visualAnalytics.layers[layer.id]?.filters || []) as any);
+      m.setFilter(layerId, (layer.id === visualAnalytics.comparison?.datasetId ? null : compileMapFilter(visualAnalytics.datasets[layer.id]?.filters || [])) as any);
 
       const isSelected = layer.id === activeLayerId;
       const compiled = compileLayerStyle(layer, {
@@ -723,13 +843,16 @@ export const MapView = () => {
         selected: isSelected,
         inactive: isInactive,
       });
+      const comparisonPaint = layer.id === visualAnalytics.comparison?.datasetId
+        ? applyCohortComparisonPaint(compiled.paint, visualAnalytics.cohorts, visualAnalytics.comparison, visualAnalytics.datasets[layer.id]?.filters || [])
+        : compiled.paint;
 
       // A visualisation change can also change the layer TYPE (e.g. fill →
       // fill-extrusion). Setting the new type's paint keys on the old layer
       // throws inside MapLibre — skip; the sync effect rebuilds the layer.
       if (m.getLayer(layerId)?.type !== compiled.type) return;
 
-      Object.entries(compiled.paint).forEach(([key, value]) => {
+      Object.entries(comparisonPaint).forEach(([key, value]) => {
         m.setPaintProperty(layerId, key, value as any);
       });
 
@@ -809,6 +932,34 @@ export const MapView = () => {
       <LocationSearchControl onSelect={focusSearchResult} onClear={clearSearchResult} />
       <LegendControl legends={visibleLegends} />
       <BasemapControl />
+      <MapInteractionToolbar
+        selectionMode={selectionMode}
+        hasLayer={mapLayers.some((layer) => layer.visible)}
+        coordinates={coordinates}
+        onToggleSelection={() => setSelectionMode((current) => !current)}
+        onHome={() => {
+          const layerId = selectedLayerId || mapLayers.find((layer) => layer.visible)?.id;
+          if (layerId) focusLayer(layerId);
+        }}
+        onCopyCoordinates={() => {
+          if (!coordinates) return;
+          void navigator.clipboard?.writeText(coordinates).then(
+            () => addToast({ type: 'success', message: 'Coordinates copied.' }),
+            () => addToast({ type: 'warning', message: 'Could not copy coordinates.' }),
+          );
+        }}
+      />
+      {selectionBox && (
+        <div
+          className="pointer-events-none absolute z-20 border border-orange-500 bg-orange-300/20"
+          style={{
+            left: selectionBox[0][0],
+            top: selectionBox[0][1],
+            width: selectionBox[1][0] - selectionBox[0][0],
+            height: selectionBox[1][1] - selectionBox[0][1],
+          }}
+        />
+      )}
     </div>
   );
 };

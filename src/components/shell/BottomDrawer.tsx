@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, Database, Maximize2, Minimize2, Terminal, Workflow } from 'lucide-react';
 import { useStore, type DrawerTab } from '../../store/useStore';
 import { useAttributeTable } from '../../hooks/useAttributeTable';
-import { WorkflowTab } from './WorkflowTab';
 import { TableTab } from './TableTab';
 import { SqlTab } from './SqlTab';
 import { cn } from '../../utils/cn';
+
+const WorkflowTab = lazy(() => import('./WorkflowTab').then((module) => ({ default: module.WorkflowTab })));
 
 const DRAWER_TABS: Array<{ id: DrawerTab; icon: typeof Workflow; label: string }> = [
   { id: 'workflow', icon: Workflow, label: 'Workflow' },
@@ -112,7 +113,7 @@ export const BottomDrawer = () => {
       {isOpen && (
         <div className="min-h-0 flex-1 overflow-hidden">
           {activeDrawerTab === 'workflow' ? (
-            <WorkflowTab />
+            <Suspense fallback={<div className="p-4 text-xs text-slate-400" role="status">Loading workflow editor…</div>}><WorkflowTab /></Suspense>
           ) : activeDrawerTab === 'table' ? (
             <TableTab table={table} />
           ) : (

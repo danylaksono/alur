@@ -19,7 +19,7 @@ export const ContextInspector = () => {
     () => mapLayers.find((layer) => layer.id === selectedLayerId) || null,
     [mapLayers, selectedLayerId]
   );
-  const layerState = selectedLayer ? visualAnalytics.layers[selectedLayer.id] : undefined;
+  const layerState = selectedLayer ? visualAnalytics.datasets[selectedLayer.id] : undefined;
   const selectedFeatureIds = layerState?.selectedFeatureIds || [];
   const filters = layerState?.filters || [];
 

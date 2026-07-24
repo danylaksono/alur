@@ -19,4 +19,23 @@ describe('visual filter SQL compiler', () => {
       { kind: 'temporal', field: 'created_at', start: '2026-01-01', end: '2026-01-31' },
     ])).toBe('WHERE (TRY_CAST("created_at" AS TIMESTAMP) >= TRY_CAST(\'2026-01-01\' AS TIMESTAMP) AND TRY_CAST("created_at" AS TIMESTAMP) <= TRY_CAST(\'2026-01-31\' AS TIMESTAMP))');
   });
+
+  it('compiles case-insensitive text and boolean filters', () => {
+    expect(compileVisualFiltersWhereClause([
+      { kind: 'text', field: 'name', operator: 'contains', value: "King's", caseSensitive: false },
+      { kind: 'boolean', field: 'active', value: true },
+    ])).toBe('WHERE contains(lower(CAST("name" AS VARCHAR)), \'king\'\'s\') AND TRY_CAST("active" AS BOOLEAN) IS TRUE');
+  });
+
+  it('compiles exclusion with deterministic null behaviour', () => {
+    expect(compileVisualFiltersWhereClause([
+      { kind: 'category', field: 'status', values: ['closed'], mode: 'exclude' },
+    ])).toBe('WHERE (NOT COALESCE((CAST("status" AS VARCHAR) = \'closed\'), FALSE))');
+  });
+
+  it('compiles explicit null filters', () => {
+    expect(compileVisualFiltersWhereClause([
+      { kind: 'null', field: 'score', isNull: false },
+    ])).toBe('WHERE "score" IS NOT NULL');
+  });
 });

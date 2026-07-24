@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { BarChart3, Donut, Loader2, Plus, RotateCw, Trash2, X } from 'lucide-react';
+import { BarChart3, Donut, FileImage, FileSpreadsheet, ImageDown, Loader2, Plus, RotateCw, Trash2, X } from 'lucide-react';
 import { useStore, type MapLayer } from '../../store/useStore';
 import {
   describeChartTable,
@@ -7,12 +7,25 @@ import {
   queryChartFacetValues,
   queryLayerChart,
   queryLayerScatter,
+  queryLayerTemporalChart,
   queryTableChart,
   queryTableScatter,
+  queryTableTemporalChart,
   visualChartFilterKey,
 } from '../../services/visualAnalyticsService';
 import { CATEGORICAL_PALETTE, SEQUENTIAL_PALETTES } from '../../utils/palettes';
 import { cn } from '../../utils/cn';
+import { buildDefaultChartForDataset } from '../../utils/analyticsCommands';
+import { metadataForLayer } from '../../utils/datasetMetadata';
+import { chartDatasetId, chartDatasetSource } from '../../utils/datasetSource';
+import { ensureStableTableDataset } from '../../services/datasetService';
+import type { DatasetDescriptor } from '../../types/datasets';
+import {
+  downloadChartCsv,
+  downloadChartPng,
+  downloadChartSvg,
+  type ChartExportData,
+} from '../../services/chartExportService';
 import type {
   VisualChartAggregation,
   VisualChartDatum,
@@ -21,6 +34,8 @@ import type {
   VisualChartType,
   VisualFilter,
   VisualScatterResult,
+  VisualTemporalResult,
+  TimeGrain,
 } from '../../types/visualAnalytics';
 
 const EXCLUDED_FIELDS = new Set(['geojson', 'geometry', 'geom', 'wkb_geometry', '__alur_tile_geom', '_alur_feature_id']);
@@ -31,6 +46,8 @@ const CHART_TYPES: Array<{ id: VisualChartType; label: string }> = [
   { id: 'rose', label: 'Rose' },
   { id: 'histogram', label: 'Histogram' },
   { id: 'scatter', label: 'Scatter' },
+  { id: 'line', label: 'Line' },
+  { id: 'area', label: 'Area' },
 ];
 
 const AGGREGATIONS: Array<{ id: VisualChartAggregation; label: string }> = [
@@ -49,6 +66,11 @@ const PALETTES = [
 const isNumericType = (type: string) =>
   ['tinyint', 'smallint', 'integer', 'bigint', 'hugeint', 'utinyint', 'usmallint', 'uinteger', 'ubigint', 'float', 'double', 'decimal', 'real']
     .some((item) => type.toLowerCase().includes(item));
+
+const isTemporalType = (type: string) =>
+  ['date', 'time', 'timestamp'].some((item) => type.toLowerCase().includes(item));
+
+const isTemporalChart = (type: VisualChartType): type is 'line' | 'area' => type === 'line' || type === 'area';
 
 type ChartField = { name: string; type: string };
 
@@ -71,22 +93,6 @@ const numericFieldsForLayer = (layer: MapLayer | undefined) => {
 
 const formatNumber = (value: number) =>
   value.toLocaleString(undefined, { maximumFractionDigits: value >= 100 ? 0 : 2 });
-
-const defaultChartForLayer = (layer: MapLayer): VisualChartSpec | null => {
-  const fields = fieldsForLayer(layer);
-  if (!fields.length) return null;
-  return {
-    id: `chart-${Date.now()}`,
-    title: `${fields[0].name} distribution`,
-    layerId: layer.id,
-    type: 'bar',
-    dimensionField: fields[0].name,
-    measureField: numericFieldsForLayer(layer)[0]?.name,
-    aggregation: 'count',
-    paletteId: 'categorical',
-    maxCategories: 8,
-  };
-};
 
 /** Whether a datum's mark should render as selected given the layer's active filters. */
 const isDatumActive = (datum: VisualChartDatum, filters: VisualFilter[]) => {
@@ -300,6 +306,18 @@ const Histogram = ({
         ref={svgRef}
         viewBox={`0 0 ${HISTOGRAM_WIDTH} ${HISTOGRAM_HEIGHT}`}
         className="w-full cursor-crosshair touch-none select-none"
+        role="img"
+        tabIndex={0}
+        aria-label={`Histogram with ${data.length} bins. Use left and right arrow keys to select a bin; Escape clears the range.`}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') { onClearRange(); return; }
+          if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+          event.preventDefault();
+          const current = brush ? bins.findIndex((bin) => bin.min === brush.min && bin.max === brush.max) : -1;
+          const next = current < 0 ? 0 : Math.max(0, Math.min(bins.length - 1, current + (event.key === 'ArrowRight' ? 1 : -1)));
+          const bin = bins[next];
+          if (bin?.min !== undefined && bin?.max !== undefined) onBrushRange(bin.min, bin.max);
+        }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
@@ -596,12 +614,190 @@ const RadialChart = ({
   );
 };
 
+const TEMPORAL_WIDTH = 300;
+const TEMPORAL_HEIGHT = 142;
+const TEMPORAL_PADDING = { top: 10, right: 8, bottom: 22, left: 34 };
+
+const TemporalChart = ({
+  result,
+  type,
+  showPoints,
+  connectMissing,
+  brush,
+  onBrush,
+  onClear,
+}: {
+  result: VisualTemporalResult;
+  type: 'line' | 'area';
+  showPoints: boolean;
+  connectMissing: boolean;
+  brush: { start: string; end: string } | null;
+  onBrush: (start: string, end: string) => void;
+  onClear: () => void;
+}) => {
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const [drag, setDrag] = useState<{ start: number; current: number } | null>(null);
+  const [active, setActive] = useState<{ series: string; point: VisualTemporalResult['series'][number]['points'][number] } | null>(null);
+  const points = result.series[0]?.points || [];
+  const plotWidth = TEMPORAL_WIDTH - TEMPORAL_PADDING.left - TEMPORAL_PADDING.right;
+  const plotHeight = TEMPORAL_HEIGHT - TEMPORAL_PADDING.top - TEMPORAL_PADDING.bottom;
+  const values = result.series.flatMap((series) => series.points.flatMap((point) => [point.value, point.totalValue])).filter((value): value is number => value !== null && Number.isFinite(value));
+  const yMin = Math.min(0, ...values);
+  const yMax = Math.max(1, ...values);
+  const ySpan = yMax - yMin || 1;
+  const xAt = (index: number) => TEMPORAL_PADDING.left + (points.length <= 1 ? plotWidth / 2 : (index / (points.length - 1)) * plotWidth);
+  const yAt = (value: number) => TEMPORAL_PADDING.top + (1 - (value - yMin) / ySpan) * plotHeight;
+  const indexAtPointer = (event: React.PointerEvent<SVGSVGElement>) => {
+    const rect = svgRef.current?.getBoundingClientRect();
+    if (!rect || !points.length) return 0;
+    const x = ((event.clientX - rect.left) / rect.width) * TEMPORAL_WIDTH;
+    return Math.max(0, Math.min(points.length - 1, Math.round(((x - TEMPORAL_PADDING.left) / plotWidth) * Math.max(1, points.length - 1))));
+  };
+  const lineSegments = (seriesPoints: typeof points, key: 'value' | 'totalValue') => {
+    const source = connectMissing ? seriesPoints.filter((point) => point[key] !== null) : seriesPoints;
+    const segments: Array<Array<{ index: number; value: number }>> = [];
+    let segment: Array<{ index: number; value: number }> = [];
+    source.forEach((point) => {
+      const originalIndex = seriesPoints.indexOf(point);
+      const value = point[key];
+      if (value === null) {
+        if (segment.length) segments.push(segment);
+        segment = [];
+      } else {
+        segment.push({ index: originalIndex, value });
+      }
+    });
+    if (segment.length) segments.push(segment);
+    return segments;
+  };
+  const pathFor = (segment: Array<{ index: number; value: number }>) => segment
+    .map((point, index) => `${index ? 'L' : 'M'} ${xAt(point.index)} ${yAt(point.value)}`)
+    .join(' ');
+  const brushIndexes = brush && points.length ? [
+    points.findIndex((point) => point.bucketStart === brush.start),
+    points.findIndex((point) => point.bucketEnd === brush.end),
+  ] : null;
+  const dragBounds = drag ? [Math.min(drag.start, drag.current), Math.max(drag.start, drag.current)] : null;
+  const selectedBounds = dragBounds || (brushIndexes && brushIndexes.every((index) => index >= 0) ? brushIndexes : null);
+  const contextVisible = result.filteredRows !== result.totalRows;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-x-3 gap-y-1" aria-label="Series legend">
+        {result.series.map((series) => (
+          <span key={series.key} className="inline-flex min-w-0 items-center gap-1 text-[10px] text-slate-500">
+            <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: series.color }} />
+            <span className="max-w-28 truncate" title={series.label}>{series.label}</span>
+          </span>
+        ))}
+        {result.hasOtherSeries && <span className="text-[10px] text-slate-400">remaining series grouped as Other</span>}
+      </div>
+      <svg
+        ref={svgRef}
+        viewBox={`0 0 ${TEMPORAL_WIDTH} ${TEMPORAL_HEIGHT}`}
+        className="h-40 w-full touch-none overflow-visible rounded-md border border-slate-100 bg-white outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+        role="img"
+        tabIndex={0}
+        aria-label={`${type === 'area' ? 'Area' : 'Line'} chart from ${points[0]?.label || 'no date'} to ${points.at(-1)?.label || 'no date'}. Drag horizontally to filter time.`}
+        onPointerDown={(event) => {
+          if (!points.length) return;
+          const index = indexAtPointer(event);
+          event.currentTarget.setPointerCapture(event.pointerId);
+          setDrag({ start: index, current: index });
+        }}
+        onPointerMove={(event) => setDrag((current) => current ? { ...current, current: indexAtPointer(event) } : current)}
+        onPointerUp={(event) => {
+          if (!drag || !points.length) return;
+          event.currentTarget.releasePointerCapture(event.pointerId);
+          const from = Math.min(drag.start, drag.current);
+          const to = Math.max(drag.start, drag.current);
+          onBrush(points[from].bucketStart, points[to].bucketEnd);
+          setDrag(null);
+        }}
+        onKeyDown={(event) => {
+          if ((event.key === 'Delete' || event.key === 'Backspace') && brush) {
+            event.preventDefault();
+            onClear();
+          }
+        }}
+      >
+        {[0, 0.5, 1].map((fraction) => {
+          const value = yMax - ySpan * fraction;
+          const y = TEMPORAL_PADDING.top + plotHeight * fraction;
+          return <g key={fraction}><line x1={TEMPORAL_PADDING.left} x2={TEMPORAL_WIDTH - TEMPORAL_PADDING.right} y1={y} y2={y} stroke="#e2e8f0" /><text x={TEMPORAL_PADDING.left - 4} y={y + 3} textAnchor="end" fontSize="8" fill="#94a3b8">{formatNumber(value)}</text></g>;
+        })}
+        {selectedBounds && (
+          <rect
+            x={xAt(selectedBounds[0]) - (points.length > 1 ? plotWidth / (points.length - 1) / 2 : 4)}
+            y={TEMPORAL_PADDING.top}
+            width={Math.max(8, xAt(selectedBounds[1]) - xAt(selectedBounds[0]) + (points.length > 1 ? plotWidth / (points.length - 1) : 8))}
+            height={plotHeight}
+            fill="#bae6fd"
+            opacity="0.45"
+          />
+        )}
+        {result.series.map((series) => (
+          <g key={series.key}>
+            {contextVisible && lineSegments(series.points, 'totalValue').map((segment, index) => (
+              <path key={`total-${index}`} d={pathFor(segment)} fill="none" stroke={series.color} strokeWidth="1.25" strokeDasharray="3 3" opacity="0.35" />
+            ))}
+            {lineSegments(series.points, 'value').map((segment, index) => {
+              const line = pathFor(segment);
+              const area = `${line} L ${xAt(segment.at(-1)!.index)} ${yAt(0)} L ${xAt(segment[0].index)} ${yAt(0)} Z`;
+              return type === 'area'
+                ? <g key={index}><path d={area} fill={series.color} opacity="0.14" /><path d={line} fill="none" stroke={series.color} strokeWidth="2" /></g>
+                : <path key={index} d={line} fill="none" stroke={series.color} strokeWidth="2" />;
+            })}
+            {series.points.map((point, index) => point.value !== null && (showPoints || points.length === 1) ? (
+              <circle
+                key={point.bucketStart}
+                cx={xAt(index)}
+                cy={yAt(point.value)}
+                r="2.75"
+                fill="white"
+                stroke={series.color}
+                strokeWidth="1.75"
+                tabIndex={0}
+                role="button"
+                aria-label={`${series.label}, ${point.label}: ${formatNumber(point.value)}`}
+                onMouseEnter={() => setActive({ series: series.label, point })}
+                onMouseLeave={() => setActive(null)}
+                onFocus={() => setActive({ series: series.label, point })}
+                onBlur={() => setActive(null)}
+              />
+            ) : null)}
+          </g>
+        ))}
+        <text x={TEMPORAL_PADDING.left} y={TEMPORAL_HEIGHT - 5} fontSize="8" fill="#94a3b8">{points[0]?.label}</text>
+        <text x={TEMPORAL_WIDTH - TEMPORAL_PADDING.right} y={TEMPORAL_HEIGHT - 5} textAnchor="end" fontSize="8" fill="#94a3b8">{points.at(-1)?.label}</text>
+      </svg>
+      <div className="flex min-h-5 items-center justify-between gap-2 text-[10px] text-slate-500" aria-live="polite">
+        <span className="truncate">{active ? `${active.series} · ${active.point.label}: ${formatNumber(active.point.value ?? 0)} (${active.point.count.toLocaleString()} rows)` : 'Drag across periods to filter · focus a point for details'}</span>
+        {brush && <button type="button" onClick={onClear} className="shrink-0 rounded px-1.5 py-0.5 font-semibold text-sky-700 hover:bg-sky-50">Reset time</button>}
+      </div>
+      <details className="rounded-md border border-slate-100 bg-slate-50/70 text-[10px] text-slate-500">
+        <summary className="cursor-pointer px-2 py-1.5 font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400">Accessible data table</summary>
+        <div className="max-h-48 overflow-auto border-t border-slate-100">
+          <table className="w-full border-collapse text-left tabular-nums">
+            <thead className="sticky top-0 bg-slate-100"><tr><th className="px-2 py-1">Period</th><th className="px-2 py-1">Series</th><th className="px-2 py-1 text-right">Value</th><th className="px-2 py-1 text-right">Rows</th></tr></thead>
+            <tbody>{result.series.flatMap((series) => series.points.map((point) => (
+              <tr key={`${series.key}-${point.bucketStart}`} className="border-t border-slate-100"><td className="px-2 py-1">{point.label}</td><td className="px-2 py-1">{series.label}</td><td className="px-2 py-1 text-right">{point.value === null ? 'Missing' : formatNumber(point.value)}</td><td className="px-2 py-1 text-right">{point.count.toLocaleString()}</td></tr>
+            )))}</tbody>
+          </table>
+        </div>
+      </details>
+    </div>
+  );
+};
+
 const ChartCard = ({
   chart,
   layer,
   layers,
   tables,
+  tableDatasets,
   filters,
+  selectedFeatureIds,
   onUpdate,
   onRemove,
   onToggleFilter,
@@ -609,6 +805,8 @@ const ChartCard = ({
   onClearRange,
   onBrush2D,
   onClear2D,
+  onBrushTemporal,
+  onClearTemporal,
   onHoverDatum,
   onLeaveDatum,
 }: {
@@ -616,7 +814,9 @@ const ChartCard = ({
   layer: MapLayer | undefined;
   layers: MapLayer[];
   tables: string[];
+  tableDatasets: DatasetDescriptor[];
   filters: VisualFilter[];
+  selectedFeatureIds: string[];
   onUpdate: (patch: Partial<Omit<VisualChartSpec, 'id'>>) => void;
   onRemove: () => void;
   onToggleFilter: (datum: VisualChartDatum) => void;
@@ -624,32 +824,48 @@ const ChartCard = ({
   onClearRange: () => void;
   onBrush2D: (brush: Brush2D) => void;
   onClear2D: () => void;
+  onBrushTemporal: (start: string, end: string) => void;
+  onClearTemporal: () => void;
   onHoverDatum: (datum: VisualChartDatum) => void;
   onLeaveDatum: () => void;
 }) => {
+  const cardRef = useRef<HTMLElement | null>(null);
+  const addToast = useStore((state) => state.addToast);
   const [result, setResult] = useState<VisualChartResult | null>(null);
   const [scatter, setScatter] = useState<VisualScatterResult | null>(null);
+  const [temporal, setTemporal] = useState<VisualTemporalResult | null>(null);
   const [facetResults, setFacetResults] = useState<Array<{ value: string; result: VisualChartResult }> | null>(null);
   const [tableFields, setTableFields] = useState<ChartField[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const isTableChart = Boolean(chart.tableName);
+  const datasetSource = chartDatasetSource(chart);
+  const datasetId = chartDatasetId(chart);
+  const datasetDescriptor = useStore((state) => state.datasetRegistry[datasetId]);
+  const registerDataset = useStore((state) => state.registerDataset);
+  const tableName = datasetSource.kind === 'table'
+    ? datasetSource.tableName
+    : datasetSource.kind === 'workflow-node'
+      ? datasetDescriptor?.relationName
+      : undefined;
+  const rowIdColumn = datasetSource.kind === 'layer' ? undefined : datasetDescriptor?.rowIdColumn;
+  const isTableChart = datasetSource.kind !== 'layer';
   const availableFields = isTableChart ? tableFields : fieldsForLayer(layer);
   const typedNumericFields = availableFields.filter((field) => isNumericType(field.type));
   const numericFields = typedNumericFields.length ? typedNumericFields : availableFields;
+  const temporalFields = availableFields.filter((field) => isTemporalType(field.type));
   const filtersKey = JSON.stringify(filters);
 
   useEffect(() => {
-    if (!chart.tableName) {
+    if (!tableName) {
       setTableFields([]);
       return;
     }
     let cancelled = false;
-    describeChartTable(chart.tableName)
+    describeChartTable(tableName)
       .then((fields) => { if (!cancelled) setTableFields(filterChartFields(fields)); })
       .catch(() => { if (!cancelled) setTableFields([]); });
     return () => { cancelled = true; };
-  }, [chart.tableName]);
+  }, [tableName]);
 
   // A freshly table-bound chart has no fields yet — pick sensible defaults
   // once the table schema arrives (or when the schema no longer has the field).
@@ -663,8 +879,11 @@ const ChartCard = ({
     });
   }, [isTableChart, tableFields, chart.dimensionField]);
   const activeKeys = useMemo(
-    () => new Set((result?.data || []).filter((datum) => isDatumActive(datum, filters)).map((datum) => datum.key)),
-    [result, filtersKey],
+    () => {
+      const selected = new Set(selectedFeatureIds);
+      return new Set((result?.data || []).filter((datum) => isDatumActive(datum, filters) || datum.featureIds.some((id) => selected.has(id))).map((datum) => datum.key));
+    },
+    [result, filtersKey, selectedFeatureIds],
   );
   const rangeFilterOn = (field: string | undefined) =>
     field === undefined ? undefined : filters.find(
@@ -678,17 +897,52 @@ const ChartCard = ({
   const brush2D: Brush2D | null = chart.type === 'scatter' && ownRangeFilter && yRangeFilter
     ? { xMin: ownRangeFilter.min!, xMax: ownRangeFilter.max!, yMin: yRangeFilter.min!, yMax: yRangeFilter.max! }
     : null;
+  const temporalFilter = filters.find(
+    (filter): filter is Extract<VisualFilter, { kind: 'temporal' }> =>
+      filter.kind === 'temporal' && filter.field === chart.dimensionField && Boolean(filter.start && filter.end),
+  );
+  const temporalBrush = temporalFilter ? { start: temporalFilter.start!, end: temporalFilter.end! } : null;
   const paletteColors = PALETTES.find((palette) => palette.id === chart.paletteId)?.colors || CATEGORICAL_PALETTE;
   const pointColor = chart.paletteId === 'categorical'
     ? paletteColors[0]
     : paletteColors[Math.min(paletteColors.length - 1, Math.floor(paletteColors.length * 0.75))];
 
+  const exportData = useMemo<ChartExportData | null>(() => {
+    if (temporal) return { kind: 'temporal', result: temporal };
+    if (scatter) return { kind: 'scatter', result: scatter };
+    if (facetResults) return { kind: 'facets', results: facetResults };
+    if (result) return { kind: 'aggregate', result };
+    return null;
+  }, [facetResults, result, scatter, temporal]);
+
+  const exportChartData = () => {
+    if (!exportData) return;
+    try {
+      downloadChartCsv(chart, filters, exportData);
+      addToast({ type: 'success', message: `Exported plotted data for ${chart.title}` });
+    } catch (exportError: any) {
+      addToast({ type: 'error', message: `Chart data export failed: ${exportError?.message || 'Unknown error'}` });
+    }
+  };
+
+  const exportChartImage = async (format: 'svg' | 'png') => {
+    if (!cardRef.current) return;
+    try {
+      if (format === 'svg') downloadChartSvg(cardRef.current, chart, filters);
+      else await downloadChartPng(cardRef.current, chart, filters);
+      addToast({ type: 'success', message: `Exported ${chart.title} as ${format.toUpperCase()}` });
+    } catch (exportError: any) {
+      addToast({ type: 'error', message: exportError?.message || `Chart ${format.toUpperCase()} export failed` });
+    }
+  };
+
   useEffect(() => {
     let cancelled = false;
     const run = async () => {
-      if ((!isTableChart && !layer) || !chart.dimensionField) {
+      if ((isTableChart && !tableName) || (!isTableChart && !layer) || !chart.dimensionField) {
         setResult(null);
         setScatter(null);
+        setTemporal(null);
         setFacetResults(null);
         return;
       }
@@ -697,37 +951,50 @@ const ChartCard = ({
         setError(null);
         if (chart.type === 'scatter') {
           const nextScatter = isTableChart
-            ? await queryTableScatter({ tableName: chart.tableName!, chart })
+            ? await queryTableScatter({ tableName: tableName!, filters, chart })
             : await queryLayerScatter({ layer: layer!, filters, chart });
           if (!cancelled) {
             setScatter(nextScatter);
             setResult(null);
+            setTemporal(null);
+            setFacetResults(null);
+          }
+        } else if (isTemporalChart(chart.type)) {
+          const nextTemporal = isTableChart
+            ? await queryTableTemporalChart({ tableName: tableName!, filters, chart })
+            : await queryLayerTemporalChart({ layer: layer!, filters, chart });
+          if (!cancelled) {
+            setTemporal(nextTemporal);
+            setResult(null);
+            setScatter(null);
             setFacetResults(null);
           }
         } else if (chart.facetField) {
           const values = await queryChartFacetValues({
             layer: isTableChart ? undefined : layer!,
-            tableName: chart.tableName,
+            tableName,
             facetField: chart.facetField,
           });
           const results = await Promise.all(values.map((value) => {
             const facet = { field: chart.facetField!, value };
             return isTableChart
-              ? queryTableChart({ tableName: chart.tableName!, chart, facet })
+              ? queryTableChart({ tableName: tableName!, rowIdColumn, filters, chart, facet })
               : queryLayerChart({ layer: layer!, filters, chart, facet });
           }));
           if (!cancelled) {
             setFacetResults(values.map((value, index) => ({ value, result: results[index] })));
             setResult(null);
             setScatter(null);
+            setTemporal(null);
           }
         } else {
           const nextResult = isTableChart
-            ? await queryTableChart({ tableName: chart.tableName!, chart })
+            ? await queryTableChart({ tableName: tableName!, rowIdColumn, filters, chart })
             : await queryLayerChart({ layer: layer!, filters, chart });
           if (!cancelled) {
             setResult(nextResult);
             setScatter(null);
+            setTemporal(null);
             setFacetResults(null);
           }
         }
@@ -736,6 +1003,7 @@ const ChartCard = ({
           setError(err?.message || 'Chart query failed');
           setResult(null);
           setScatter(null);
+          setTemporal(null);
           setFacetResults(null);
         }
       } finally {
@@ -745,10 +1013,10 @@ const ChartCard = ({
 
     run();
     return () => { cancelled = true; };
-  }, [layer?.id, layer?.styleVersion, chart.tableName, filtersKey, chart.type, chart.dimensionField, chart.measureField, chart.aggregation, chart.paletteId, chart.maxCategories, chart.facetField]);
+  }, [layer?.id, layer?.styleVersion, tableName, rowIdColumn, filtersKey, chart.type, chart.dimensionField, chart.measureField, chart.aggregation, chart.paletteId, chart.maxCategories, chart.facetField, chart.timeGrain, chart.seriesField]);
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+    <section ref={cardRef} className="rounded-lg border border-slate-200 bg-white shadow-sm">
       <div className="flex items-center justify-between gap-2 border-b bg-slate-50 px-3 py-2">
         <div className="min-w-0">
           <input
@@ -757,24 +1025,60 @@ const ChartCard = ({
             className="w-full truncate bg-transparent text-[11px] font-semibold uppercase tracking-wide text-slate-700 outline-none"
           />
           <div className="truncate text-[11px] text-slate-400">
-            {isTableChart ? `table · ${chart.tableName}` : layer?.name || 'Missing layer'}
+            {isTableChart
+              ? `${datasetSource.kind === 'workflow-node' ? 'workflow' : 'table'} · ${datasetDescriptor?.name || tableName || 'Missing relation'}${datasetDescriptor ? ` · ID ${datasetDescriptor.rowIdColumn} (${datasetDescriptor.rowIdQuality === 'validated-unique' ? 'validated' : 'materialised'})` : ''}`
+              : layer?.name || 'Missing layer'}
           </div>
         </div>
-        <button
-          type="button"
-          onClick={onRemove}
-          className="rounded-md p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
-          title="Remove chart"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
+        <div className="flex shrink-0 items-center gap-0.5">
+          <button
+            type="button"
+            onClick={exportChartData}
+            disabled={!exportData}
+            className="rounded-md p-1.5 text-slate-400 hover:bg-sky-50 hover:text-sky-700 disabled:cursor-not-allowed disabled:opacity-30"
+            title="Export the plotted values and filter provenance as CSV"
+            aria-label={`Export plotted data for ${chart.title} as CSV`}
+          >
+            <FileSpreadsheet className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => { void exportChartImage('svg'); }}
+            disabled={!exportData}
+            className="rounded-md p-1.5 text-slate-400 hover:bg-sky-50 hover:text-sky-700 disabled:cursor-not-allowed disabled:opacity-30"
+            title="Export the rendered chart as SVG (SVG charts only)"
+            aria-label={`Export ${chart.title} as SVG`}
+          >
+            <FileImage className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => { void exportChartImage('png'); }}
+            disabled={!exportData}
+            className="rounded-md p-1.5 text-slate-400 hover:bg-sky-50 hover:text-sky-700 disabled:cursor-not-allowed disabled:opacity-30"
+            title="Export the rendered chart as PNG (canvas or SVG charts)"
+            aria-label={`Export ${chart.title} as PNG`}
+          >
+            <ImageDown className="h-3.5 w-3.5" />
+          </button>
+          <span className="mx-1 h-4 w-px bg-slate-200" aria-hidden="true" />
+          <button
+            type="button"
+            onClick={onRemove}
+            className="rounded-md p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+            title="Remove chart"
+            aria-label={`Remove ${chart.title}`}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-2 border-b p-3">
         <label className="space-y-1">
           <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Source</span>
           <select
-            value={isTableChart ? `table:${chart.tableName}` : `layer:${chart.layerId}`}
+            value={isTableChart && datasetDescriptor ? `dataset:${datasetDescriptor.id}` : isTableChart ? `table:${tableName || ''}` : `layer:${datasetSource.layerId}`}
             onChange={(event) => {
               const value = event.target.value;
               if (value.startsWith('layer:')) {
@@ -784,15 +1088,28 @@ const ChartCard = ({
                 onUpdate({
                   layerId,
                   tableName: undefined,
+                  source: { kind: 'layer', layerId },
                   dimensionField: nextFields[0]?.name || '',
                   measureField: numericFieldsForLayer(nextLayer)[0]?.name,
                 });
+              } else if (value.startsWith('dataset:')) {
+                const dataset = tableDatasets.find((item) => item.id === value.slice('dataset:'.length));
+                if (!dataset) return;
+                onUpdate({ source: dataset.source, layerId: '', tableName: dataset.relationName, dimensionField: '', measureField: undefined });
               } else {
                 // Fields load async; the schema effect fills the defaults in.
-                onUpdate({
-                  tableName: value.slice('table:'.length),
-                  dimensionField: '',
-                  measureField: undefined,
+                const selectedTableName = value.slice('table:'.length);
+                void ensureStableTableDataset({ tableName: selectedTableName }).then((dataset) => {
+                  registerDataset(dataset);
+                  onUpdate({
+                    source: dataset.source,
+                    layerId: '',
+                    tableName: dataset.relationName || selectedTableName,
+                    dimensionField: '',
+                    measureField: undefined,
+                  });
+                }).catch((sourceError: any) => {
+                  addToast({ type: 'error', message: `Could not link table: ${sourceError?.message || 'Unknown error'}` });
                 });
               }
             }}
@@ -807,9 +1124,15 @@ const ChartCard = ({
             )}
             {tables.length > 0 && (
               <optgroup label="DuckDB tables">
+                {tableName && !tables.includes(tableName) && <option value={`table:${tableName}`}>{datasetDescriptor?.name || tableName}</option>}
                 {tables.map((name) => (
                   <option key={name} value={`table:${name}`}>{name}</option>
                 ))}
+              </optgroup>
+            )}
+            {tableDatasets.length > 0 && (
+              <optgroup label="Linked datasets">
+                {tableDatasets.map((dataset) => <option key={dataset.id} value={`dataset:${dataset.id}`}>{dataset.name}</option>)}
               </optgroup>
             )}
           </select>
@@ -825,7 +1148,9 @@ const ChartCard = ({
                 type: nextType,
                 ...(nextType === 'scatter'
                   ? { facetField: undefined, ...(chart.measureField ? {} : { measureField: numericFields[0]?.name }) }
-                  : {}),
+                  : isTemporalChart(nextType)
+                    ? { facetField: undefined, dimensionField: temporalFields[0]?.name || chart.dimensionField, timeGrain: chart.timeGrain || 'auto' }
+                    : { seriesField: undefined }),
               });
             }}
             className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] outline-none focus:border-slate-400"
@@ -838,14 +1163,14 @@ const ChartCard = ({
 
         <label className="space-y-1">
           <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-            {chart.type === 'scatter' ? 'X field' : 'Dimension'}
+            {chart.type === 'scatter' ? 'X field' : isTemporalChart(chart.type) ? 'Date / time' : 'Dimension'}
           </span>
           <select
             value={chart.dimensionField}
             onChange={(event) => onUpdate({ dimensionField: event.target.value })}
             className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] outline-none focus:border-slate-400"
           >
-            {availableFields.map((field) => (
+            {(isTemporalChart(chart.type) && temporalFields.length ? temporalFields : availableFields).map((field) => (
               <option key={field.name} value={field.name}>{field.name}</option>
             ))}
           </select>
@@ -897,7 +1222,7 @@ const ChartCard = ({
           </select>
         </label>
 
-        {chart.type !== 'scatter' && (
+        {chart.type !== 'scatter' && !isTemporalChart(chart.type) && (
           <label className="space-y-1">
             <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Facet by</span>
             <select
@@ -912,10 +1237,52 @@ const ChartCard = ({
             </select>
           </label>
         )}
+
+        {isTemporalChart(chart.type) && (
+          <>
+            <label className="space-y-1">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Time grain</span>
+              <select value={chart.timeGrain || 'auto'} onChange={(event) => onUpdate({ timeGrain: event.target.value as TimeGrain })} className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] outline-none focus:border-slate-400">
+                <option value="auto">Auto</option>
+                <option value="hour">Hour</option>
+                <option value="day">Day</option>
+                <option value="week">Week</option>
+                <option value="month">Month</option>
+                <option value="quarter">Quarter</option>
+                <option value="year">Year</option>
+              </select>
+            </label>
+            <label className="space-y-1">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Series</span>
+              <select value={chart.seriesField || ''} onChange={(event) => onUpdate({ seriesField: event.target.value || undefined })} className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] outline-none focus:border-slate-400">
+                <option value="">Single series</option>
+                {availableFields.filter((field) => field.name !== chart.dimensionField).map((field) => <option key={field.name} value={field.name}>{field.name}</option>)}
+              </select>
+            </label>
+            <label className="flex items-center gap-2 text-[11px] font-medium text-slate-500">
+              <input type="checkbox" checked={chart.showPoints ?? true} onChange={(event) => onUpdate({ showPoints: event.target.checked })} className="h-4 w-4 rounded border-slate-300 accent-sky-600" /> Show points
+            </label>
+            <label className="flex items-center gap-2 text-[11px] font-medium text-slate-500" title="Off by default so periods without observations remain visible as gaps">
+              <input type="checkbox" checked={Boolean(chart.connectMissing)} onChange={(event) => onUpdate({ connectMissing: event.target.checked })} className="h-4 w-4 rounded border-slate-300 accent-sky-600" /> Connect missing periods
+            </label>
+          </>
+        )}
+        {result && result.data.length > 0 && (
+          <details className="mt-3 rounded-md border border-slate-100 bg-slate-50 px-2 py-1.5">
+            <summary className="cursor-pointer text-[10px] font-semibold text-slate-500">Accessible data table</summary>
+            <div className="mt-2 max-h-40 overflow-auto">
+              <table className="w-full text-left text-[10px] text-slate-600">
+                <caption className="sr-only">Values plotted in {chart.title}</caption>
+                <thead><tr><th scope="col" className="py-1">{chart.dimensionField}</th><th scope="col" className="py-1 text-right">Active</th><th scope="col" className="py-1 text-right">Total</th></tr></thead>
+                <tbody>{result.data.map((datum) => <tr key={datum.key} className="border-t border-slate-200"><th scope="row" className="py-1 font-medium">{datum.label}</th><td className="py-1 text-right tabular-nums">{formatNumber(datum.value)}</td><td className="py-1 text-right tabular-nums">{formatNumber(datum.totalValue)}</td></tr>)}</tbody>
+              </table>
+            </div>
+          </details>
+        )}
       </div>
 
       <div className="p-3">
-        {isLoading && !result && !scatter && !facetResults ? (
+        {isLoading && !result && !scatter && !temporal && !facetResults ? (
           <div className="flex h-36 items-center justify-center text-slate-400">
             <Loader2 className="h-4 w-4 animate-spin" />
           </div>
@@ -923,6 +1290,28 @@ const ChartCard = ({
           <div className="flex h-36 items-center justify-center px-4 text-center text-[11px] text-rose-500">
             {error}
           </div>
+        ) : isTemporalChart(chart.type) ? (
+          !temporal || !temporal.series.some((series) => series.points.some((point) => point.value !== null)) ? (
+            <div className="flex h-36 items-center justify-center px-4 text-center text-[11px] text-slate-400">
+              No valid temporal values for this field and aggregation.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2 text-[11px] text-slate-400">
+                <span>{chart.aggregation} · {temporal.grain} grain</span>
+                <span>{temporal.filteredRows.toLocaleString()} active / {temporal.totalRows.toLocaleString()} total</span>
+              </div>
+              <TemporalChart
+                result={temporal}
+                type={chart.type}
+                showPoints={chart.showPoints ?? true}
+                connectMissing={Boolean(chart.connectMissing)}
+                brush={temporalBrush}
+                onBrush={onBrushTemporal}
+                onClear={onClearTemporal}
+              />
+            </div>
+          )
         ) : chart.type === 'scatter' ? (
           !scatter || !scatter.points.length ? (
             <div className="flex h-36 items-center justify-center px-4 text-center text-[11px] text-slate-400">
@@ -931,10 +1320,10 @@ const ChartCard = ({
           ) : (
             <div className="space-y-3">
               <div className="flex items-center justify-between text-[11px] text-slate-400">
-                <span>{isTableChart ? `${scatter.totalRows.toLocaleString()} rows` : `${scatter.filteredRows.toLocaleString()} active rows`}</span>
+                <span>{scatter.filteredRows.toLocaleString()} active rows</span>
                 <span>
                   {scatter.sampled && <span className="text-slate-300">sampled · </span>}
-                  {!isTableChart && `${scatter.totalRows.toLocaleString()} total`}
+                  {scatter.totalRows.toLocaleString()} total
                 </span>
               </div>
               <ScatterChart
@@ -960,7 +1349,7 @@ const ChartCard = ({
                 );
                 return facetResults.map(({ value, result: facetResult }) => {
                   const facetActiveKeys = new Set(
-                    facetResult.data.filter((datum) => isDatumActive(datum, filters)).map((datum) => datum.key),
+                    facetResult.data.filter((datum) => isDatumActive(datum, filters) || datum.featureIds.some((id) => selectedFeatureIds.includes(id))).map((datum) => datum.key),
                   );
                   return (
                     <div key={value} className="rounded-md border border-slate-100 bg-white p-1.5">
@@ -1005,8 +1394,8 @@ const ChartCard = ({
         ) : (
           <div className="space-y-3">
             <div className="flex items-center justify-between text-[11px] text-slate-400">
-              <span>{isTableChart ? `${result.totalRows.toLocaleString()} rows` : `${result.filteredRows.toLocaleString()} active rows`}</span>
-              <span>{!isTableChart && `${result.totalRows.toLocaleString()} total`}</span>
+              <span>{result.filteredRows.toLocaleString()} active rows</span>
+              <span>{result.totalRows.toLocaleString()} total</span>
             </div>
             {chart.type === 'histogram' ? (
               <Histogram
@@ -1045,6 +1434,7 @@ const ChartCard = ({
 export const ChartPanel = () => {
   const {
     mapLayers,
+    datasetRegistry,
     selectedLayerId,
     visualAnalytics,
     addChart,
@@ -1057,6 +1447,7 @@ export const ChartPanel = () => {
 
   const selectedLayer = mapLayers.find((layer) => layer.id === selectedLayerId) || mapLayers[0];
   const charts = visualAnalytics.charts;
+  const tableDatasets = Object.values(datasetRegistry).filter((dataset) => !dataset.spatial && Boolean(dataset.relationName));
   const hasChartableLayer = mapLayers.some((layer) => fieldsForLayer(layer).length > 0);
   const [tables, setTables] = useState<string[]>([]);
 
@@ -1073,20 +1464,22 @@ export const ChartPanel = () => {
     return () => { cancelled = true; };
   }, [mapLayers, charts.length, tablesRefreshTick]);
 
-  const handleAddChart = () => {
+  const handleAddChart = async () => {
     if (selectedLayer) {
-      const nextChart = defaultChartForLayer(selectedLayer);
+      const nextChart = buildDefaultChartForDataset(metadataForLayer(selectedLayer));
       if (nextChart) {
-        addChart(nextChart);
+        addChart({ ...nextChart, source: { kind: 'layer', layerId: nextChart.layerId } });
         return;
       }
     }
-    if (tables.length) {
+    if (tableDatasets.length) {
+      const dataset = tableDatasets[0];
       addChart({
         id: `chart-${Date.now()}`,
-        title: `${tables[0]} distribution`,
+        title: `${dataset.name} distribution`,
         layerId: '',
-        tableName: tables[0],
+        tableName: dataset.relationName,
+        source: dataset.source,
         type: 'bar',
         dimensionField: '',
         aggregation: 'count',
@@ -1095,14 +1488,35 @@ export const ChartPanel = () => {
       });
       return;
     }
+    if (tables.length) {
+      try {
+        const dataset = await ensureStableTableDataset({ tableName: tables[0] });
+        useStore.getState().registerDataset(dataset);
+        addChart({
+          id: `chart-${Date.now()}`,
+          title: `${tables[0]} distribution`,
+          layerId: '',
+          tableName: dataset.relationName || tables[0],
+          source: dataset.source,
+          type: 'bar',
+          dimensionField: '',
+          aggregation: 'count',
+          paletteId: 'categorical',
+          maxCategories: 8,
+        });
+      } catch (sourceError: any) {
+        addToast({ type: 'error', message: `Could not link table: ${sourceError?.message || 'Unknown error'}` });
+      }
+      return;
+    }
     addToast({ type: 'warning', message: 'No chartable layers or tables available' });
   };
 
-  const layerFilters = (layerId: string) => visualAnalytics.layers[layerId]?.filters || [];
+  const datasetFilters = (datasetId: string) => visualAnalytics.datasets[datasetId]?.filters || [];
 
   const toggleFilter = (chart: VisualChartSpec, datum: VisualChartDatum) => {
-    if (chart.tableName) return; // table charts are unlinked views
-    const currentFilters = layerFilters(chart.layerId);
+    const datasetId = chartDatasetId(chart);
+    const currentFilters = datasetFilters(datasetId);
 
     if (datum.filter.kind === 'category') {
       // Merge into one multi-value filter per field so several categories
@@ -1113,14 +1527,14 @@ export const ChartPanel = () => {
           filter.kind === 'category' && filter.field === datum.filter.field,
       );
       if (!existing) {
-        setLayerFilters(chart.layerId, [...currentFilters, datum.filter]);
+        setLayerFilters(datasetId, [...currentFilters, datum.filter]);
         return;
       }
       const values = existing.values.includes(value)
         ? existing.values.filter((item) => item !== value)
         : [...existing.values, value];
       setLayerFilters(
-        chart.layerId,
+        datasetId,
         values.length
           ? currentFilters.map((filter) => (filter === existing ? { ...existing, values } : filter))
           : currentFilters.filter((filter) => filter !== existing),
@@ -1131,7 +1545,7 @@ export const ChartPanel = () => {
     const datumKey = visualChartFilterKey(datum.filter);
     const exists = currentFilters.some((filter) => visualChartFilterKey(filter) === datumKey);
     setLayerFilters(
-      chart.layerId,
+      datasetId,
       exists
         ? currentFilters.filter((filter) => visualChartFilterKey(filter) !== datumKey)
         : [...currentFilters, datum.filter],
@@ -1139,18 +1553,18 @@ export const ChartPanel = () => {
   };
 
   const setRangeFilter = (chart: VisualChartSpec, min: number, max: number) => {
-    if (chart.tableName) return;
-    const rest = layerFilters(chart.layerId).filter(
+    const datasetId = chartDatasetId(chart);
+    const rest = datasetFilters(datasetId).filter(
       (filter) => !(filter.kind === 'range' && filter.field === chart.dimensionField),
     );
-    setLayerFilters(chart.layerId, [...rest, { kind: 'range', field: chart.dimensionField, min, max }]);
+    setLayerFilters(datasetId, [...rest, { kind: 'range', field: chart.dimensionField, min, max }]);
   };
 
   const clearRangeFilter = (chart: VisualChartSpec) => {
-    if (chart.tableName) return;
+    const datasetId = chartDatasetId(chart);
     setLayerFilters(
-      chart.layerId,
-      layerFilters(chart.layerId).filter(
+      datasetId,
+      datasetFilters(datasetId).filter(
         (filter) => !(filter.kind === 'range' && filter.field === chart.dimensionField),
       ),
     );
@@ -1160,9 +1574,9 @@ export const ChartPanel = () => {
     new Set([chart.dimensionField, chart.measureField].filter((field): field is string => Boolean(field)));
 
   const setScatterBrush = (chart: VisualChartSpec, brush: Brush2D) => {
-    if (chart.tableName) return;
+    const datasetId = chartDatasetId(chart);
     const axes = scatterAxisFields(chart);
-    const rest = layerFilters(chart.layerId).filter(
+    const rest = datasetFilters(datasetId).filter(
       (filter) => !(filter.kind === 'range' && axes.has(filter.field)),
     );
     const next: VisualFilter[] = [
@@ -1172,15 +1586,33 @@ export const ChartPanel = () => {
     if (chart.measureField && chart.measureField !== chart.dimensionField) {
       next.push({ kind: 'range', field: chart.measureField, min: brush.yMin, max: brush.yMax });
     }
-    setLayerFilters(chart.layerId, next);
+    setLayerFilters(datasetId, next);
   };
 
   const clearScatterBrush = (chart: VisualChartSpec) => {
-    if (chart.tableName) return;
+    const datasetId = chartDatasetId(chart);
     const axes = scatterAxisFields(chart);
     setLayerFilters(
-      chart.layerId,
-      layerFilters(chart.layerId).filter((filter) => !(filter.kind === 'range' && axes.has(filter.field))),
+      datasetId,
+      datasetFilters(datasetId).filter((filter) => !(filter.kind === 'range' && axes.has(filter.field))),
+    );
+  };
+
+  const setTemporalBrush = (chart: VisualChartSpec, start: string, end: string) => {
+    const datasetId = chartDatasetId(chart);
+    const rest = datasetFilters(datasetId).filter(
+      (filter) => !(filter.kind === 'temporal' && filter.field === chart.dimensionField),
+    );
+    setLayerFilters(datasetId, [...rest, { kind: 'temporal', field: chart.dimensionField, start, end }]);
+  };
+
+  const clearTemporalBrush = (chart: VisualChartSpec) => {
+    const datasetId = chartDatasetId(chart);
+    setLayerFilters(
+      datasetId,
+      datasetFilters(datasetId).filter(
+        (filter) => !(filter.kind === 'temporal' && filter.field === chart.dimensionField),
+      ),
     );
   };
 
@@ -1194,7 +1626,7 @@ export const ChartPanel = () => {
               Charts
             </h3>
             <p className="mt-1 truncate text-[11px] text-slate-400">
-              Click marks to filter, drag histograms to brush. Grey bars show the unfiltered total.
+              Click marks to filter; drag distributions or timelines to brush. Muted marks show unfiltered context.
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
@@ -1208,8 +1640,8 @@ export const ChartPanel = () => {
             </button>
             <button
               type="button"
-              onClick={handleAddChart}
-              disabled={!hasChartableLayer && !tables.length}
+              onClick={() => { void handleAddChart(); }}
+              disabled={!hasChartableLayer && !tables.length && !tableDatasets.length}
               className="flex h-8 items-center gap-1.5 rounded-md bg-slate-900 px-3 text-[11px] font-semibold uppercase tracking-wider text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
               <Plus className="h-3.5 w-3.5" />
@@ -1220,7 +1652,7 @@ export const ChartPanel = () => {
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
-        {!mapLayers.length && !tables.length ? (
+        {!mapLayers.length && !tables.length && !tableDatasets.length ? (
           <div className="flex h-full items-center justify-center px-6 text-center text-[11px] text-slate-400">
             Add or run a layer before creating charts.
           </div>
@@ -1234,8 +1666,11 @@ export const ChartPanel = () => {
         ) : (
           <div className="space-y-3">
             {charts.map((chart) => {
-              const layer = mapLayers.find((item) => item.id === chart.layerId);
-              const filters = chart.tableName ? [] : visualAnalytics.layers[chart.layerId]?.filters || [];
+              const source = chartDatasetSource(chart);
+              const datasetId = chartDatasetId(chart);
+              const layer = source.kind === 'layer' ? mapLayers.find((item) => item.id === source.layerId) : undefined;
+              const filters = visualAnalytics.datasets[datasetId]?.filters || [];
+              const selectedFeatureIds = visualAnalytics.datasets[datasetId]?.selectedFeatureIds || [];
               return (
                 <ChartCard
                   key={chart.id}
@@ -1243,7 +1678,9 @@ export const ChartPanel = () => {
                   layer={layer}
                   layers={mapLayers}
                   tables={tables}
+                  tableDatasets={tableDatasets}
                   filters={filters}
+                  selectedFeatureIds={selectedFeatureIds}
                   onUpdate={(patch) => updateChart(chart.id, patch)}
                   onRemove={() => removeChart(chart.id)}
                   onToggleFilter={(datum) => toggleFilter(chart, datum)}
@@ -1251,8 +1688,10 @@ export const ChartPanel = () => {
                   onClearRange={() => clearRangeFilter(chart)}
                   onBrush2D={(brush) => setScatterBrush(chart, brush)}
                   onClear2D={() => clearScatterBrush(chart)}
-                  onHoverDatum={(datum) => { if (!chart.tableName) setHighlightedFeatures(chart.layerId, datum.featureIds); }}
-                  onLeaveDatum={() => { if (!chart.tableName) setHighlightedFeatures(chart.layerId, []); }}
+                  onBrushTemporal={(start, end) => setTemporalBrush(chart, start, end)}
+                  onClearTemporal={() => clearTemporalBrush(chart)}
+                  onHoverDatum={(datum) => { if (source.kind === 'layer') setHighlightedFeatures(source.layerId, datum.featureIds); }}
+                  onLeaveDatum={() => { if (source.kind === 'layer') setHighlightedFeatures(source.layerId, []); }}
                 />
               );
             })}

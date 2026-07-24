@@ -156,15 +156,15 @@ describe('layer state', () => {
     store.toggleSelectedFeature('areas', '1');
     store.toggleSelectedFeature('areas', '3');
 
-    expect(useStore.getState().visualAnalytics.layers.areas.hoveredFeatureId).toBe('2');
-    expect(useStore.getState().visualAnalytics.layers.areas.selectedFeatureIds).toEqual(['1', '3']);
+    expect(useStore.getState().visualAnalytics.datasets.areas.hoveredFeatureId).toBe('2');
+    expect(useStore.getState().visualAnalytics.datasets.areas.selectedFeatureIds).toEqual(['1', '3']);
     expect(useStore.getState().selectedLayerId).toBe('areas');
 
     store.toggleSelectedFeature('areas', '1');
-    expect(useStore.getState().visualAnalytics.layers.areas.selectedFeatureIds).toEqual(['3']);
+    expect(useStore.getState().visualAnalytics.datasets.areas.selectedFeatureIds).toEqual(['3']);
 
     store.clearFeatureSelection('areas');
-    expect(useStore.getState().visualAnalytics.layers.areas.selectedFeatureIds).toEqual([]);
+    expect(useStore.getState().visualAnalytics.datasets.areas.selectedFeatureIds).toEqual([]);
   });
 
   it('sets multi-row selection atomically and focuses explicit bounds', () => {
@@ -172,7 +172,7 @@ describe('layer state', () => {
     store.addMapLayer({ id: 'areas', name: 'Areas', geojson: fc(3), sourceKind: 'manual' });
 
     store.setFeatureSelection('areas', ['1', '2', '2', '3']);
-    expect(useStore.getState().visualAnalytics.layers.areas.selectedFeatureIds).toEqual(['1', '2', '3']);
+    expect(useStore.getState().visualAnalytics.datasets.areas.selectedFeatureIds).toEqual(['1', '2', '3']);
 
     const bounds: [[number, number], [number, number]] = [[-1, 50], [1, 52]];
     store.focusLayerBounds('areas', bounds);
@@ -196,7 +196,7 @@ describe('layer state', () => {
 
     store.removeMapLayer('areas');
 
-    expect(useStore.getState().visualAnalytics.layers.areas).toBeUndefined();
+    expect(useStore.getState().visualAnalytics.datasets.areas).toBeUndefined();
     expect(useStore.getState().visualAnalytics.charts).toEqual([]);
   });
 
@@ -222,10 +222,112 @@ describe('layer state', () => {
       title: 'ID share',
       type: 'donut',
     });
-    expect(useStore.getState().visualAnalytics.layers.areas.highlightedFeatureIds).toEqual(['1', '2']);
+    expect(useStore.getState().visualAnalytics.datasets.areas.highlightedFeatureIds).toEqual(['1', '2']);
 
     store.removeChart('chart-1');
     expect(useStore.getState().visualAnalytics.charts).toEqual([]);
+  });
+
+  it('undoes and redoes durable filters without recording hover state', () => {
+    const store = useStore.getState();
+    store.addMapLayer({ id: 'areas', name: 'Areas', geojson: fc(3), sourceKind: 'manual' });
+
+    store.setLayerFilters('areas', [{ kind: 'range', field: 'id', min: 2 }]);
+    expect(useStore.getState().analysisHistory.past).toHaveLength(1);
+
+    store.setHoveredFeature('areas', '3');
+    expect(useStore.getState().analysisHistory.past).toHaveLength(1);
+
+    store.undoAnalysis();
+    expect(useStore.getState().visualAnalytics.datasets.areas.filters).toEqual([]);
+    expect(useStore.getState().visualAnalytics.datasets.areas.hoveredFeatureId).toBe('3');
+    expect(useStore.getState().analysisHistory.future).toHaveLength(1);
+
+    store.redoAnalysis();
+    expect(useStore.getState().visualAnalytics.datasets.areas.filters).toEqual([
+      { kind: 'range', field: 'id', min: 2 },
+    ]);
+  });
+
+  it('restores chart additions and removals through analysis history', () => {
+    const store = useStore.getState();
+    store.addMapLayer({ id: 'areas', name: 'Areas', geojson: fc(3), sourceKind: 'manual' });
+    store.addChart({
+      id: 'chart-history',
+      title: 'Area IDs',
+      layerId: 'areas',
+      type: 'bar',
+      dimensionField: 'id',
+      aggregation: 'count',
+      paletteId: 'categorical',
+      maxCategories: 8,
+    });
+    store.removeChart('chart-history');
+
+    store.undoAnalysis();
+    expect(useStore.getState().visualAnalytics.charts).toHaveLength(1);
+
+    store.undoAnalysis();
+    expect(useStore.getState().visualAnalytics.charts).toEqual([]);
+  });
+
+  it('adds, reorders, removes, and restores KPI specifications through history', () => {
+    const store = useStore.getState();
+    store.addMapLayer({ id: 'areas', name: 'Areas', geojson: fc(3), sourceKind: 'manual' });
+    store.addKpi({ id: 'count', datasetId: 'areas', title: 'Rows', aggregation: 'count', comparison: 'total' });
+    store.addKpi({ id: 'mean', datasetId: 'areas', title: 'Mean ID', field: 'id', aggregation: 'avg', comparison: 'none' });
+    store.reorderKpi('mean', 0);
+    expect(useStore.getState().visualAnalytics.kpis.map((kpi) => kpi.id)).toEqual(['mean', 'count']);
+    store.removeKpi('mean');
+    expect(useStore.getState().visualAnalytics.kpis.map((kpi) => kpi.id)).toEqual(['count']);
+    store.undoAnalysis();
+    expect(useStore.getState().visualAnalytics.kpis.map((kpi) => kpi.id)).toEqual(['mean', 'count']);
+  });
+
+  it('manages named cohorts and restores a complete analytical bookmark', () => {
+    const store = useStore.getState();
+    store.addMapLayer({ id: 'areas', name: 'Areas', geojson: fc(3), sourceKind: 'manual' });
+    store.setLayerFilters('areas', [{ kind: 'range', field: 'id', min: 2 }]);
+    store.addCohort({ id: 'priority', datasetId: 'areas', name: 'Priority', colour: '#0284c7', createdAt: 1, definition: { kind: 'filters', filters: [{ kind: 'range', field: 'id', min: 2 }] } });
+    store.addBookmark({
+      id: 'view-1', name: 'Priority view', createdAt: 2, datasetId: 'areas',
+      filtersByDataset: { areas: [{ kind: 'range', field: 'id', min: 2 }] },
+      cohorts: useStore.getState().visualAnalytics.cohorts,
+      mapCamera: { longitude: -1, latitude: 52, zoom: 8, bearing: 0, pitch: 0 },
+      charts: [], kpis: [],
+    });
+    store.clearLayerFilters('areas');
+    store.removeCohort('priority');
+    store.restoreBookmark('view-1');
+    const restored = useStore.getState();
+    expect(restored.visualAnalytics.datasets.areas.filters).toEqual([{ kind: 'range', field: 'id', min: 2 }]);
+    expect(restored.visualAnalytics.cohorts.map((cohort) => cohort.id)).toEqual(['priority']);
+    expect(restored.ui.mapCamera).toMatchObject({ longitude: -1, latitude: 52, zoom: 8 });
+  });
+
+  it('rebinds legacy table analytics to a relinked workflow dataset without losing filters', () => {
+    const store = useStore.getState();
+    store.registerDataset({ id: 'table:sales', name: 'Sales', sourceVersion: 1, source: { kind: 'table', datasetId: 'table:sales', tableName: 'sales', rowIdColumn: '__alur_row_id' }, fields: [], rowIdColumn: '__alur_row_id', rowIdQuality: 'materialised', sourceUpdatedAt: 1, spatial: false, relationName: 'sales' });
+    store.setLayerFilters('table:sales', [{ kind: 'category', field: 'region', values: ['North'] }]);
+    store.addChart({ id: 'sales-chart', title: 'Sales', layerId: '', tableName: 'sales', type: 'bar', dimensionField: 'region', aggregation: 'count', paletteId: 'categorical', maxCategories: 8 });
+    store.rebindDataset('table:sales', { id: 'workflow:input-sales', name: 'Sales', sourceVersion: 1, source: { kind: 'workflow-node', datasetId: 'workflow:input-sales', nodeId: 'input-sales', rowIdColumn: '__alur_row_id' }, fields: [], rowIdColumn: '__alur_row_id', rowIdQuality: 'materialised', sourceUpdatedAt: 2, spatial: false, relationName: '__alur_dataset_sales' });
+    const state = useStore.getState();
+    expect(state.visualAnalytics.datasets['workflow:input-sales'].filters).toHaveLength(1);
+    expect(state.visualAnalytics.datasets['table:sales']).toBeUndefined();
+    expect(state.visualAnalytics.charts[0]).toMatchObject({ source: { kind: 'workflow-node', datasetId: 'workflow:input-sales' }, tableName: '__alur_dataset_sales' });
+  });
+
+  it('restores layer presentation and bumps its render version', () => {
+    const store = useStore.getState();
+    store.addMapLayer({ id: 'areas', name: 'Areas', geojson: fc(3), sourceKind: 'manual', opacity: 0.8 });
+    const initialVersion = useStore.getState().mapLayers[0].styleVersion;
+
+    store.updateMapLayer('areas', { opacity: 0.35 });
+    expect(useStore.getState().mapLayers[0].opacity).toBe(0.35);
+
+    store.undoAnalysis();
+    expect(useStore.getState().mapLayers[0].opacity).toBe(0.8);
+    expect(useStore.getState().mapLayers[0].styleVersion).toBeGreaterThan(initialVersion);
   });
 
   it('removing a node cleans up linked layers and active layer selection', () => {
@@ -253,5 +355,17 @@ describe('layer state', () => {
 
     expect(useStore.getState().mapLayers.map((layer) => layer.id)).toEqual(['parcels']);
     expect(useStore.getState().selectedLayerId).toBeNull();
+  });
+
+  it('saves and resizes dashboard cards independently of presentation mode', () => {
+    const store = useStore.getState();
+    store.setWorkspaceMode('board');
+    store.addDashboardCard({ id: 'note-1', kind: 'note', title: 'Finding', note: 'North is growing.', width: 1, height: 'compact' });
+    store.updateDashboardCard('note-1', { width: 2, height: 'tall' });
+    store.setPresentationMode(true);
+    expect(useStore.getState().visualAnalytics.dashboard?.cards[0]).toMatchObject({ id: 'note-1', width: 2, height: 'tall' });
+    expect(useStore.getState().ui).toMatchObject({ workspaceMode: 'board', isPresentationMode: true });
+    store.removeDashboardCard('note-1');
+    expect(useStore.getState().visualAnalytics.dashboard?.cards).toEqual([]);
   });
 });

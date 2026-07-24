@@ -74,8 +74,8 @@ export const Chat = () => {
               id: layer.id,
               name: layer.name,
               fields: layer.source.fields.map((field) => field.name),
-              selectedFeatureIds: visualAnalytics.layers[layer.id]?.selectedFeatureIds || [],
-              filters: visualAnalytics.layers[layer.id]?.filters || [],
+              selectedFeatureIds: visualAnalytics.datasets[layer.id]?.selectedFeatureIds || [],
+              filters: visualAnalytics.datasets[layer.id]?.filters || [],
             })),
           })}`
         }
@@ -355,7 +355,7 @@ export const Chat = () => {
             const filter: VisualFilter = args.kind === 'range'
               ? { kind: 'range', field: args.field, min: args.min, max: args.max }
               : { kind: 'category', field: args.field, values: (args.values || []).map(String) };
-            const current = visualAnalytics.layers[layer.id]?.filters || [];
+            const current = visualAnalytics.datasets[layer.id]?.filters || [];
             setLayerFilters(layer.id, args.mode === 'replace' ? [filter] : [...current, filter]);
             addChatMessage('assistant', `Filtered "${layer.name}" by ${args.field}.`, { kind: 'tool_result', summary: `${args.kind} filter applied` });
             break;
@@ -368,7 +368,7 @@ export const Chat = () => {
               break;
             }
             const requested = (args.featureIds || args.feature_ids || []).map(String);
-            const current = visualAnalytics.layers[layer.id]?.selectedFeatureIds || [];
+            const current = visualAnalytics.datasets[layer.id]?.selectedFeatureIds || [];
             const next = args.mode === 'add'
               ? [...new Set([...current, ...requested])]
               : args.mode === 'remove'
@@ -401,7 +401,7 @@ export const Chat = () => {
           case 'zoom_to_selection': {
             const layerId = args.layerId || args.layer_id || selectedLayerId;
             const layer = mapLayers.find((item) => item.id === layerId);
-            const featureIds = layer ? visualAnalytics.layers[layer.id]?.selectedFeatureIds || [] : [];
+            const featureIds = layer ? visualAnalytics.datasets[layer.id]?.selectedFeatureIds || [] : [];
             if (!layer || !featureIds.length) {
               addChatMessage('assistant', 'Select at least one feature before zooming.', { kind: 'tool_result', summary: 'Zoom skipped' });
               break;

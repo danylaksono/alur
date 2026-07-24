@@ -68,19 +68,37 @@ const geometryCentroid = (geometry: GeoJSON.Geometry | null): [number, number] |
 
 const matchesFilterJs = (properties: Record<string, unknown>, filter: VisualFilter): boolean => {
   const raw = properties[filter.field];
-  if (raw === null || raw === undefined) return Boolean(filter.includeNull);
-  if (filter.kind === 'category') return filter.values.includes(String(raw));
-  if (filter.kind === 'temporal') {
-    const value = String(raw);
-    if (filter.start && value < filter.start) return false;
-    if (filter.end && value > filter.end) return false;
-    return true;
+  let matches = false;
+  if (filter.kind === 'null') {
+    return filter.isNull ? raw === null || raw === undefined : raw !== null && raw !== undefined;
   }
-  const value = Number(raw);
-  if (!Number.isFinite(value)) return Boolean(filter.includeNull);
-  if (filter.min !== undefined && value < filter.min) return false;
-  if (filter.max !== undefined && value > filter.max) return false;
-  return true;
+  if (raw === null || raw === undefined) {
+    matches = 'includeNull' in filter && Boolean(filter.includeNull);
+  } else if (filter.kind === 'category') {
+    matches = filter.values.includes(String(raw));
+  } else if (filter.kind === 'temporal') {
+    const value = String(raw);
+    matches = !(filter.start && value < filter.start) && !(filter.end && value > filter.end);
+  } else if (filter.kind === 'text') {
+    const value = String(raw);
+    const haystack = filter.caseSensitive ? value : value.toLocaleLowerCase();
+    const needle = filter.caseSensitive ? filter.value : filter.value.toLocaleLowerCase();
+    matches = filter.operator === 'contains'
+      ? haystack.includes(needle)
+      : filter.operator === 'starts_with'
+        ? haystack.startsWith(needle)
+        : filter.operator === 'ends_with'
+          ? haystack.endsWith(needle)
+          : haystack === needle;
+  } else if (filter.kind === 'boolean') {
+    matches = (raw === true || String(raw).toLocaleLowerCase() === 'true') === filter.value;
+  } else {
+    const value = Number(raw);
+    matches = Number.isFinite(value)
+      && !(filter.min !== undefined && value < filter.min)
+      && !(filter.max !== undefined && value > filter.max);
+  }
+  return 'mode' in filter && filter.mode === 'exclude' ? !matches : matches;
 };
 
 export const queryLayerGlyphPoints = async ({

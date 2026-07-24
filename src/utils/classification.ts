@@ -16,7 +16,7 @@ import type {
   LayerVisualisation,
   LegendSpec,
 } from '../types/visualisation';
-import { CATEGORICAL_PALETTE, fitPaletteToClassCount } from './palettes';
+import { CATEGORICAL_PALETTE, fitPaletteToClassCount, paletteMetadataForColors } from './palettes';
 
 export type NumericProfile = {
   kind: 'numeric';
@@ -184,6 +184,7 @@ export const buildCategoricalVisualisation = ({
   otherColor: '#94a3b8',
   nullColor: '#e2e8f0',
   opacity: 0.78,
+  totalCount: profile.total,
 });
 
 export const buildGraduatedSymbolVisualisation = ({
@@ -389,14 +390,19 @@ export const buildLegend = (
   }
 
   if (visualisation.kind === 'categorical') {
+    const visibleTotal = visualisation.totalCount || visualisation.categories.reduce((sum, category) => sum + (category.count || 0), 0);
     return {
       title: visualisation.field,
       kind: 'categorical',
+      classification: { method: visualisation.method },
+      palette: paletteMetadataForColors(visualisation.categories.map((category) => category.color), visualisation.categories.length),
       items: [
         ...visualisation.categories.map((category) => ({
           label: category.value,
           value: category.value,
           color: category.color,
+          count: category.count,
+          percentage: category.count !== undefined && visibleTotal > 0 ? category.count / visibleTotal : undefined,
         })),
         { label: 'Other', color: visualisation.otherColor },
         { label: 'No data', color: visualisation.nullColor },
@@ -499,6 +505,8 @@ export const buildLegend = (
   return {
     title: visualisation.field,
     kind: visualisation.kind,
+    classification: { method: visualisation.method, breaks: visualisation.breaks },
+    palette: paletteMetadataForColors(visualisation.palette, visualisation.palette.length),
     items: [...classBreakItems(visualisation.breaks, visualisation.palette), { label: 'No data', color: visualisation.nullColor }],
   };
 };
