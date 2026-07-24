@@ -34,9 +34,13 @@ npm run test       # Run the test suite
 
 ## GitHub Pages Deployment
 
-The production build is configured for the `/ymnngis/` GitHub Pages subpath, so static assets resolve correctly after deployment.
+The GitHub Actions build uses Vite's `github-pages` mode, which configures the `/ymnngis/` repository subpath so static assets resolve correctly after deployment. The default production build uses `/`, which is suitable for Netlify and other root-domain deployments.
 
 Pushes to `main` are deployed through GitHub Actions in `.github/workflows/deploy.yml`. In the repository settings, set Pages to use GitHub Actions as the source.
+
+## Netlify Deployment
+
+Netlify builds the site with `npm run build` and publishes `dist`. The included `netlify.toml` records those settings in the repository.
 
 ## Architecture
 
