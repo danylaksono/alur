@@ -1,6 +1,7 @@
 import { duckdbService } from './duckdb';
 import type { DatasetDescriptor } from '../types/datasets';
 import type {
+  ComparisonAlignedRecord,
   ComparisonMeasure,
   ComparisonOperand,
   ComparisonResult,
@@ -10,9 +11,20 @@ import type {
 import { compileVisualFiltersWhereClause, quoteIdentifier } from '../utils/visualFilterSql';
 
 const resultCache = new Map<string, Promise<ComparisonResult>>();
+export const ALIGNED_RECORD_LIMIT = 250;
+export const SPATIAL_SAMPLE_LIMIT = 1500;
 const toNumber = (value: unknown) => value === null || value === undefined ? null : Number(value);
 const rows = (result: { toArray: () => unknown[] }) => result.toArray() as Array<Record<string, unknown>>;
 const relation = (dataset: DatasetDescriptor) => dataset.relationName ? quoteIdentifier(dataset.relationName) : null;
+
+const operandTable = (operand: ComparisonOperand, dataset: DatasetDescriptor) => {
+  const materialisedTable = operand.scope.kind === 'materialised-selection'
+    ? operand.scope.tableName
+    : operand.scope.kind === 'cohort' && operand.scope.definition.kind === 'selection-table'
+      ? operand.scope.definition.tableName
+      : undefined;
+  return materialisedTable ? quoteIdentifier(materialisedTable) : relation(dataset);
+};
 
 export const comparisonCacheKey = (spec: ComparisonSpec, datasets: Record<string, DatasetDescriptor>) => JSON.stringify({
   spec,
@@ -37,6 +49,152 @@ const aggregationSql = (measure: ComparisonMeasure, operand: ComparisonOperand) 
   if (measure.aggregation === 'avg') return `AVG(${numeric})`;
   if (measure.aggregation === 'min') return `MIN(${numeric})`;
   return `MAX(${numeric})`;
+};
+
+const alignmentCtes = (spec: ComparisonSpec, datasets: Record<string, DatasetDescriptor>) => spec.operands.map((operand, operandIndex) => {
+  const dataset = datasets[operand.datasetId];
+  const table = operandTable(operand, dataset);
+  const keyField = spec.alignment.keyFields?.[operand.id];
+  if (!table || !keyField) return null;
+  const measures = spec.measures.map((measure, measureIndex) => `${aggregationSql(measure, operand)} AS m${measureIndex}`);
+  return `o${operandIndex} AS (SELECT CAST(${quoteIdentifier(keyField)} AS VARCHAR) AS alignment_key, TRUE AS present${operandIndex}${measures.length ? `, ${measures.join(', ')}` : ''} FROM ${table} ${operandWhereClause(operand)} GROUP BY 1)`;
+});
+
+const queryAlignedRecords = async (
+  spec: ComparisonSpec,
+  datasets: Record<string, DatasetDescriptor>,
+  signal?: AbortSignal,
+): Promise<{ records: ComparisonAlignedRecord[]; total: number; overlap: NonNullable<ComparisonResult['overlap']> }> => {
+  if (spec.alignment.mode !== 'entity-keyed' || !spec.operands.length) return { records: [], total: 0, overlap: [] };
+  const ctes = alignmentCtes(spec, datasets);
+  if (ctes.some((cte) => !cte)) return { records: [], total: 0, overlap: [] };
+  const keyUnion = spec.operands.map((_, index) => `SELECT alignment_key FROM o${index}`).join(' UNION ');
+  const valueColumns = spec.operands.flatMap((_, operandIndex) => [
+    `o${operandIndex}.present${operandIndex} AS present${operandIndex}`,
+    ...spec.measures.map((__, measureIndex) => `o${operandIndex}.m${measureIndex} AS o${operandIndex}m${measureIndex}`),
+  ]);
+  const joins = spec.operands.map((_, index) => `LEFT JOIN o${index} ON o${index}.alignment_key = keys.alignment_key`).join(' ');
+  if (signal?.aborted) throw new DOMException('Comparison query cancelled', 'AbortError');
+  const alignedRows = rows(await duckdbService.query(`WITH ${ctes.join(', ')}, keys AS (${keyUnion}) SELECT keys.alignment_key, COUNT(*) OVER () AS aligned_total${valueColumns.length ? `, ${valueColumns.join(', ')}` : ''} FROM keys ${joins} ORDER BY keys.alignment_key LIMIT ${ALIGNED_RECORD_LIMIT};`));
+  const records = alignedRows.map((row): ComparisonAlignedRecord => {
+    const values: ComparisonAlignedRecord['values'] = {};
+    const presentOperandIds: string[] = [];
+    spec.operands.forEach((operand, operandIndex) => {
+      if (row[`present${operandIndex}`]) presentOperandIds.push(operand.id);
+      values[operand.id] = Object.fromEntries(spec.measures.map((measure, measureIndex) => [measure.id, toNumber(row[`o${operandIndex}m${measureIndex}`])]));
+    });
+    const deltas = Object.fromEntries(spec.measures.map((measure) => {
+      if (spec.operands.length !== 2) return [measure.id, null];
+      const a = values[spec.operands[0].id][measure.id];
+      const b = values[spec.operands[1].id][measure.id];
+      return [measure.id, a === null || b === null ? null : b - a];
+    }));
+    return { key: String(row.alignment_key), presentOperandIds, values, deltas };
+  });
+  const overlapColumns: string[] = [];
+  for (let left = 0; left < spec.operands.length; left += 1) for (let right = left + 1; right < spec.operands.length; right += 1) {
+    overlapColumns.push(`(SELECT COUNT(*) FROM o${left} INNER JOIN o${right} USING (alignment_key)) AS overlap_${left}_${right}`);
+  }
+  const overlapRow = overlapColumns.length
+    ? rows(await duckdbService.query(`WITH ${ctes.join(', ')} SELECT ${overlapColumns.join(', ')};`))[0] || {}
+    : {};
+  const overlap: NonNullable<ComparisonResult['overlap']> = [];
+  for (let left = 0; left < spec.operands.length; left += 1) for (let right = left + 1; right < spec.operands.length; right += 1) overlap.push({
+    operandAId: spec.operands[left].id,
+    operandBId: spec.operands[right].id,
+    count: Number(overlapRow[`overlap_${left}_${right}`] || 0),
+  });
+  return { records, total: Number(alignedRows[0]?.aligned_total || 0), overlap };
+};
+
+const spatialGeometry = (dataset: DatasetDescriptor) => dataset.geometryColumn
+  || dataset.fields.find((field) => field.type.toLowerCase() === 'geometry')?.name;
+
+const lonLatGeometrySql = (dataset: DatasetDescriptor, geometryField: string) => {
+  const geometry = quoteIdentifier(geometryField);
+  const crs = dataset.geometryCrs?.replace(/'/g, "''");
+  return crs && crs.toUpperCase() !== 'EPSG:4326'
+    ? `ST_Transform(${geometry}, '${crs}', 'EPSG:4326', true)`
+    : geometry;
+};
+
+const querySpatialSample = async (
+  spec: ComparisonSpec,
+  operand: ComparisonOperand,
+  dataset: DatasetDescriptor,
+  denominator: number,
+  signal?: AbortSignal,
+): Promise<NonNullable<ComparisonResult['spatialSamples']>[number] | null> => {
+  const table = operandTable(operand, dataset);
+  const geometryField = spatialGeometry(dataset);
+  if (!table || !geometryField) return null;
+  const keyField = spec.alignment.keyFields?.[operand.id] || dataset.rowIdColumn;
+  const measure = spec.measures[0];
+  const measureField = measure?.fields[operand.id];
+  const valueSql = !measure || measure.aggregation === 'count' || !measureField ? '1' : `TRY_CAST(${quoteIdentifier(measureField)} AS DOUBLE)`;
+  const geometry = quoteIdentifier(geometryField);
+  const lonLatGeometry = lonLatGeometrySql(dataset, geometryField);
+  if (signal?.aborted) throw new DOMException('Comparison query cancelled', 'AbortError');
+  const scopeWhere = operandWhereClause(operand);
+  const spatialWhere = `${scopeWhere}${scopeWhere ? ' AND' : ' WHERE'} ${geometry} IS NOT NULL`;
+  const sampleRows = rows(await duckdbService.query(`SELECT CAST(${quoteIdentifier(keyField)} AS VARCHAR) AS __alur_key, ${valueSql} AS __alur_value, ST_AsGeoJSON(${lonLatGeometry}) AS geojson FROM ${table} ${spatialWhere} LIMIT ${SPATIAL_SAMPLE_LIMIT};`));
+  const features = sampleRows.flatMap((row): GeoJSON.Feature[] => {
+    if (!row.geojson) return [];
+    try {
+      return [{
+        type: 'Feature',
+        id: String(row.__alur_key),
+        geometry: JSON.parse(String(row.geojson)) as GeoJSON.Geometry,
+        properties: { __alur_key: String(row.__alur_key), __alur_value: toNumber(row.__alur_value), __alur_operand_id: operand.id },
+      }];
+    } catch { return []; }
+  });
+  return { operandId: operand.id, measureId: measure?.id, features: { type: 'FeatureCollection', features }, sampled: denominator > SPATIAL_SAMPLE_LIMIT, featureCount: denominator };
+};
+
+const queryDifferenceSpatialSample = async (
+  spec: ComparisonSpec,
+  datasets: Record<string, DatasetDescriptor>,
+  signal?: AbortSignal,
+): Promise<NonNullable<ComparisonResult['differenceSpatialSample']> | null> => {
+  if (spec.operands.length !== 2 || spec.alignment.mode !== 'entity-keyed' || !spec.measures[0]) return null;
+  const [a, b] = spec.operands;
+  const datasetA = datasets[a.datasetId];
+  const datasetB = datasets[b.datasetId];
+  const tableA = operandTable(a, datasetA);
+  const tableB = operandTable(b, datasetB);
+  const keyA = spec.alignment.keyFields?.[a.id];
+  const keyB = spec.alignment.keyFields?.[b.id];
+  const geometryField = spatialGeometry(datasetA);
+  if (!tableA || !tableB || !keyA || !keyB || !geometryField) return null;
+  const measure = spec.measures[0];
+  const geometry = quoteIdentifier(geometryField);
+  const whereA = operandWhereClause(a);
+  const geometryWhereA = `${whereA}${whereA ? ' AND' : ' WHERE'} ${geometry} IS NOT NULL`;
+  const query = `WITH a AS (
+      SELECT CAST(${quoteIdentifier(keyA)} AS VARCHAR) AS alignment_key,
+             ${aggregationSql(measure, a)} AS value_a,
+             ANY_VALUE(ST_AsGeoJSON(${lonLatGeometrySql(datasetA, geometryField)})) AS geojson
+      FROM ${tableA} ${geometryWhereA} GROUP BY 1
+    ), b AS (
+      SELECT CAST(${quoteIdentifier(keyB)} AS VARCHAR) AS alignment_key,
+             ${aggregationSql(measure, b)} AS value_b
+      FROM ${tableB} ${operandWhereClause(b)} GROUP BY 1
+    )
+    SELECT a.alignment_key AS __alur_key, b.value_b - a.value_a AS __alur_value, a.geojson, COUNT(*) OVER () AS feature_total
+    FROM a INNER JOIN b USING (alignment_key)
+    WHERE a.value_a IS NOT NULL AND b.value_b IS NOT NULL
+    ORDER BY a.alignment_key LIMIT ${SPATIAL_SAMPLE_LIMIT};`;
+  if (signal?.aborted) throw new DOMException('Comparison query cancelled', 'AbortError');
+  const sampleRows = rows(await duckdbService.query(query));
+  const features = sampleRows.flatMap((row): GeoJSON.Feature[] => {
+    if (!row.geojson) return [];
+    try {
+      return [{ type: 'Feature', id: String(row.__alur_key), geometry: JSON.parse(String(row.geojson)) as GeoJSON.Geometry, properties: { __alur_key: String(row.__alur_key), __alur_value: toNumber(row.__alur_value), __alur_operand_id: '__difference__' } }];
+    } catch { return []; }
+  });
+  const featureCount = Number(sampleRows[0]?.feature_total || 0);
+  return { operandId: '__difference__', measureId: measure.id, features: { type: 'FeatureCollection', features }, sampled: featureCount > SPATIAL_SAMPLE_LIMIT, featureCount };
 };
 
 export type ComparisonCompatibility = {
@@ -76,12 +234,7 @@ const runComparison = async (
   for (const operand of spec.operands) {
     if (signal?.aborted) throw new DOMException('Comparison query cancelled', 'AbortError');
     const dataset = datasets[operand.datasetId];
-    const materialisedTable = operand.scope.kind === 'materialised-selection'
-      ? operand.scope.tableName
-      : operand.scope.kind === 'cohort' && operand.scope.definition.kind === 'selection-table'
-        ? operand.scope.definition.tableName
-        : undefined;
-    const table = materialisedTable ? quoteIdentifier(materialisedTable) : relation(dataset);
+    const table = operandTable(operand, dataset);
     if (!table) {
       warnings.push(`${operand.label} has no queryable relation. Relink or materialise the dataset first.`);
       continue;
@@ -128,7 +281,33 @@ const runComparison = async (
     }
   }
 
-  return { specId: spec.id, summaries, distributions, categoryShares, temporalSeries, warnings: [...new Set(warnings)], generatedAt: Date.now() };
+  let alignedRecords: ComparisonResult['alignedRecords'];
+  let alignedRecordCount: number | undefined;
+  let alignedRecordsTruncated: boolean | undefined;
+  let overlap: ComparisonResult['overlap'];
+  if (spec.alignment.mode === 'entity-keyed' && (spec.requestedViews.includes('records') || spec.requestedViews.includes('map'))) {
+    const aligned = await queryAlignedRecords(spec, datasets, signal);
+    alignedRecords = aligned.records;
+    alignedRecordCount = aligned.total;
+    alignedRecordsTruncated = aligned.total > ALIGNED_RECORD_LIMIT;
+    overlap = aligned.overlap;
+  }
+
+  const spatialSamples: NonNullable<ComparisonResult['spatialSamples']> = [];
+  if (spec.requestedViews.includes('map')) for (const operand of spec.operands) {
+    const dataset = datasets[operand.datasetId];
+    if (!dataset?.spatial) continue;
+    const denominator = summaries[0]?.values.find((value) => value.operandId === operand.id)?.denominator || 0;
+    const sample = await querySpatialSample(spec, operand, dataset, denominator, signal);
+    if (sample) spatialSamples.push(sample);
+    else warnings.push(`${operand.label} is marked spatial but has no queryable geometry column.`);
+  }
+
+  const differenceSpatialSample = compatibility.differenceMapEligible && spec.requestedViews.includes('map')
+    ? await queryDifferenceSpatialSample(spec, datasets, signal)
+    : null;
+
+  return { specId: spec.id, summaries, distributions, categoryShares, temporalSeries, overlap, alignedRecords, alignedRecordCount, alignedRecordsTruncated, spatialSamples, differenceSpatialSample: differenceSpatialSample || undefined, warnings: [...new Set(warnings)], generatedAt: Date.now() };
 };
 
 export const queryComparison = (spec: ComparisonSpec, datasets: Record<string, DatasetDescriptor>, signal?: AbortSignal) => {

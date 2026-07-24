@@ -56,6 +56,37 @@ test('@a11y populated Explore, Compare, Explain, and inspector workflows', async
     await expect(page.getByRole('heading', { name: 'Comparison sessions' })).toBeVisible();
     await expect(page.getByText(/2 operands/)).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath('compare-two-operands.png'), fullPage: true });
+    if (testInfo.project.name === 'desktop') {
+      await page.getByRole('tab', { name: 'Map', exact: true }).click();
+      await expect(page.locator('div[aria-label$=" comparison map"]')).toHaveCount(2, { timeout: 30_000 });
+      await expect(page.locator('[data-comparison-map-ready="true"]')).toHaveCount(2, { timeout: 30_000 });
+      await page.waitForTimeout(500);
+      await page.screenshot({ path: testInfo.outputPath('compare-synchronised-maps.png'), fullPage: true });
+
+      await page.getByLabel('Comparison alignment').selectOption('entity-keyed');
+      const rowId = await page.evaluate(() => Object.values((window as unknown as { __alurStore: { getState: () => { datasetRegistry: Record<string, { rowIdColumn: string }> } } }).__alurStore.getState().datasetRegistry)[0]?.rowIdColumn);
+      const keySelectors = page.getByLabel(/entity key$/i);
+      await keySelectors.nth(0).selectOption(rowId);
+      await keySelectors.nth(1).selectOption(rowId);
+      await page.getByLabel('Measure aggregation').selectOption('avg');
+      await page.getByLabel(/measure field$/i).nth(0).selectOption('Gcons2023');
+      await page.getByLabel(/measure field$/i).nth(1).selectOption('Gcons2023');
+      await page.getByRole('tab', { name: 'Map', exact: true }).click();
+      await expect(page.getByRole('button', { name: 'Difference B − A' })).toBeEnabled({ timeout: 30_000 });
+      await page.getByRole('button', { name: 'Difference B − A' }).click();
+      await expect(page.locator('[data-comparison-map-ready="true"]')).toHaveCount(1, { timeout: 30_000 });
+      await page.waitForTimeout(500);
+      await page.screenshot({ path: testInfo.outputPath('compare-difference-map.png'), fullPage: true });
+      await page.getByRole('button', { name: 'Pin to Explain' }).click();
+      await expect(page.getByText(/frozen map evidence pinned/i)).toBeVisible();
+      await page.getByRole('tab', { name: 'Records', exact: true }).click();
+      await expect(page.getByRole('heading', { name: 'Entity-aligned record preview' })).toBeVisible({ timeout: 30_000 });
+      await page.locator('tbody tr').first().click();
+      await page.getByRole('button', { name: 'Use selected as filter' }).click();
+      await expect(page.getByText(/explicitly as a dataset filter/i)).toBeVisible();
+      await page.screenshot({ path: testInfo.outputPath('compare-aligned-records.png'), fullPage: true });
+      await page.getByLabel('Comparison alignment').selectOption('aggregate-only');
+    }
     await page.getByRole('button', { name: '+ Add' }).click();
     await page.getByRole('button', { name: '+ Add' }).click();
     await expect(page.getByText(/4 operands/)).toBeVisible();
@@ -67,6 +98,7 @@ test('@a11y populated Explore, Compare, Explain, and inspector workflows', async
   await test.step('Explain reasoning structure and presentation exit', async () => {
     await switchMode(page, 'explain');
     await expect(page.getByLabel('Section title').first()).toHaveValue('Question');
+    if (testInfo.project.name === 'desktop') await expect(page.locator('[data-comparison-map-ready="true"]')).toHaveCount(1, { timeout: 30_000 });
     const results = await new AxeBuilder({ page }).analyze();
     expect(results.violations.filter((violation) => ['serious', 'critical'].includes(violation.impact || ''))).toEqual([]);
     await page.getByRole('button', { name: 'Present' }).click();

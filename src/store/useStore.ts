@@ -378,18 +378,29 @@ const emptyVisualAnalytics = (): HydratedVisualAnalyticsState => ({
   variants: [],
 });
 
+const datasetFieldsForLayer = (layer: MapLayer) => {
+  const source = layer.source;
+  if (source.kind !== 'duckdb-table' && source.kind !== 'duckdb-query') return source.fields;
+  return [{ name: source.featureIdColumn, type: 'BIGINT' }, ...source.fields.filter((field) => field.name !== source.featureIdColumn)];
+};
+
 const datasetDescriptorForLayer = (layer: MapLayer): DatasetDescriptor => ({
   id: layer.id,
   name: layer.name,
   sourceVersion: DATASET_SOURCE_VERSION,
   source: { kind: 'layer', layerId: layer.id },
-  fields: layer.source.fields,
+  fields: datasetFieldsForLayer(layer),
   rowCount: layer.featureCount,
   rowIdColumn: layer.source.kind === 'duckdb-table' || layer.source.kind === 'duckdb-query' ? layer.source.featureIdColumn : '_alur_feature_id',
   rowIdQuality: 'map-feature-id',
   sourceUpdatedAt: layer.source.kind === 'duckdb-table' || layer.source.kind === 'duckdb-query' ? layer.source.renderVersion : layer.createdAt,
   spatial: true,
-  relationName: layer.source.kind === 'duckdb-table' || layer.source.kind === 'duckdb-query' ? layer.source.tableName : undefined,
+  geometryColumn: layer.source.kind === 'duckdb-table' || layer.source.kind === 'duckdb-query' ? '__alur_tile_geom' : undefined,
+  geometryCrs: layer.source.kind === 'duckdb-table' || layer.source.kind === 'duckdb-query' ? 'EPSG:3857' : 'EPSG:4326',
+  geometryKind: layer.source.geometryKind,
+  bounds: layer.source.bounds,
+  relationName: layer.source.kind === 'duckdb-table' || layer.source.kind === 'duckdb-query' ? layer.source.tileSource.tableName : undefined,
+  originTableName: layer.source.kind === 'duckdb-table' || layer.source.kind === 'duckdb-query' ? layer.source.tableName : undefined,
 });
 
 const recordCurrentAnalysis = (state: AppState, action: HistoryAction) =>

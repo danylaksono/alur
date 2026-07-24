@@ -18,6 +18,11 @@ export type DatasetDescriptor = {
   rowIdQuality: 'validated-unique' | 'materialised' | 'map-feature-id';
   sourceUpdatedAt: number;
   spatial: boolean;
+  /** Spatial metadata used by generic consumers such as comparison maps. */
+  geometryColumn?: string;
+  geometryCrs?: string;
+  geometryKind?: GeometryKind;
+  bounds?: [[number, number], [number, number]];
   /** Physical DuckDB relation used by the dataset query adapter. */
   relationName?: string;
   originTableName?: string;

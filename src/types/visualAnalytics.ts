@@ -78,6 +78,22 @@ export type ComparisonValue = {
   missing: number;
 };
 
+export type ComparisonAlignedRecord = {
+  key: string;
+  presentOperandIds: string[];
+  values: Record<string, Record<string, number | null>>;
+  /** B minus A for two-operand numeric measures. */
+  deltas: Record<string, number | null>;
+};
+
+export type ComparisonSpatialSample = {
+  operandId: string;
+  measureId?: string;
+  features: GeoJSON.FeatureCollection;
+  sampled: boolean;
+  featureCount: number;
+};
+
 export type ComparisonResult = {
   specId: string;
   summaries: Array<{ measureId: string; values: ComparisonValue[] }>;
@@ -85,7 +101,11 @@ export type ComparisonResult = {
   categoryShares: Array<{ dimension: string; operandId: string; values: Array<{ label: string; count: number; share: number }> }>;
   temporalSeries: Array<{ measureId: string; operandId: string; points: Array<{ period: string; value: number | null }> }>;
   overlap?: Array<{ operandAId: string; operandBId: string; count: number }>;
-  alignedRecords?: Array<Record<string, unknown>>;
+  alignedRecords?: ComparisonAlignedRecord[];
+  alignedRecordCount?: number;
+  alignedRecordsTruncated?: boolean;
+  spatialSamples?: ComparisonSpatialSample[];
+  differenceSpatialSample?: ComparisonSpatialSample;
   warnings: string[];
   generatedAt: number;
 };
@@ -106,6 +126,8 @@ export type ExplainCard = {
   sectionId: string;
   kind: ExplainCardKind;
   referenceId?: string;
+  comparisonView?: ComparisonView;
+  comparisonMapMode?: 'multiples' | 'difference';
   datasetId?: string;
   title?: string;
   note?: string;
