@@ -18,6 +18,7 @@ import type { VisualAnalyticsState, VisualChartSpec, VisualFilter } from '../typ
 import type { MvtTileSource } from '../services/duckdb';
 import type { LayerSource } from '../types/layers';
 import type { LayerBounds } from '../types/layers';
+import { migrateLocalStorageKey } from '../utils/storageMigration';
 
 export type NodeExecutionState = {
   status: 'idle' | 'running' | 'done' | 'error';
@@ -51,7 +52,7 @@ export type MapLayer = {
   hexbinLayerId?: string;
 };
 
-export type GISNode = Node & {
+export type WorkflowNode = Node & {
   data: {
     label: string;
     type: 'input' | 'analysis' | 'attribute' | 'aggregate' | 'filter' | 'join' | 'visualisation' | 'output';
@@ -96,7 +97,7 @@ export type ChatMessage = {
 };
 
 interface AppState {
-  nodes: GISNode[];
+  nodes: WorkflowNode[];
   edges: Edge[];
   duckdbReady: boolean;
   selectedBasemapId: BasemapId;
@@ -141,7 +142,7 @@ interface AppState {
   onNodesChange: (changes: NodeChange[]) => void;
   onEdgesChange: (changes: EdgeChange[]) => void;
   onConnect: (connection: Connection) => void;
-  addNode: (node: GISNode) => void;
+  addNode: (node: WorkflowNode) => void;
   updateNode: (id: string, config: any) => void;
   removeNode: (id: string) => void;
   duplicateNode: (id: string, newId?: string, position?: { x: number; y: number }) => void;
@@ -171,14 +172,10 @@ interface AppState {
 export type NewMapLayer = Omit<MapLayer, 'visible' | 'opacity' | 'createdAt' | 'featureCount' | 'styleVersion' | 'source'> &
   Partial<Pick<MapLayer, 'visible' | 'opacity' | 'createdAt' | 'featureCount' | 'styleVersion' | 'source'>>;
 
-if (typeof window !== 'undefined') {
-  window.localStorage.removeItem('ymnngis-workflow');
-}
+migrateLocalStorageKey('ymnngis-settings', 'alur-settings');
 
 const removeRecordKeys = <T>(record: Record<string, T>, ids: Set<string>) =>
   Object.fromEntries(Object.entries(record).filter(([id]) => !ids.has(id)));
-
-const emptyFeatureCollection: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
 
 const inferLegacyGeometryKind = (geojson?: GeoJSON.FeatureCollection) => {
   const geomType = geojson?.features.find((feature) => feature.geometry)?.geometry?.type || 'Point';
@@ -369,7 +366,7 @@ export const useStore = create<AppState>()(persist((set, get) => ({
         .filter((change) => change.type === 'remove')
         .map((change) => change.id)
     );
-    const nextNodes = applyNodeChanges(changes, get().nodes) as GISNode[];
+    const nextNodes = applyNodeChanges(changes, get().nodes) as WorkflowNode[];
     const nextNodeIds = new Set(nextNodes.map((node) => node.id));
 
     const nextLayers = removedNodeIds.size
@@ -459,7 +456,7 @@ export const useStore = create<AppState>()(persist((set, get) => ({
     const sourcePosition = node.position ?? { x: 0, y: 0 };
     const nextPosition = position ?? { x: sourcePosition.x + 40, y: sourcePosition.y + 40 };
 
-    const clonedNode: GISNode = {
+    const clonedNode: WorkflowNode = {
       ...node,
       id: newId,
       position: nextPosition,
@@ -531,7 +528,7 @@ export const useStore = create<AppState>()(persist((set, get) => ({
     mapLayers: state.mapLayers.map((layer) => {
       if (layer.id !== layerId) return layer;
       if (!layer.visualisation && !layer.legend) return layer;
-      const { visualisation, legend, ...rest } = layer;
+      const { visualisation: _visualisation, legend: _legend, ...rest } = layer;
       return { ...rest, styleVersion: layer.styleVersion + 1 };
     }),
   })),
@@ -700,7 +697,7 @@ export const useStore = create<AppState>()(persist((set, get) => ({
     toasts: state.toasts.filter((t) => t.id !== id)
   })),
 }), {
-  name: 'ymnngis-settings',
+  name: 'alur-settings',
   version: 1,
   // Only user settings persist; workflow/layer state is ephemeral by design.
   partialize: (state) => ({ settings: state.settings }) as AppState,
@@ -709,5 +706,5 @@ export const useStore = create<AppState>()(persist((set, get) => ({
 
 if (typeof window !== 'undefined' && import.meta.env?.DEV) {
   // Debug handle for dev tools and E2E runs.
-  (window as unknown as Record<string, unknown>).__ymnStore = useStore;
+  (window as unknown as Record<string, unknown>).__alurStore = useStore;
 }

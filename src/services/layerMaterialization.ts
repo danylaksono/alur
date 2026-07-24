@@ -23,7 +23,7 @@ export const materializeWorkflowMapLayer = async ({
   sourceKind?: 'workflow' | 'step' | 'output' | 'manual';
   visualisationConfig?: WorkflowVisualisationConfig;
 }) => {
-  const tableName = safeName(`ymn_layer_${layerId}`);
+  const tableName = safeName(`alur_layer_${layerId}`);
   await duckdbService.materializeQueryAsTable(workflow.resultSql, tableName);
   const featureCount = await duckdbService.getTableFeatureCount(tableName);
   const source = await duckdbService.prepareLayerSource(tableName, {

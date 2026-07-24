@@ -1,9 +1,9 @@
 ---
 name: verify
-description: Build, launch, and drive YMNNGIS (browser GIS app) to verify changes at the UI surface.
+description: Build, launch, and drive ALUR (browser visual analytics app) to verify changes at the UI surface.
 ---
 
-# Verifying YMNNGIS
+# Verifying ALUR
 
 Client-side React + DuckDB-WASM + MapLibre app. No backend. Surface is the browser UI.
 
@@ -36,7 +36,7 @@ Playwright is not a project dep — install it in a scratch dir (`npm i playwrig
 
 ## Debug handles (dev builds only)
 
-`window.__ymnMap` (the MapLibre instance) and `window.__ymnStore` (the zustand store) are
+`window.__alurMap` (the MapLibre instance) and `window.__alurStore` (the zustand store) are
 exposed in dev. Use them from `page.evaluate` to assert layer types, paint, pitch, and
 store state directly instead of scraping the DOM.
 

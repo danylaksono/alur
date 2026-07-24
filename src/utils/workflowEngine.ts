@@ -1,5 +1,5 @@
 import type { Edge } from '@xyflow/react';
-import type { GISNode } from '../store/useStore';
+import type { WorkflowNode } from '../store/useStore';
 import type { LayerVisualisation } from '../types/visualisation';
 import { spatialFunctions } from './spatialFunctions';
 
@@ -89,7 +89,7 @@ const BOOLEAN_SPATIAL_PREDICATES = new Set([
 // ─── helpers ──────────────────────────────────────────────────────────
 
 /** Topologically sort nodes from sources (no incoming edges) to sinks. */
-function topoSort(nodes: GISNode[], edges: Edge[]): GISNode[] {
+function topoSort(nodes: WorkflowNode[], edges: Edge[]): WorkflowNode[] {
   const adj = new Map<string, string[]>();
   const inDeg = new Map<string, number>();
 
@@ -144,7 +144,7 @@ function isBooleanPredicate(operation: string): boolean {
 
 // ─── main builder ─────────────────────────────────────────────────────
 
-export function buildWorkflowSQL(nodes: GISNode[], edges: Edge[], options?: { limit?: number }): WorkflowResult {
+export function buildWorkflowSQL(nodes: WorkflowNode[], edges: Edge[], options?: { limit?: number }): WorkflowResult {
   if (!nodes.length) {
     throw new Error('No nodes in the workflow.');
   }
@@ -199,7 +199,7 @@ export function buildWorkflowSQL(nodes: GISNode[], edges: Edge[], options?: { li
         // Named parameters from node config (generic system)
         const extraParams = config?.params as Record<string, unknown> | undefined;
         if (extraParams) {
-          for (const [k, v] of Object.entries(extraParams)) {
+          for (const [_key, v] of Object.entries(extraParams)) {
             if (v === undefined || v === null || v === '') continue;
             if (typeof v === 'number' || typeof v === 'boolean') {
               args.push(String(v));
@@ -352,7 +352,7 @@ export function buildWorkflowSQL(nodes: GISNode[], edges: Edge[], options?: { li
         const selectedValues = selectionIds.map((id: string) => `'${id.replace(/'/g, "''")}'`).join(', ');
         const geometryPredicate = meta.geom ? ` WHERE ${qi(meta.geom)} IS NOT NULL` : '';
         ctes.push(
-          `${alias} AS (\n  SELECT * EXCLUDE (__ymn_selection_row)\n  FROM (\n    SELECT *, ROW_NUMBER() OVER ()::BIGINT AS __ymn_selection_row\n    FROM ${source}${geometryPredicate}\n  )\n  WHERE CAST(__ymn_selection_row AS VARCHAR) IN (${selectedValues})\n)`
+          `${alias} AS (\n  SELECT * EXCLUDE (__alur_selection_row)\n  FROM (\n    SELECT *, ROW_NUMBER() OVER ()::BIGINT AS __alur_selection_row\n    FROM ${source}${geometryPredicate}\n  )\n  WHERE CAST(__alur_selection_row AS VARCHAR) IN (${selectedValues})\n)`
         );
       } else {
         ctes.push(
@@ -417,7 +417,7 @@ export function buildWorkflowSQL(nodes: GISNode[], edges: Edge[], options?: { li
  * Build SQL that executes the workflow up to (and including) a specific target node.
  * Useful for step-through / per-node execution.
  */
-export function buildUpToSQL(nodes: GISNode[], edges: Edge[], targetNodeId: string, options?: { limit?: number }): WorkflowResult {
+export function buildUpToSQL(nodes: WorkflowNode[], edges: Edge[], targetNodeId: string, options?: { limit?: number }): WorkflowResult {
   if (!nodes.length) throw new Error('No nodes in the workflow.');
   if (!nodes.some((node) => node.id === targetNodeId)) {
     throw new Error(`Target node "${targetNodeId}" does not exist.`);

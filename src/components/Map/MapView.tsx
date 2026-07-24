@@ -149,13 +149,13 @@ export const MapView = () => {
   useEffect(() => {
     if (!mapContainer.current || map.current) return;
     registerMvtProtocol();
-	    const m = new maplibregl.Map({
-	      container: mapContainer.current,
-	      style: getBasemap(selectedBasemapId).styleUrl,
-	      // Blank-canvas start: world view until the first layer focuses the map.
-	      center: [0, 20],
-	      zoom: 1.5,
-	    });
+    const m = new maplibregl.Map({
+      container: mapContainer.current,
+      style: getBasemap(selectedBasemapId).styleUrl,
+      // Blank-canvas start: world view until the first layer focuses the map.
+      center: [0, 20],
+      zoom: 1.5,
+    });
     m.addControl(new maplibregl.NavigationControl(), 'top-right');
     // Fires on the initial style load and after every setStyle — unlike
     // isStyleLoaded(), it is not perturbed by ongoing tile loads.
@@ -163,7 +163,7 @@ export const MapView = () => {
     map.current = m;
     if (import.meta.env.DEV) {
       // Debug handle for driving/inspecting the map in dev tools and E2E runs.
-      (window as unknown as Record<string, unknown>).__ymnMap = m;
+      (window as unknown as Record<string, unknown>).__alurMap = m;
     }
 
     popup.current = new maplibregl.Popup({
@@ -199,7 +199,7 @@ export const MapView = () => {
       map.current = null;
       popup.current = null;
     };
-	  }, []);
+  }, []);
 
   useEffect(() => {
     const m = map.current;

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useStore, type GISNode } from '../store/useStore';
+import { useStore, type WorkflowNode } from '../store/useStore';
 import {
   materializeLayerSelection,
   queryLayerColumnProfile,
@@ -13,11 +13,14 @@ import type { ColumnProfile, HistogramBin } from '../components/DataTable';
 import type { VisualFilter } from '../types/visualAnalytics';
 import type { ComputedField } from '../utils/fieldCalculator';
 import type { AppliedTableLayout, SavedTableView, TableLayout } from '../types/table';
+import { migrateLocalStorageKey } from '../utils/storageMigration';
 
 const EMPTY_FILTERS: VisualFilter[] = [];
 const EMPTY_FEATURE_IDS: string[] = [];
 const EMPTY_COMPUTED_FIELDS: ComputedField[] = [];
-const TABLE_VIEWS_STORAGE_KEY = 'ymnngis-table-views';
+const TABLE_VIEWS_STORAGE_KEY = 'alur-table-views';
+
+migrateLocalStorageKey('ymnngis-table-views', TABLE_VIEWS_STORAGE_KEY);
 
 const loadSavedViews = (): Record<string, SavedTableView[]> => {
   if (typeof window === 'undefined') return {};
@@ -387,7 +390,7 @@ export function useAttributeTable() {
         const geojson: GeoJSON.FeatureCollection = {
           type: 'FeatureCollection',
           features: (selectedLayer.geojson?.features || []).filter((feature) => (
-            selected.has(String(feature.properties?._ymn_feature_id ?? feature.id ?? ''))
+            selected.has(String(feature.properties?._alur_feature_id ?? feature.id ?? ''))
           )),
         };
         addMapLayer({ id, name, geojson, sourceKind: 'manual' });
@@ -396,7 +399,7 @@ export function useAttributeTable() {
           layer: selectedLayer,
           featureIds: selectedFeatureIds,
           computedFields,
-          outputTableName: `ymn_selection_${Date.now()}`,
+          outputTableName: `alur_selection_${Date.now()}`,
         });
         if (!result) throw new Error('Could not materialize the selected geometries.');
         addMapLayer({ id, name, source: result.source, tileSource: result.source.tileSource, featureCount: result.featureCount, sourceKind: 'step' });
@@ -417,10 +420,10 @@ export function useAttributeTable() {
     let config: Record<string, unknown>;
     if (selectedLayer.source.kind === 'legacy-geojson') {
       const selected = new Set(selectedFeatureIds);
-      const features = (selectedLayer.geojson?.features || []).filter((feature) => selected.has(String(feature.properties?._ymn_feature_id ?? feature.id ?? '')));
+      const features = (selectedLayer.geojson?.features || []).filter((feature) => selected.has(String(feature.properties?._alur_feature_id ?? feature.id ?? '')));
       const candidates = ['id', 'ID', 'fid', 'FID', 'gid', 'GID', 'objectid', 'OBJECTID'];
       const idField = candidates.find((field) => features.length > 0 && features.every((feature) => (
-        String(feature.properties?.[field] ?? '') === String(feature.properties?._ymn_feature_id ?? feature.id ?? '')
+        String(feature.properties?.[field] ?? '') === String(feature.properties?._alur_feature_id ?? feature.id ?? '')
       )));
       if (!idField) {
         addToast({ type: 'warning', message: 'These rows do not expose a stable source ID. Create a selection layer instead.' });
@@ -434,7 +437,7 @@ export function useAttributeTable() {
         selectionIds: selectedFeatureIds,
       };
     }
-    const filterNode: GISNode = {
+    const filterNode: WorkflowNode = {
       id: nodeId,
       type: 'filter',
       position: { x: (sourceNode?.position.x || 0) + 260, y: sourceNode?.position.y || 0 },

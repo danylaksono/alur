@@ -57,7 +57,7 @@ type CrsEstimate = {
 
 const qi = (name: string) => `"${name.replace(/"/g, '""')}"`;
 const escapeSqlString = (value: string) => value.replace(/'/g, "''");
-const mvtTableNameFor = (tableName: string) => `__ymn_mvt_${tableName.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+const mvtTableNameFor = (tableName: string) => `__alur_mvt_${tableName.replace(/[^a-zA-Z0-9_]/g, '_')}`;
 const withFileNameSuffix = (path: string, suffix: string) => {
     const slashIndex = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
     const directory = slashIndex >= 0 ? path.slice(0, slashIndex + 1) : '';
@@ -384,7 +384,7 @@ class DuckDBService {
                 if (
                     !name ||
                     ['geojson', 'geometry', 'geom', 'wkb_geometry', 'geometry_bbox'].includes(loweredName) ||
-                    loweredName.startsWith('__ymn_') ||
+                    loweredName.startsWith('__alur_') ||
                     !mvtType
                 ) {
                     return null;
@@ -411,7 +411,7 @@ class DuckDBService {
                 return (
                     col.name &&
                     !['geojson', 'geometry', 'geom', 'wkb_geometry', 'geometry_bbox'].includes(lower) &&
-                    !lower.startsWith('__ymn_') &&
+                    !lower.startsWith('__alur_') &&
                     !type.includes('geometry') &&
                     !type.includes('blob') &&
                     !type.includes('binary')
@@ -693,15 +693,15 @@ class DuckDBService {
         await this.query(`
             CREATE OR REPLACE TABLE ${qi(tileTable)} AS
             SELECT
-                ROW_NUMBER() OVER ()::BIGINT AS __ymn_mvt_id,
-                ST_Transform(${geomExpr}, '${sourceCrs}', 'EPSG:3857', true) AS __ymn_tile_geom
+                ROW_NUMBER() OVER ()::BIGINT AS __alur_mvt_id,
+                ST_Transform(${geomExpr}, '${sourceCrs}', 'EPSG:3857', true) AS __alur_tile_geom
                 ${propertySelect}
             FROM ${sourceTable}
             WHERE ${geomExpr} IS NOT NULL;
         `);
 
         const typeResult = await this.query(
-            `SELECT ST_GeometryType(__ymn_tile_geom) AS geometry_type FROM ${qi(tileTable)} WHERE __ymn_tile_geom IS NOT NULL LIMIT 1;`
+            `SELECT ST_GeometryType(__alur_tile_geom) AS geometry_type FROM ${qi(tileTable)} WHERE __alur_tile_geom IS NOT NULL LIMIT 1;`
         );
         const typeRaw = typeResult.toArray()[0];
         const typeRow = typeof typeRaw?.toJSON === 'function' ? typeRaw.toJSON() : typeRaw;
@@ -748,7 +748,7 @@ class DuckDBService {
             crsConfidence: crsEstimate.confidence,
             crsReason: crsEstimate.reason,
             geometryKind: tileSource.geometryKind,
-            featureIdColumn: '__ymn_mvt_id',
+            featureIdColumn: '__alur_mvt_id',
             bounds: await this.layerBounds(tableName, geomExpr, crsEstimate.transformCrs),
             fields: this.fieldsForLayerSource(columns),
             tileSource,
@@ -782,16 +782,16 @@ class DuckDBService {
             ),
             tile_rows AS (
                 SELECT {
-                    "geom": ST_AsMVTGeom(__ymn_tile_geom, ST_Extent(tile_bounds), 4096, 64, true),
-                    "__ymn_mvt_id": __ymn_mvt_id,
-                    "_ymn_feature_id": CAST(__ymn_mvt_id AS VARCHAR)
+                    "geom": ST_AsMVTGeom(__alur_tile_geom, ST_Extent(tile_bounds), 4096, 64, true),
+                    "__alur_mvt_id": __alur_mvt_id,
+                    "_alur_feature_id": CAST(__alur_mvt_id AS VARCHAR)
                     ${properties}
                 } AS tile_row
                 FROM ${qi(source.tableName)}, bounds
-                WHERE ST_Intersects(__ymn_tile_geom, tile_bounds)
+                WHERE ST_Intersects(__alur_tile_geom, tile_bounds)
                 ${filterClause}
             )
-            SELECT ST_AsMVT(tile_row, ${`'${escapeSqlString(source.layerName)}'`}, 4096, 'geom', '__ymn_mvt_id') AS tile
+            SELECT ST_AsMVT(tile_row, ${`'${escapeSqlString(source.layerName)}'`}, 4096, 'geom', '__alur_mvt_id') AS tile
             FROM tile_rows;
         `);
         const rawRow = result.toArray()[0];

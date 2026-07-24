@@ -58,7 +58,7 @@ export const AboutDialog = () => {
         <div className="px-5 py-5">
           <div className="flex items-center gap-3">
             <img
-              src={new URL('../../../alur-mark.svg', import.meta.url).href}
+              src="/alur-mark.svg"
               alt=""
               className="h-11 w-11"
             />

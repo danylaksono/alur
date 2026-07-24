@@ -39,9 +39,9 @@ const detectGeometryColumn = async (tableName: string): Promise<string | null> =
 
 /** Exact pointy-top hex assignment (d3-hexbin algorithm) in mercator meters. */
 const hexCellFor = (x: number, y: number, dx: number, dy: number): [number, number] => {
-  let py = y / dy;
+  const py = y / dy;
   let pj = Math.round(py);
-  let px = x / dx - (pj & 1) / 2;
+  const px = x / dx - (pj & 1) / 2;
   let pi = Math.round(px);
   const py1 = py - pj;
 

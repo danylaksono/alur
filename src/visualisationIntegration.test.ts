@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Edge } from '@xyflow/react';
-import type { GISNode } from './store/useStore';
+import type { WorkflowNode } from './store/useStore';
 import { useStore } from './store/useStore';
 import { buildWorkflowSQL, buildUpToSQL } from './utils/workflowEngine';
 import { resolveVisualisationForGeoJson } from './utils/visualisationResolver';
@@ -14,11 +14,7 @@ import {
   buildLegend,
   profileGeoJsonField,
 } from './utils/classification';
-import {
-  compileLabelLayer,
-  compileLayerStyle,
-  geometryKindForLayer,
-} from './utils/mapStyleCompiler';
+import { compileLayerStyle, geometryKindForLayer } from './utils/mapStyleCompiler';
 import { getPalette, fitPaletteToClassCount } from './utils/palettes';
 import { compileVisualFiltersWhereClause } from './utils/visualFilterSql';
 import {
@@ -65,15 +61,15 @@ const makeLayer = (id: string, features: GeoJSON.Feature[], patch: Partial<MapLa
 
 const node = (
   id: string,
-  type: GISNode['data']['type'],
+  type: WorkflowNode['data']['type'],
   config: Record<string, unknown> = {},
   label = id,
-): GISNode => ({
+): WorkflowNode => ({
   id,
   type,
   position: { x: 0, y: 0 },
   data: { label, type, config },
-} as GISNode);
+} as WorkflowNode);
 
 describe('integration: visualisation pipeline', () => {
   // ── Style compiler ──
@@ -182,7 +178,7 @@ describe('integration: visualisation pipeline', () => {
   // ── Workflow engine visualisation propagation ──
 
   it('passes visualisation config through workflow nodes to output', () => {
-    const nodes: GISNode[] = [
+    const nodes: WorkflowNode[] = [
       node('src', 'input', { tableName: 'need_london', fileName: 'need_london.parquet' }),
       node('attr', 'attribute', { expression: 'need / 10', resultField: 'need_score' }),
       node('style', 'visualisation', {
@@ -208,7 +204,7 @@ describe('integration: visualisation pipeline', () => {
   });
 
   it('branches to multiple styled outputs from the same data source', () => {
-    const nodes: GISNode[] = [
+    const nodes: WorkflowNode[] = [
       node('src', 'input', { tableName: 'need_london', fileName: 'need_london.parquet' }),
       node('style_a', 'visualisation', { kind: 'choropleth', field: 'need', method: 'equal_interval', classCount: 4, paletteId: 'forest' }),
       node('style_b', 'visualisation', { kind: 'categorical', field: 'borough', paletteId: 'teal' }),
@@ -391,8 +387,8 @@ describe('integration: visualisation pipeline', () => {
     useStore.getState().addMapLayer({ id: 'fid-layer', name: 'FIDs', geojson });
     const layer = useStore.getState().mapLayers.find((l) => l.id === 'fid-layer')!;
     const features = layer.geojson?.features || [];
-    expect(features[0].properties?._ymn_feature_id).toBe('42');
-    expect(features[1].properties?._ymn_feature_id).toContain('fid-layer:2');
+    expect(features[0].properties?._alur_feature_id).toBe('42');
+    expect(features[1].properties?._alur_feature_id).toContain('fid-layer:2');
   });
 
   // ── Palette utility ──

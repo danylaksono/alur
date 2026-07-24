@@ -27,7 +27,7 @@ export const SqlTab = ({
     try {
       setIsRunning(true);
       const layerId = `manual-query-${Date.now()}`;
-      const tableName = `ymn_manual_${Date.now()}`;
+      const tableName = `alur_manual_${Date.now()}`;
       await duckdbService.materializeQueryAsTable(manualSQL, tableName);
       const source = await duckdbService.prepareLayerSource(tableName, { kind: 'duckdb-query' });
       const featureCount = await duckdbService.getTableFeatureCount(tableName);

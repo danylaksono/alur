@@ -31,12 +31,10 @@ export const JoinNode = ({ data, id, selected }: any) => {
     return schema
       .map((col: any) => col.name || col.column_name)
       .filter((name: unknown): name is string =>
-        typeof name === 'string' && !EXCLUDED_COLUMNS.has(name.toLowerCase()) && !name.toLowerCase().startsWith('__ymn_')
+        typeof name === 'string' && !EXCLUDED_COLUMNS.has(name.toLowerCase()) && !name.toLowerCase().startsWith('__alur_')
       );
   };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const leftColumns = useMemo(() => columnsForHandle('input-0'), [edges, nodeSchemas, id]);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const rightColumns = useMemo(() => columnsForHandle('input-1'), [edges, nodeSchemas, id]);
 
   const updateConfig = (patch: Record<string, unknown>) => updateNode(id, { ...config, ...patch });

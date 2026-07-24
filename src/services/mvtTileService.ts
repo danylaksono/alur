@@ -1,7 +1,7 @@
 import * as maplibregl from 'maplibre-gl';
 import { duckdbService, type MvtTileSource } from './duckdb';
 
-const PROTOCOL = 'ymnngis-mvt';
+const PROTOCOL = 'alur-mvt';
 const tileSources = new Map<string, MvtTileSource>();
 let protocolRegistered = false;
 

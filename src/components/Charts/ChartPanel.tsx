@@ -23,7 +23,7 @@ import type {
   VisualScatterResult,
 } from '../../types/visualAnalytics';
 
-const EXCLUDED_FIELDS = new Set(['geojson', 'geometry', 'geom', 'wkb_geometry', '__ymn_tile_geom', '_ymn_feature_id']);
+const EXCLUDED_FIELDS = new Set(['geojson', 'geometry', 'geom', 'wkb_geometry', '__alur_tile_geom', '_alur_feature_id']);
 
 const CHART_TYPES: Array<{ id: VisualChartType; label: string }> = [
   { id: 'bar', label: 'Bar' },
@@ -56,7 +56,7 @@ const filterChartFields = (fields: ChartField[]) =>
   fields
     .filter((field) => {
       const lower = field.name.toLowerCase();
-      return !EXCLUDED_FIELDS.has(lower) && !lower.startsWith('__ymn_');
+      return !EXCLUDED_FIELDS.has(lower) && !lower.startsWith('__alur_');
     })
     .sort((a, b) => a.name.localeCompare(b.name));
 
@@ -251,7 +251,7 @@ const Histogram = ({
     onHover(data[binIndexAt(pointerX(event))]);
   };
 
-  const handlePointerUp = (event: React.PointerEvent) => {
+  const handlePointerUp = (_event: React.PointerEvent) => {
     if (!drag) return;
     const from = Math.min(drag.start, drag.current);
     const to = Math.max(drag.start, drag.current);

@@ -1,0 +1,17 @@
+{
+  "name": "ALUR — Interactive Visual Analytics",
+  "short_name": "ALUR",
+  "description": "Explore data through linked tables, charts, maps and reproducible workflows.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#123536",
+  "icons": [
+    {
+      "src": "/alur-mark.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

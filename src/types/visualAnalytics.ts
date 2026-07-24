@@ -1,4 +1,4 @@
-export const FEATURE_ID_PROPERTY = '_ymn_feature_id';
+export const FEATURE_ID_PROPERTY = '_alur_feature_id';
 
 export type LayerFeatureSelection = {
   hoveredFeatureId?: string;
