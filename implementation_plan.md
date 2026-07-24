@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-The repository has a strong foundation: DuckDB-Wasm + MapLibre GL + React Flow + LLM chat in a single-page app. However, the four core components (Chat, Node DAG, SQL Editor, Map) currently feel like four separate apps glued together rather than a tightly integrated GIS modeling environment. The plan below addresses this in three progressive phases.
+The repository has a strong foundation: DuckDB-Wasm + MapLibre GL + React Flow + LLM chat in a single-page app. However, the four core components (Chat, Node DAG, SQL Editor, Map) currently feel like four separate apps glued together rather than a tightly integrated visual analytics workspace. The plan below addresses this in three progressive phases.
 
 ---
 
@@ -66,7 +66,7 @@ The repository has a strong foundation: DuckDB-Wasm + MapLibre GL + React Flow +
 - Click a node → highlight associated map layer (dim others, zoom to bounds)
 - Click a feature on the map → highlight the corresponding node in the flow, show its attributes in the table
 - Map “Layer Stack” panel shows which node produced which layer (already partially done but no node link)
-**Why:** This is the single most impactful integration. GIS modelers expect to click on a result and see both the map and the model light up.
+**Why:** This is the single most impactful integration. Analysts expect to click on a result and see both the map and the workflow light up.
 
 ### 1.4 Map interactivity: popups, filtering, measurement
 **Current:** Map is a passive display. No click interaction, no popups, no querying.
@@ -75,7 +75,7 @@ The repository has a strong foundation: DuckDB-Wasm + MapLibre GL + React Flow +
 - Shift+click → select features and filter the active workflow node
 - Right-click → context menu: “Zoom to layer”, “Filter selection”, “Add as new Input”
 - Simple measurement tool (distance, area) — MapLibre has built-in helpers
-**Why:** Without click interaction, the map is a static image. A GIS modeler needs to explore data visually.
+**Why:** Without click interaction, the map is a static image. Analysts need to explore spatial data visually.
 
 ### 1.5 Step-through workflow execution
 **Current:** The only way to “run” a workflow is the “Execute Workflow” button which runs the entire DAG at once.
@@ -83,7 +83,7 @@ The repository has a strong foundation: DuckDB-Wasm + MapLibre GL + React Flow +
 - Each node shows its current status (idle/running/done/error)
 - Nodes can be executed incrementally — run upstream, inspect intermediate result on map, continue downstream
 - Cache intermediate results so re-running a downstream node doesn’t recompute upstream work
-**Why:** This is how desktop GIS modelers work (e.g., QGIS Graphical Modeler’s “Run selected”). Debugging a 10-node workflow is impossible if you only see the final output.
+**Why:** This is how mature visual workflow tools work (for example, QGIS Graphical Modeler's “Run selected”). Debugging a 10-node workflow is impossible if you only see the final output.
 
 ### 1.6 Chat can directly add layers to map
 **Current:** `add_geojson_layer` and `add_h3_layer` tool definitions exist but are stubbed with “not implemented yet” (Chat.tsx lines 123-127).
@@ -119,7 +119,7 @@ The repository has a strong foundation: DuckDB-Wasm + MapLibre GL + React Flow +
 - Check that numeric fields are valid numbers
 - Run a lightweight `EXPLAIN` or `DESCRIBE` on the intermediate SQL to catch column errors early
 - Show inline error badges on nodes
-**Why:** Fail fast. A QGIS modeler tells you immediately if a parameter is invalid.
+**Why:** Fail fast. Mature analytical tools report invalid parameters immediately.
 
 ### 2.5 Filter and Aggregate: auto-suggest columns from schema
 **Current:** Filter and Aggregate nodes have free-text inputs for column names (`condition`, `groupBy`). Users must guess column names.
@@ -156,7 +156,7 @@ The repository has a strong foundation: DuckDB-Wasm + MapLibre GL + React Flow +
 - Configurable limit per node (in node config UI)
 - MVT (Mapbox Vector Tiles) rendering for large datasets using `ST_AsMVT` instead of `ST_AsGeoJSON`
 - Virtual scrolling in the DataTable via TanStack Table’s built-in virtualization
-**Why:** Without this, the app is limited to ~5000 features. That’s not “production-ready for medium GIS analysis.”
+**Why:** Without this, the app is limited to ~5000 features. That is not production-ready for medium-scale visual analysis.
 
 ### 3.4 Add error boundaries for each panel
 **Current:** A crash in the chat, map, or flow will take down the entire app.
@@ -176,7 +176,7 @@ The repository has a strong foundation: DuckDB-Wasm + MapLibre GL + React Flow +
 - Drag-to-reorder layers
 - Color picker for symbolization
 - Delete layer button
-**Why:** Essential for any GIS map view.
+**Why:** Essential for any analytical map view.
 
 ### 3.7 Keyboard shortcuts and accessibility
 **Current:** No keyboard shortcuts. No ARIA labels.
@@ -274,7 +274,7 @@ Data Flow (Target):
 
 ## Measurement: How we know we’re done
 
-The app is “production-ready for basic to medium GIS analysis with vector datasets” when:
+The app is production-ready for basic to medium visual and spatial analysis with vector datasets when:
 
 1. **Load data** → A user can upload Parquet/CSV and see it on the map in <3s
 2. **Build workflow** → A user can create a 5+ node workflow without touching the chat (or with chat, either way)

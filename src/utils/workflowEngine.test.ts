@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { buildWorkflowSQL, buildUpToSQL, cteAlias } from './workflowEngine';
-import type { GISNode } from '../store/useStore';
+import type { WorkflowNode } from '../store/useStore';
 import type { Edge } from '@xyflow/react';
 
-function makeNode(overrides: Partial<GISNode>): GISNode {
+function makeNode(overrides: Partial<WorkflowNode>): WorkflowNode {
   return {
     id: 'node-1',
     type: 'input',
@@ -14,7 +14,7 @@ function makeNode(overrides: Partial<GISNode>): GISNode {
       config: {},
     },
     ...overrides,
-  } as GISNode;
+  } as WorkflowNode;
 }
 
 describe('cteAlias', () => {
@@ -49,7 +49,7 @@ describe('buildWorkflowSQL', () => {
   });
 
   it('generates a buffer analysis workflow', () => {
-    const nodes: GISNode[] = [
+    const nodes: WorkflowNode[] = [
       makeNode({ id: 'src', data: { label: 'Src', type: 'input', config: { tableName: 'london' } } }),
       makeNode({ id: 'buf', position: { x: 200, y: 0 }, data: { label: 'Buffer', type: 'analysis', config: { operation: 'ST_Buffer', distance: 500 } } }),
     ];
@@ -61,7 +61,7 @@ describe('buildWorkflowSQL', () => {
   });
 
   it('generates a filter workflow', () => {
-    const nodes: GISNode[] = [
+    const nodes: WorkflowNode[] = [
       makeNode({ id: 'src', data: { label: 'Src', type: 'input', config: { tableName: 'data' } } }),
       makeNode({ id: 'flt', position: { x: 200, y: 0 }, data: { label: 'Filter', type: 'filter', config: { condition: 'population > 1000' } } }),
     ];
@@ -71,19 +71,19 @@ describe('buildWorkflowSQL', () => {
   });
 
   it('generates a reproducible row-selection filter workflow', () => {
-    const nodes: GISNode[] = [
+    const nodes: WorkflowNode[] = [
       makeNode({ id: 'src', data: { label: 'Src', type: 'input', config: { tableName: 'data' } } }),
       makeNode({ id: 'flt', position: { x: 200, y: 0 }, data: { label: 'Selected rows', type: 'filter', config: { condition: 'Selection', selectionIds: ['2', '5'] } } }),
     ];
     const edges: Edge[] = [{ id: 'e1', source: 'src', target: 'flt', type: 'smoothstep' }];
     const result = buildWorkflowSQL(nodes, edges);
-    expect(result.sql).toContain('ROW_NUMBER() OVER ()::BIGINT AS __ymn_selection_row');
+    expect(result.sql).toContain('ROW_NUMBER() OVER ()::BIGINT AS __alur_selection_row');
     expect(result.sql).toContain("IN ('2', '5')");
-    expect(result.sql).toContain('EXCLUDE (__ymn_selection_row)');
+    expect(result.sql).toContain('EXCLUDE (__alur_selection_row)');
   });
 
   it('generates an aggregate workflow', () => {
-    const nodes: GISNode[] = [
+    const nodes: WorkflowNode[] = [
       makeNode({ id: 'src', data: { label: 'Src', type: 'input', config: { tableName: 'zones' } } }),
       makeNode({ id: 'agg', position: { x: 200, y: 0 }, data: { label: 'Agg', type: 'aggregate', config: { operation: 'ST_Union_Agg', groupBy: 'city' } } }),
     ];
@@ -95,7 +95,7 @@ describe('buildWorkflowSQL', () => {
   });
 
   it('generates an attribute computation workflow', () => {
-    const nodes: GISNode[] = [
+    const nodes: WorkflowNode[] = [
       makeNode({ id: 'src', data: { label: 'Src', type: 'input', config: { tableName: 'data' } } }),
       makeNode({ id: 'attr', position: { x: 200, y: 0 }, data: { label: 'Attr', type: 'attribute', config: { expression: 'pop / area', resultField: 'density' } } }),
     ];
@@ -106,7 +106,7 @@ describe('buildWorkflowSQL', () => {
   });
 
   it('generates a multi-input spatial join workflow', () => {
-    const nodes: GISNode[] = [
+    const nodes: WorkflowNode[] = [
       makeNode({ id: 'a', data: { label: 'A', type: 'input', config: { tableName: 'polygons' } } }),
       makeNode({ id: 'b', data: { label: 'B', type: 'input', config: { tableName: 'lines' } } }),
       makeNode({ id: 'inter', position: { x: 200, y: 0 }, data: { label: 'Intersect', type: 'analysis', config: { operation: 'ST_Intersection' } } }),
@@ -122,7 +122,7 @@ describe('buildWorkflowSQL', () => {
   });
 
   it('respects target handles for two-input operations', () => {
-    const nodes: GISNode[] = [
+    const nodes: WorkflowNode[] = [
       makeNode({ id: 'a', data: { label: 'A', type: 'input', config: { tableName: 'polygons' } } }),
       makeNode({ id: 'b', data: { label: 'B', type: 'input', config: { tableName: 'lines' } } }),
       makeNode({ id: 'diff', position: { x: 200, y: 0 }, data: { label: 'Diff', type: 'analysis', config: { operation: 'ST_Difference' } } }),
@@ -138,7 +138,7 @@ describe('buildWorkflowSQL', () => {
   });
 
   it('keeps geometry when a scalar single-input function is used', () => {
-    const nodes: GISNode[] = [
+    const nodes: WorkflowNode[] = [
       makeNode({ id: 'src', data: { label: 'Src', type: 'input', config: { tableName: 'polygons' } } }),
       makeNode({ id: 'area', position: { x: 200, y: 0 }, data: { label: 'Area', type: 'analysis', config: { operation: 'ST_Area' } } }),
     ];
@@ -152,7 +152,7 @@ describe('buildWorkflowSQL', () => {
   });
 
   it('uses boolean two-input predicates as filters while preserving source geometry', () => {
-    const nodes: GISNode[] = [
+    const nodes: WorkflowNode[] = [
       makeNode({ id: 'a', data: { label: 'A', type: 'input', config: { tableName: 'polygons' } } }),
       makeNode({ id: 'b', data: { label: 'B', type: 'input', config: { tableName: 'points' } } }),
       makeNode({ id: 'contains', position: { x: 200, y: 0 }, data: { label: 'Contains', type: 'analysis', config: { operation: 'ST_Contains' } } }),
@@ -171,7 +171,7 @@ describe('buildWorkflowSQL', () => {
   });
 
   it('rejects table functions as normal analysis nodes', () => {
-    const nodes: GISNode[] = [
+    const nodes: WorkflowNode[] = [
       makeNode({ id: 'src', data: { label: 'Src', type: 'input', config: { tableName: 'polygons' } } }),
       makeNode({ id: 'read', position: { x: 200, y: 0 }, data: { label: 'Read', type: 'analysis', config: { operation: 'ST_Read' } } }),
     ];
@@ -181,7 +181,7 @@ describe('buildWorkflowSQL', () => {
   });
 
   it('creates an addressable CTE for output nodes', () => {
-    const nodes: GISNode[] = [
+    const nodes: WorkflowNode[] = [
       makeNode({ id: 'src', data: { label: 'Src', type: 'input', config: { tableName: 'data' } } }),
       makeNode({ id: 'out', position: { x: 200, y: 0 }, data: { label: 'Out', type: 'output', config: {} } }),
     ];
@@ -195,7 +195,7 @@ describe('buildWorkflowSQL', () => {
   });
 
   it('passes visualisation nodes through SQL and exposes style metadata', () => {
-    const nodes: GISNode[] = [
+    const nodes: WorkflowNode[] = [
       makeNode({ id: 'src', data: { label: 'Src', type: 'input', config: { tableName: 'data' } } }),
       makeNode({
         id: 'style',
@@ -217,7 +217,7 @@ describe('buildWorkflowSQL', () => {
   });
 
   it('topologically sorts nodes correctly', () => {
-    const nodes: GISNode[] = [
+    const nodes: WorkflowNode[] = [
       makeNode({ id: 'z', position: { x: 400, y: 0 }, data: { label: 'Output', type: 'output', config: {} } }),
       makeNode({ id: 'buf', position: { x: 200, y: 0 }, data: { label: 'Buffer', type: 'analysis', config: { operation: 'ST_Buffer', distance: 100 } } }),
       makeNode({ id: 'src', data: { label: 'Src', type: 'input', config: { tableName: 'data' } } }),
@@ -236,7 +236,7 @@ describe('buildWorkflowSQL', () => {
 
 describe('buildUpToSQL', () => {
   it('builds SQL up to a target node, excluding downstream nodes', () => {
-    const nodes: GISNode[] = [
+    const nodes: WorkflowNode[] = [
       makeNode({ id: 'src', data: { label: 'Src', type: 'input', config: { tableName: 'data' } } }),
       makeNode({ id: 'buf', position: { x: 200, y: 0 }, data: { label: 'Buffer', type: 'analysis', config: { operation: 'ST_Buffer', distance: 100 } } }),
       makeNode({ id: 'flt', position: { x: 400, y: 0 }, data: { label: 'Filter', type: 'filter', config: { condition: 'need > 10' } } }),
@@ -260,7 +260,7 @@ describe('buildUpToSQL', () => {
 });
 
 describe('join node', () => {
-  const joinNodes = (config: Record<string, unknown>): { nodes: GISNode[]; edges: Edge[] } => ({
+  const joinNodes = (config: Record<string, unknown>): { nodes: WorkflowNode[]; edges: Edge[] } => ({
     nodes: [
       makeNode({ id: 'left', data: { label: 'Left', type: 'input', config: { tableName: 'points' } } }),
       makeNode({ id: 'right', position: { x: 0, y: 200 }, data: { label: 'Right', type: 'input', config: { tableName: 'polygons' } } }),

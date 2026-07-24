@@ -19,7 +19,7 @@ export const TableTab = ({ table }: { table: ReturnType<typeof useAttributeTable
     const computed = new Set(table.computedFields.map((field) => field.name));
     const names = new Set<string>();
     table.data.slice(0, 20).forEach((row) => Object.keys(row).forEach((key) => {
-      if (!computed.has(key) && !['geojson', 'geometry', 'geom', 'wkb_geometry', '__ymn_tile_geom', '_ymn_feature_id', '__ymn_mvt_id'].includes(key.toLowerCase())) names.add(key);
+      if (!computed.has(key) && !['geojson', 'geometry', 'geom', 'wkb_geometry', '__alur_tile_geom', '_alur_feature_id', '__alur_mvt_id'].includes(key.toLowerCase())) names.add(key);
     }));
     return [...names];
   }, [table.computedFields, table.data]);
@@ -112,7 +112,7 @@ export const TableTab = ({ table }: { table: ReturnType<typeof useAttributeTable
             selectedFeatureIds={table.selectedFeatureIds}
             featureIdColumn={table.selectedLayer?.source.kind === 'duckdb-table' || table.selectedLayer?.source.kind === 'duckdb-query'
               ? table.selectedLayer.source.featureIdColumn
-              : '_ymn_feature_id'}
+              : '_alur_feature_id'}
             onClearSelection={table.selectedLayer ? table.onClearSelection : undefined}
             onToggleSelection={table.selectedLayer ? table.onToggleSelection : undefined}
             onSetSelection={table.selectedLayer ? table.onSetSelection : undefined}

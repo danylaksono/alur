@@ -5,7 +5,7 @@ import App from './App';
 import { WorkflowTab } from './components/shell/WorkflowTab';
 import { SqlTab } from './components/shell/SqlTab';
 import { Chat } from './components/Chat';
-import { useStore, type GISNode } from './store/useStore';
+import { useStore, type WorkflowNode } from './store/useStore';
 import { buildWorkflowSQL } from './utils/workflowEngine';
 import { llmToolDefinitions } from './utils/toolDefinitions';
 
@@ -28,25 +28,25 @@ const featureCollection = (name: string, count = 3): GeoJSON.FeatureCollection =
 
 const node = (
   id: string,
-  type: GISNode['data']['type'],
+  type: WorkflowNode['data']['type'],
   config: Record<string, unknown>,
   label = id,
   position = { x: 0, y: 0 },
-): GISNode => ({
+): WorkflowNode => ({
   id,
   type,
   position,
   data: { label, type, config },
-} as GISNode);
+} as WorkflowNode);
 
-describe('sample GIS workflow smoke test', () => {
+describe('sample visual analytics workflow smoke test', () => {
   beforeEach(() => {
     useStore.getState().resetWorkspace();
     useStore.setState({ duckdbReady: true, toasts: [] });
   });
 
   it('builds a sample-data node sequence into SQL that can back the SQL preview', () => {
-    const nodes: GISNode[] = [
+    const nodes: WorkflowNode[] = [
       node('sample_need', 'input', { tableName: 'need_london', fileName: 'need_london.parquet' }, 'London NEED sample'),
       node('need_filter', 'filter', { condition: 'need >= 10' }, 'High need filter', { x: 260, y: 0 }),
       node('need_buffer', 'analysis', { operation: 'ST_Buffer', distance: 500 }, '500m buffer', { x: 520, y: 0 }),
@@ -164,7 +164,7 @@ describe('sample GIS workflow smoke test', () => {
     expect(configProperties.exportFormat.enum).toEqual(['geojson', 'csv', 'json', 'parquet']);
     expect(configProperties.kind.enum).toEqual(['choropleth', 'categorical', 'graduated_symbol', 'heatmap', 'label', 'dot_density']);
 
-    const nodes: GISNode[] = [
+    const nodes: WorkflowNode[] = [
       node('sample_need', 'input', { tableName: 'need_london', fileName: 'need_london.parquet' }),
       node('export_output', 'output', { outputMode: 'export', exportFormat: 'parquet', maxFeatures: 5000 }),
     ];

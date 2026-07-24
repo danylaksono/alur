@@ -29,7 +29,7 @@ export const Header = () => {
     <header className="z-50 flex h-14 shrink-0 items-center justify-between border-b border-slate-200/80 bg-white px-4 shadow-[0_1px_0_rgba(15,23,42,0.02)]">
       <div className="flex items-center gap-2.5" aria-label="ALUR interactive visual analytics">
         <img
-          src={new URL('../../../alur-mark.svg', import.meta.url).href}
+          src="/alur-mark.svg"
           alt=""
           className="h-9 w-9"
         />

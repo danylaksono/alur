@@ -1,7 +1,7 @@
 import type { Edge } from '@xyflow/react';
 import { duckdbService } from './duckdb';
 import { buildWorkflowSQL, cteAlias } from '../utils/workflowEngine';
-import type { GISNode } from '../store/useStore';
+import type { WorkflowNode } from '../store/useStore';
 import type { ColumnProfile } from '../components/DataTable';
 import type { VisualFilter } from '../types/visualAnalytics';
 import { compileVisualFiltersWhereClause } from '../utils/visualFilterSql';
@@ -45,7 +45,7 @@ const combinedWhereClause = (schema: any[] | undefined, search: string, filters:
   return predicates.length ? ` WHERE (${predicates.join(') AND (')})` : '';
 };
 
-export const buildNodeSelectSql = (nodes: GISNode[], edges: Edge[], nodeId: string) => {
+export const buildNodeSelectSql = (nodes: WorkflowNode[], edges: Edge[], nodeId: string) => {
   const { withClause } = buildWorkflowSQL(nodes, edges);
   return `${withClause} SELECT * FROM ${cteAlias(nodeId)}`;
 };
@@ -61,7 +61,7 @@ export const buildNodeTableExportSql = ({
   sortDirection,
   computedFields,
 }: {
-  nodes: GISNode[];
+  nodes: WorkflowNode[];
   edges: Edge[];
   nodeId: string;
   schema: any[] | undefined;
@@ -91,7 +91,7 @@ export const queryNodePreviewRows = async ({
   filters = [],
   computedFields = [],
 }: {
-  nodes: GISNode[];
+  nodes: WorkflowNode[];
   edges: Edge[];
   nodeId: string;
   schema: any[] | undefined;
@@ -135,7 +135,7 @@ export const queryNodeColumnProfile = async ({
   filters = [],
   computedFields = [],
 }: {
-  nodes: GISNode[];
+  nodes: WorkflowNode[];
   edges: Edge[];
   nodeId: string;
   schema: any[] | undefined;

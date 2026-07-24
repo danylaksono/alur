@@ -96,7 +96,7 @@ interface DataTableProps {
   onPageSizeChange: (pageSize: number) => void;
 }
 
-const INTERNAL_COLUMNS = new Set(['geojson', 'geometry', 'geom', 'wkb_geometry', '__ymn_tile_geom', '_feature']);
+const INTERNAL_COLUMNS = new Set(['geojson', 'geometry', 'geom', 'wkb_geometry', '__alur_tile_geom', '_feature']);
 const columnHelper = createColumnHelper<RowData>();
 
 const formatCellValue = (value: unknown) => {
@@ -216,7 +216,7 @@ export const DataTable = ({
   const keys = useMemo(() => {
     const names = new Set<string>();
     data.slice(0, 20).forEach((row) => Object.keys(row).forEach((key) => {
-      if (!INTERNAL_COLUMNS.has(key.toLowerCase()) && key !== '_ymn_feature_id' && key !== '__ymn_mvt_id') names.add(key);
+      if (!INTERNAL_COLUMNS.has(key.toLowerCase()) && key !== '_alur_feature_id' && key !== '__alur_mvt_id') names.add(key);
     }));
     return [...names];
   }, [data]);
@@ -264,9 +264,9 @@ export const DataTable = ({
   const activeFilterSet = useMemo(() => new Set(activeFilterKeys), [activeFilterKeys]);
   const selectedFeatureSet = useMemo(() => new Set(selectedFeatureIds), [selectedFeatureIds]);
   const featureIdForRow = (row: RowData) => String(
-    row._ymn_feature_id
+    row._alur_feature_id
     ?? (featureIdColumn ? row[featureIdColumn] : undefined)
-    ?? row.__ymn_mvt_id
+    ?? row.__alur_mvt_id
     ?? '',
   );
   const widthForColumn = useCallback((column: string) => columnWidths[column] || 158, [columnWidths]);

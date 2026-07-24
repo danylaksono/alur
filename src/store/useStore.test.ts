@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { useStore, type GISNode } from './useStore';
+import { useStore, type WorkflowNode } from './useStore';
 
 const fc = (count = 1): GeoJSON.FeatureCollection => ({
   type: 'FeatureCollection',
@@ -10,7 +10,7 @@ const fc = (count = 1): GeoJSON.FeatureCollection => ({
   })),
 });
 
-const node = (id: string, tableName?: string): GISNode => ({
+const node = (id: string, tableName?: string): WorkflowNode => ({
   id,
   type: 'input',
   position: { x: 0, y: 0 },
@@ -19,7 +19,7 @@ const node = (id: string, tableName?: string): GISNode => ({
     type: 'input',
     config: tableName ? { tableName } : {},
   },
-} as GISNode);
+} as WorkflowNode);
 
 describe('layer state', () => {
   beforeEach(() => {
@@ -44,7 +44,7 @@ describe('layer state', () => {
       sourceKind: 'input',
     });
     expect(state.selectedLayerId).toBe('roads');
-    expect(state.mapLayers[0].geojson?.features[0].properties?._ymn_feature_id).toBe('1');
+    expect(state.mapLayers[0].geojson?.features[0].properties?._alur_feature_id).toBe('1');
   });
 
   it('replaces repeated execution layers while preserving layer preferences', () => {

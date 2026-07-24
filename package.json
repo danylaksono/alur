@@ -2,6 +2,19 @@
   "name": "alur",
   "private": true,
   "version": "0.1.0",
+  "description": "Interactive visual analytics, from data to direction.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/danylaksono/alur.git"
+  },
+  "homepage": "https://alur-app.netlify.app/",
+  "keywords": [
+    "visual-analytics",
+    "data-visualization",
+    "geospatial",
+    "duckdb",
+    "maplibre"
+  ],
   "type": "module",
   "scripts": {
     "dev": "vite",

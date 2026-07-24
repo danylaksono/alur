@@ -1,6 +1,6 @@
 # ALUR: Production Roadmap
 
-This document outlines the architectural evolution and feature roadmap for GeoModeler Pro, transitioning from a prototype to a production-grade GIS processing modeler.
+This document outlines ALUR's evolution from a prototype into a production-grade visual analytics workspace with strong spatial-analysis capabilities.
 
 ## Status: All Phases Completed - Production Ready Prototype 🚀
 

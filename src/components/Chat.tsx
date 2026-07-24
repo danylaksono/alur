@@ -195,7 +195,7 @@ export const Chat = () => {
                   ? rowArray.slice(0, 6).map((row: any) => JSON.stringify(row)).join('\n')
                   : 'No rows returned.';
               const rowCount = Array.isArray(rows) ? rows.length : 0;
-              addChatMessage('assistant', `SQL returned ${rowCount} rows`, { kind: 'tool_result', summary: `${rowCount} rows returned` });
+              addChatMessage('assistant', `SQL returned ${rowCount} rows`, { kind: 'tool_result', summary });
             } catch (err: any) {
               addChatMessage('assistant', `SQL error: ${err.message || 'Unknown error'}`, { kind: 'tool_result', summary: 'Query failed' });
             }

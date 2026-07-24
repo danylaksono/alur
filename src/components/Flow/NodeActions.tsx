@@ -59,7 +59,7 @@ export const NodeActions = ({ id, selected = false, helperContent }: NodeActions
     try {
       const workflow = buildUpToSQL(nodes, edges, id);
       if (format === 'geojson') {
-        const tableName = `ymn_export_${id.replace(/[^a-zA-Z0-9_]/g, '_')}_${Date.now()}`;
+        const tableName = `alur_export_${id.replace(/[^a-zA-Z0-9_]/g, '_')}_${Date.now()}`;
         await duckdbService.materializeQueryAsTable(workflow.resultSql, tableName);
         const geojson = await duckdbService.getGeoJSONFromTable(tableName, 100000);
         if (!geojson || geojson.features.length === 0) {

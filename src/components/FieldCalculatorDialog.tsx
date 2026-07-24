@@ -59,7 +59,7 @@ export const FieldCalculatorDialog = ({
     if (!draft.name.trim() || !draft.expression.trim()) return [];
     const field: ComputedField = { id: editingId || 'preview', name: draft.name.trim(), expression: draft.expression.trim() };
     return applyComputedFields(sampleRows.slice(0, 5), [field]).map((row, index) => ({
-      key: String(row._ymn_feature_id ?? index),
+      key: String(row._alur_feature_id ?? index),
       value: row[field.name],
     }));
   }, [draft, editingId, sampleRows]);

@@ -10,10 +10,10 @@ const source = {
   geometryColumn: 'geometry',
   crs: 'EPSG:4326',
   geometryKind: 'point' as const,
-  featureIdColumn: '__ymn_mvt_id',
+  featureIdColumn: '__alur_mvt_id',
   fields: [{ name: 'value', type: 'DOUBLE' }],
   tileSource: {
-    tableName: '__ymn_mvt_points',
+    tableName: '__alur_mvt_points',
     layerName: 'features',
     geometryKind: 'point' as const,
     propertyColumns: ['value'],
@@ -97,7 +97,7 @@ describe('glyph grid DuckDB preparation', () => {
     expect(whereIndex).toBeGreaterThan(-1);
     expect(sampleIndex).toBeGreaterThan(whereIndex);
     expect(sql.slice(sampleIndex)).not.toContain('WHERE');
-    expect(sql).toContain('(SELECT * FROM "__ymn_mvt_points"');
+    expect(sql).toContain('(SELECT * FROM "__alur_mvt_points"');
     expect(sql).toContain('CAST("value" AS DOUBLE) >= 10');
     expect(points).toEqual([{
       position: [-0.1, 51.5],

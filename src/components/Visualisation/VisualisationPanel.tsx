@@ -37,7 +37,7 @@ const fieldNamesForLayer = (layer: MapLayer | null) => {
     .map((field) => field.name)
     .filter((name) => {
       const lower = name.toLowerCase();
-      return !excludedFields.has(lower) && !lower.startsWith('__ymn_');
+      return !excludedFields.has(lower) && !lower.startsWith('__alur_');
     })
     .sort((a, b) => a.localeCompare(b));
 };
@@ -122,7 +122,7 @@ const temporalFieldsForLayer = (layer: MapLayer | null) => {
       TEMPORAL_TYPE_PATTERN.test(field.type) || TEMPORAL_NAME_PATTERN.test(field.name)
     )
     .map((field) => field.name)
-    .filter((name) => !excludedFields.has(name.toLowerCase()) && !name.toLowerCase().startsWith('__ymn_'));
+    .filter((name) => !excludedFields.has(name.toLowerCase()) && !name.toLowerCase().startsWith('__alur_'));
 };
 
 export const VisualisationPanel = ({

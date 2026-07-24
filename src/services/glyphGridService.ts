@@ -104,9 +104,9 @@ export const queryLayerGlyphPoints = async ({
       .filter((filter) => available.has(filter.field))
       .map(compileVisualFilterPredicate)
       .filter((item): item is string => Boolean(item));
-    const whereParts = ['__ymn_tile_geom IS NOT NULL', ...predicates];
+    const whereParts = ['__alur_tile_geom IS NOT NULL', ...predicates];
     const whereClause = `WHERE ${whereParts.join(' AND ')}`;
-    const lonLat = `ST_Centroid(ST_Transform(__ymn_tile_geom, 'EPSG:3857', 'EPSG:4326', true))`;
+    const lonLat = `ST_Centroid(ST_Transform(__alur_tile_geom, 'EPSG:3857', 'EPSG:4326', true))`;
     const valueSelects = valueFields
       .map((field, index) => `, TRY_CAST(${quoteIdentifier(field)} AS DOUBLE) AS v${index}`)
       .join('');

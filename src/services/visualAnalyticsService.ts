@@ -33,7 +33,7 @@ const normalizeRows = (rows: any[]) =>
 
 export const analyticsTableForLayer = async (layer: AnalyticsLayer) => {
   if (layer.source?.kind === 'duckdb-table' || layer.source?.kind === 'duckdb-query') {
-    // The map renders from this table and promotes __ymn_mvt_id as its feature ID.
+    // The map renders from this table and promotes __alur_mvt_id as its feature ID.
     // Querying it here keeps table row identity exactly aligned with MapLibre.
     return layer.source.tileSource?.tableName || layer.source.tableName;
   }
@@ -74,9 +74,9 @@ export const queryLayerSelectionBounds = async (
   const tableName = layer.source.tileSource.tableName;
   const result = await duckdbService.query(`
     WITH extent AS (
-      SELECT ST_Extent_Agg(ST_Transform(__ymn_tile_geom, 'EPSG:3857', 'EPSG:4326', true)) AS bbox
+      SELECT ST_Extent_Agg(ST_Transform(__alur_tile_geom, 'EPSG:3857', 'EPSG:4326', true)) AS bbox
       FROM "${tableName.replace(/"/g, '""')}"
-      WHERE CAST(__ymn_mvt_id AS VARCHAR) IN (${values})
+      WHERE CAST(__alur_mvt_id AS VARCHAR) IN (${values})
     )
     SELECT ST_XMin(bbox) AS min_x, ST_YMin(bbox) AS min_y,
            ST_XMax(bbox) AS max_x, ST_YMax(bbox) AS max_y
@@ -333,7 +333,7 @@ export const buildLayerExportSql = async ({
   const whereClause = layerSearchWhereClause(layer, filters, search, computedFields);
   const sortClause = sortBy ? `ORDER BY ${quoteIdentifier(sortBy)} ${sortDirection.toUpperCase()} NULLS LAST` : '';
   const excludeGeometry = layer.source?.kind === 'duckdb-table' || layer.source?.kind === 'duckdb-query'
-    ? 'EXCLUDE (__ymn_tile_geom)'
+    ? 'EXCLUDE (__alur_tile_geom)'
     : '';
   return `SELECT * ${excludeGeometry} FROM ${relation} ${whereClause} ${sortClause}`;
 };
@@ -800,7 +800,7 @@ const selectedWhereClause = (selectedFeatureIds: string[]) => {
 
 const candidateColumns = (layer: Pick<AnalyticsLayer, 'source' | 'geojson'>) =>
   analyticsFieldsForLayer(layer)
-    .filter((key) => ![FEATURE_ID_PROPERTY, 'geojson', 'geometry', 'geom', 'wkb_geometry', '__ymn_tile_geom'].includes(key.toLowerCase()))
+    .filter((key) => ![FEATURE_ID_PROPERTY, 'geojson', 'geometry', 'geom', 'wkb_geometry', '__alur_tile_geom'].includes(key.toLowerCase()))
     .slice(0, 12);
 
 export const queryLayerSummary = async ({
@@ -977,7 +977,7 @@ export const explainLayerSelection = async ({
     .filter((name) => {
       const lower = name.toLowerCase();
       return ![FEATURE_ID_PROPERTY, 'geojson', 'geometry', 'geom', 'wkb_geometry'].includes(lower)
-        && !lower.startsWith('__ymn_')
+        && !lower.startsWith('__alur_')
         && (!tileColumns || tileColumns.has(name));
     })
     .slice(0, 36);
@@ -1058,7 +1058,7 @@ export const explainLayerSelection = async ({
   return { selectedCount, restCount, fields: fields.slice(0, 8) };
 };
 
-const INTERNAL_TABLE_PREFIXES = ['__ymn_', 'visual_layer_'];
+const INTERNAL_TABLE_PREFIXES = ['__alur_', 'visual_layer_'];
 
 /** DuckDB tables a chart can bind to directly (workflow outputs, SQL results). */
 export const listChartTables = async (): Promise<string[]> => {

@@ -32,15 +32,9 @@ npm run preview    # Preview production build
 npm run test       # Run the test suite
 ```
 
-## GitHub Pages Deployment
-
-The GitHub Actions build uses Vite's `github-pages` mode, which configures the `/ymnngis/` repository subpath so static assets resolve correctly after deployment. The default production build uses `/`, which is suitable for Netlify and other root-domain deployments.
-
-Pushes to `main` are deployed through GitHub Actions in `.github/workflows/deploy.yml`. In the repository settings, set Pages to use GitHub Actions as the source.
-
 ## Netlify Deployment
 
-Netlify builds the site with `npm run build` and publishes `dist`. The included `netlify.toml` records those settings in the repository.
+Netlify is the sole production deployment at [alur-app.netlify.app](https://alur-app.netlify.app/). It builds the site with `npm run build` and publishes `dist`; the included `netlify.toml` records those settings in the repository.
 
 ## Architecture
 
@@ -109,7 +103,7 @@ All styles are compiled to native MapLibre expressions — no hand-written JSON.
 - **Temporal slider** — animated time range with play/pause, configurable window size, and speed control
 - **DuckDB-backed summaries** — count, mean, min, max, and category breakdowns computed under active filters
 - **Filter chips** — visual display of all active filters with individual remove and clear-all
-- **Stable feature IDs** — `_ymn_feature_id` assigned on layer creation, used for cross-component linking
+- **Stable feature IDs** — `_alur_feature_id` assigned on layer creation, used for cross-component linking
 
 ### ALUR Copilot
 - Natural-language workflow creation (“add a 500m buffer around london wards”)
@@ -156,7 +150,7 @@ src/
 │   ├── palettes.ts              # Sequential + categorical palettes
 │   ├── visualFilterSql.ts       # VisualFilter → DuckDB WHERE clauses
 │   ├── visualisationResolver.ts # Workflow config → LayerVisualisation
-│   ├── featureIdentity.ts       # _ymn_feature_id assignment
+│   ├── featureIdentity.ts       # _alur_feature_id assignment
 │   ├── workflowEngine.ts        # Node graph → SQL compiler
 │   ├── mapStyleExport.ts        # Export map styles as JSON
 │   ├── basemaps.ts              # Basemap tile sources

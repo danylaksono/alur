@@ -148,7 +148,7 @@ describe('visual analytics cache helpers', () => {
   it('uses the MVT backing table for DuckDB chart feature ids', async () => {
     vi.spyOn(duckdbService, 'getTableSchema').mockResolvedValue({
       toArray: () => [
-        { name: '__ymn_mvt_id' },
+        { name: '__alur_mvt_id' },
         { name: 'Annual Generation [kWh]' },
       ],
     } as any);
@@ -170,10 +170,10 @@ describe('visual analytics cache helpers', () => {
           geometryColumn: 'geometry',
           crs: 'EPSG:27700',
           geometryKind: 'polygon',
-          featureIdColumn: '__ymn_mvt_id',
+          featureIdColumn: '__alur_mvt_id',
           fields: [{ name: 'Annual Generation [kWh]', type: 'DOUBLE' }],
           tileSource: {
-            tableName: '__ymn_mvt_rooftop_pv',
+            tableName: '__alur_mvt_rooftop_pv',
             layerName: 'features',
             geometryKind: 'polygon',
             propertyColumns: ['Annual Generation [kWh]'],
@@ -194,8 +194,8 @@ describe('visual analytics cache helpers', () => {
       },
     });
 
-    expect(query.mock.calls[0][0]).toContain('FROM "__ymn_mvt_rooftop_pv"');
-    expect(query.mock.calls[2][0]).toContain('STRING_AGG(CAST("__ymn_mvt_id" AS VARCHAR)');
+    expect(query.mock.calls[0][0]).toContain('FROM "__alur_mvt_rooftop_pv"');
+    expect(query.mock.calls[2][0]).toContain('STRING_AGG(CAST("__alur_mvt_id" AS VARCHAR)');
     expect(query.mock.calls[2][0]).not.toContain('FROM "rooftop_pv"');
     expect(result.data[0].featureIds).toEqual(['7']);
   });
@@ -203,16 +203,16 @@ describe('visual analytics cache helpers', () => {
   it('queries DuckDB table rows from the rendered MVT table so selection ids match', async () => {
     const query = vi.spyOn(duckdbService, 'query')
       .mockResolvedValueOnce({ toArray: () => [{ row_count: 1 }] } as any)
-      .mockResolvedValueOnce({ toArray: () => [{ __ymn_mvt_id: 7, name: 'Selected row' }] } as any);
+      .mockResolvedValueOnce({ toArray: () => [{ __alur_mvt_id: 7, name: 'Selected row' }] } as any);
     const source = {
       kind: 'duckdb-table' as const,
       tableName: 'source_table',
       geometryColumn: 'geometry',
       crs: 'EPSG:4326',
       geometryKind: 'point' as const,
-      featureIdColumn: '__ymn_mvt_id',
+      featureIdColumn: '__alur_mvt_id',
       fields: [{ name: 'name', type: 'VARCHAR' }],
-      tileSource: { tableName: '__ymn_mvt_source_table', layerName: 'features', geometryKind: 'point' as const, propertyColumns: ['name'] },
+      tileSource: { tableName: '__alur_mvt_source_table', layerName: 'features', geometryKind: 'point' as const, propertyColumns: ['name'] },
       renderVersion: 1,
     };
 
@@ -227,11 +227,11 @@ describe('visual analytics cache helpers', () => {
       computedFields: [{ id: 'length', name: 'name_length', expression: "concat(name, 'x')" }],
     });
 
-    expect(query.mock.calls[0][0]).toContain('FROM "__ymn_mvt_source_table"');
-    expect(query.mock.calls[1][0]).toContain('FROM "__ymn_mvt_source_table"');
+    expect(query.mock.calls[0][0]).toContain('FROM "__alur_mvt_source_table"');
+    expect(query.mock.calls[1][0]).toContain('FROM "__alur_mvt_source_table"');
     expect(query.mock.calls[1][0]).toContain('AS "name_length"');
     expect(query.mock.calls[1][0]).toContain('ORDER BY "name_length" DESC');
-    expect(result.rows[0].__ymn_mvt_id).toBe(7);
+    expect(result.rows[0].__alur_mvt_id).toBe(7);
   });
 
   it('queries scatter points with a context flag that ignores the chart axes', async () => {
@@ -364,12 +364,12 @@ describe('visual analytics cache helpers', () => {
       } as any);
 
     const result = await queryTableChart({
-      tableName: 'ymn_manual_123',
+      tableName: 'alur_manual_123',
       chart: {
         id: 'chart-6',
         title: 'Manual result',
         layerId: '',
-        tableName: 'ymn_manual_123',
+        tableName: 'alur_manual_123',
         type: 'bar',
         dimensionField: 'category',
         aggregation: 'count',
@@ -379,7 +379,7 @@ describe('visual analytics cache helpers', () => {
     });
 
     const groupSql = String(query.mock.calls[2][0]);
-    expect(groupSql).toContain('FROM "ymn_manual_123"');
+    expect(groupSql).toContain('FROM "alur_manual_123"');
     expect(groupSql).toContain('CAST(NULL AS VARCHAR)');
     expect(groupSql).not.toContain('FILTER (WHERE');
     expect(result.totalRows).toBe(4);
@@ -389,14 +389,14 @@ describe('visual analytics cache helpers', () => {
   it('lists chartable tables and hides internal ones', async () => {
     vi.spyOn(duckdbService, 'query').mockResolvedValueOnce({
       toArray: () => [
-        { table_name: '__ymn_mvt_pv' },
+        { table_name: '__alur_mvt_pv' },
         { table_name: 'need_london' },
         { table_name: 'visual_layer_areas' },
-        { table_name: 'ymn_manual_99' },
+        { table_name: 'alur_manual_99' },
       ],
     } as any);
 
-    await expect(listChartTables()).resolves.toEqual(['need_london', 'ymn_manual_99']);
+    await expect(listChartTables()).resolves.toEqual(['need_london', 'alur_manual_99']);
   });
 
   it('calculates bounds for selected legacy features', async () => {
