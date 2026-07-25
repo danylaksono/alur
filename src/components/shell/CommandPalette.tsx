@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
-import { BarChart3, Database, FilePlus2, Gauge, GitCompareArrows, Layers, LayoutDashboard, MapPinned, Redo2, ScanSearch, Search, Sparkles, Table2, Terminal, Undo2, Users, Workflow, X } from 'lucide-react';
-import { useStore } from '../../store/useStore';
+import { BarChart3, Database, FilePlus2, Gauge, GitCompareArrows, Layers, LayoutDashboard, MapPinned, PanelLeft, Redo2, ScanSearch, Search, Sparkles, Table2, Terminal, Undo2, Users, Workflow, X } from 'lucide-react';
+import { useStore, type NavDestination } from '../../store/useStore';
 import { useAnalyticsCommands } from '../../hooks/useAnalyticsCommands';
 import { metadataForLayer, preferredExplorationField } from '../../utils/datasetMetadata';
 
@@ -29,8 +29,9 @@ export const CommandPalette = () => {
 
   const commands = useMemo<Command[]>(() => {
     const state = useStore.getState();
-    const openRail = (tab: 'layers' | 'charts' | 'cohorts' | 'chat') => () => state.setActiveRailTab(tab);
-    const openDrawer = (tab: 'workflow' | 'table' | 'sql') => () => state.openDrawerTab(tab);
+    // Commands route through the same navigation the rail uses, so a command
+    // and a rail click cannot leave the shell in different states.
+    const goTo = (destination: NavDestination) => () => state.navigate(destination);
     const explorationField = selectedLayer
       ? preferredExplorationField(metadataForLayer(selectedLayer))
       : undefined;
@@ -39,9 +40,9 @@ export const CommandPalette = () => {
       : undefined;
     return [
       { id: 'add-data', label: 'Add data', keywords: 'load import parquet csv file', icon: FilePlus2, run: () => document.getElementById('alur-file-input')?.click() },
-      { id: 'layers', label: 'Open Layers', keywords: 'map style visualise', icon: Layers, run: openRail('layers') },
-      { id: 'charts', label: 'Open Charts', keywords: 'graph plot distribution', icon: BarChart3, run: openRail('charts') },
-      { id: 'cohorts', label: 'Open Cohorts', keywords: 'compare groups subsets bookmarks sensemaking', icon: Users, run: openRail('cohorts') },
+      { id: 'layers', label: 'Open Layers', keywords: 'map style visualise', icon: Layers, run: goTo('layers') },
+      { id: 'charts', label: 'Open Charts', keywords: 'graph plot distribution', icon: BarChart3, run: goTo('charts') },
+      { id: 'cohorts', label: 'Open Cohorts', keywords: 'compare groups subsets bookmarks sensemaking', icon: Users, run: goTo('cohorts') },
       ...(selectedLayer && explorationField ? [{
         id: 'create-chart',
         label: `Create chart of ${explorationField.name}`,
@@ -56,12 +57,13 @@ export const CommandPalette = () => {
         icon: Gauge,
         run: () => executeAnalyticsCommand({ type: 'pin-kpi', datasetId: selectedLayer.id, field: metricField.name }),
       }] : []),
-      { id: 'copilot', label: 'Open Copilot', keywords: 'assistant chat ai', icon: Sparkles, run: openRail('chat') },
-      { id: 'workflow', label: 'Open Workflow', keywords: 'nodes pipeline dag', icon: Workflow, run: openDrawer('workflow') },
-      { id: 'table', label: 'Open Table', keywords: 'rows attributes data', icon: Table2, run: openDrawer('table') },
-      { id: 'sql', label: 'Open SQL', keywords: 'query duckdb code', icon: Terminal, run: openDrawer('sql') },
-      { id: 'analyse', label: 'Open Analyse workspace', keywords: 'analyse identify inspect compare rank relate associate group delineate cohort scenario', icon: GitCompareArrows, run: () => state.setWorkspaceMode('compare') },
-      { id: 'explain', label: 'Open Explain workspace', keywords: 'presentation story evidence board layout', icon: LayoutDashboard, run: () => state.setWorkspaceMode('explain') },
+      { id: 'copilot', label: 'Open Copilot', keywords: 'assistant chat ai', icon: Sparkles, run: goTo('chat') },
+      { id: 'workflow', label: 'Open Workflow', keywords: 'nodes pipeline dag scenario variant', icon: Workflow, run: goTo('workflow') },
+      { id: 'table', label: 'Open Table', keywords: 'rows attributes data', icon: Table2, run: goTo('table') },
+      { id: 'sql', label: 'Open SQL', keywords: 'query duckdb code', icon: Terminal, run: goTo('sql') },
+      { id: 'compare', label: 'Open Compare', keywords: 'analyse compare groups cohorts time scenarios difference', icon: GitCompareArrows, run: goTo('compare') },
+      { id: 'explain', label: 'Open Report', keywords: 'explain presentation story evidence board layout', icon: LayoutDashboard, run: goTo('explain') },
+      { id: 'toggle-nav', label: 'Toggle navigation labels', keywords: 'rail sidebar collapse expand icons', icon: PanelLeft, run: state.toggleRailExpanded },
       { id: 'focus-layer', label: 'Zoom to active layer', keywords: 'map home extent fit', icon: MapPinned, disabled: !selectedLayerId, run: () => { if (selectedLayerId) state.focusLayer(selectedLayerId); } },
       { id: 'dataset-overview', label: 'Open dataset overview', keywords: 'profile quality fields missing distinct', icon: ScanSearch, disabled: !selectedLayerId, run: () => { if (selectedLayerId) state.setDatasetOverviewLayerId(selectedLayerId); } },
       { id: 'focus-selection', label: 'Zoom to selection', keywords: 'map selected extent fit', icon: MapPinned, disabled: !selectedLayerState?.selectedFeatureIds.length, run: async () => { if (selectedLayerId) await executeAnalyticsCommand({ type: 'focus-selection', datasetId: selectedLayerId }); } },

@@ -109,13 +109,28 @@ export type LoadingOperation = {
   startedAt: number;
 };
 
-export type RailTab = 'layers' | 'charts' | 'cohorts' | 'chat';
+export type RailTab = 'layers' | 'charts' | 'cohorts' | 'chat' | 'nodes';
 export type DrawerTab = 'workflow' | 'table' | 'sql';
 export type DrawerMode = 'collapsed' | 'open' | 'maximized';
+
+/**
+ * Every place the rail can send you. One list replaces what used to be three
+ * competing navigations (workspace mode, panel tab, drawer tab): each entry
+ * knows which surface it lives on, so picking a destination sets all of them.
+ */
+export type NavDestination = RailTab | DrawerTab | 'compare' | 'explain';
+
+const PANEL_DESTINATIONS: RailTab[] = ['layers', 'charts', 'cohorts', 'chat', 'nodes'];
+
+/** The workflow canvas keeps its node palette in the left panel. */
+const PANEL_FOR_DRAWER_TAB: Partial<Record<DrawerTab, RailTab>> = { workflow: 'nodes' };
+const DRAWER_TAB_FOR_PANEL: Partial<Record<RailTab, DrawerTab>> = { nodes: 'workflow' };
 
 export type UIState = {
   activeRailTab: RailTab;
   isPanelCollapsed: boolean;
+  /** Rail shows labels when expanded, icons only when collapsed. */
+  isRailExpanded: boolean;
   drawerMode: DrawerMode;
   drawerHeight: number;
   activeDrawerTab: DrawerTab;
@@ -167,6 +182,12 @@ export interface AppState {
   selectedNodeId: string | null;
   selectedLayerId: string | null;
   layerFocusRequest: { layerId: string; requestedAt: number; bounds?: LayerBounds } | null;
+  /**
+   * Bumped when something outside the canvas (the node palette, now in the
+   * left panel) wants the graph refitted. The palette no longer sits inside
+   * ReactFlowProvider, so it cannot call fitView itself.
+   */
+  workflowFitRequest: number;
   nodeSchemas: Record<string, any[]>;
   nodeExecutionStates: Record<string, NodeExecutionState>;
   visualAnalytics: HydratedVisualAnalyticsState;
@@ -179,8 +200,11 @@ export interface AppState {
   analysisHistory: AnalysisHistoryState;
 
   setProjectName: (name: string) => void;
+  navigate: (destination: NavDestination) => void;
+  requestWorkflowFit: () => void;
   setActiveRailTab: (tab: RailTab) => void;
   togglePanelCollapsed: () => void;
+  toggleRailExpanded: () => void;
   setDrawerMode: (mode: DrawerMode) => void;
   setDrawerHeight: (height: number) => void;
   setActiveDrawerTab: (tab: DrawerTab) => void;
@@ -345,6 +369,7 @@ const noopStorage: Storage = {
 const initialUIState: UIState = {
   activeRailTab: 'layers',
   isPanelCollapsed: typeof window !== 'undefined' && window.innerWidth < 768,
+  isRailExpanded: typeof window === 'undefined' || window.innerWidth >= 1280,
   drawerMode: 'open',
   drawerHeight: 320,
   activeDrawerTab: 'workflow',
@@ -359,6 +384,27 @@ const initialUIState: UIState = {
   isPresentationMode: false,
 };
 
+/**
+ * Whether a rail destination's surface is currently showing.
+ *
+ * Workflow spans two surfaces (canvas in the drawer, palette in the panel) and
+ * counts as active only when both are. The drawer boots open on the workflow
+ * tab, so a looser test would mark it active before its palette is showing and
+ * the first click would close the canvas instead of completing the pairing.
+ */
+export const isDestinationActive = (ui: UIState, destination: NavDestination): boolean => {
+  if (destination === 'compare') return ui.workspaceMode === 'compare';
+  if (destination === 'explain') return ui.workspaceMode === 'explain' || ui.workspaceMode === 'board';
+
+  const isExplore = ui.workspaceMode === 'explore';
+  const panelShowing = (tab: RailTab) => isExplore && ui.activeRailTab === tab && !ui.isPanelCollapsed;
+  const drawerShowing = (tab: DrawerTab) => isExplore && ui.activeDrawerTab === tab && ui.drawerMode !== 'collapsed';
+
+  if (destination === 'workflow') return drawerShowing('workflow') && panelShowing('nodes');
+  if (destination === 'table' || destination === 'sql') return drawerShowing(destination);
+  return panelShowing(destination);
+};
+
 const clampDrawerHeight = (height: number) => {
   const maxHeight = typeof window === 'undefined' ? 800 : window.innerHeight - 160;
   return Math.max(160, Math.min(height, maxHeight));
@@ -367,10 +413,10 @@ const clampDrawerHeight = (height: number) => {
 /** UI keys that represent a deliberate layout choice and are safe to restore. */
 export type LayoutPreferences = Pick<
   UIState,
-  'activeRailTab' | 'isPanelCollapsed' | 'drawerMode' | 'drawerHeight' | 'activeDrawerTab'
+  'activeRailTab' | 'isPanelCollapsed' | 'isRailExpanded' | 'drawerMode' | 'drawerHeight' | 'activeDrawerTab'
 >;
 
-const RAIL_TAB_VALUES: RailTab[] = ['layers', 'charts', 'cohorts', 'chat'];
+const RAIL_TAB_VALUES: RailTab[] = [...PANEL_DESTINATIONS];
 const DRAWER_TAB_VALUES: DrawerTab[] = ['workflow', 'table', 'sql'];
 const DRAWER_MODE_VALUES: DrawerMode[] = ['collapsed', 'open', 'maximized'];
 
@@ -383,6 +429,7 @@ export const pickLayoutPreferences = (ui?: Partial<UIState>): Partial<LayoutPref
   const preferences: Partial<LayoutPreferences> = {};
   if (RAIL_TAB_VALUES.includes(ui.activeRailTab as RailTab)) preferences.activeRailTab = ui.activeRailTab;
   if (typeof ui.isPanelCollapsed === 'boolean') preferences.isPanelCollapsed = ui.isPanelCollapsed;
+  if (typeof ui.isRailExpanded === 'boolean') preferences.isRailExpanded = ui.isRailExpanded;
   if (DRAWER_MODE_VALUES.includes(ui.drawerMode as DrawerMode)) preferences.drawerMode = ui.drawerMode;
   if (DRAWER_TAB_VALUES.includes(ui.activeDrawerTab as DrawerTab)) preferences.activeDrawerTab = ui.activeDrawerTab;
   if (typeof ui.drawerHeight === 'number' && Number.isFinite(ui.drawerHeight)) {
@@ -479,6 +526,7 @@ export const useStore = create<AppState>()(persist((set, get) => ({
   selectedNodeId: null,
   selectedLayerId: null,
   layerFocusRequest: null,
+  workflowFitRequest: 0,
   nodeSchemas: {},
   nodeExecutionStates: {},
   visualAnalytics: emptyVisualAnalytics(),
@@ -518,12 +566,56 @@ export const useStore = create<AppState>()(persist((set, get) => ({
     loadingOperations: removeRecordKeys(state.loadingOperations, new Set([id])),
   })),
 
+  // Single entry point for the rail: resolves a destination onto whichever
+  // surface owns it, so the caller never has to know which of the three it is.
+  navigate: (destination) => set((state) => {
+    if (destination === 'compare' || destination === 'explain') {
+      return { ui: { ...state.ui, workspaceMode: destination, isPresentationMode: false } };
+    }
+
+    if (PANEL_DESTINATIONS.includes(destination as RailTab)) {
+      const tab = destination as RailTab;
+      const pairedDrawerTab = DRAWER_TAB_FOR_PANEL[tab];
+      return {
+        ui: {
+          ...state.ui,
+          workspaceMode: 'explore',
+          isPresentationMode: false,
+          activeRailTab: tab,
+          isPanelCollapsed: false,
+          ...(pairedDrawerTab
+            ? {
+                activeDrawerTab: pairedDrawerTab,
+                drawerMode: state.ui.drawerMode === 'collapsed' ? 'open' : state.ui.drawerMode,
+              }
+            : {}),
+        },
+      };
+    }
+
+    const tab = destination as DrawerTab;
+    const pairedPanelTab = PANEL_FOR_DRAWER_TAB[tab];
+    return {
+      ui: {
+        ...state.ui,
+        workspaceMode: 'explore',
+        isPresentationMode: false,
+        activeDrawerTab: tab,
+        drawerMode: state.ui.drawerMode === 'collapsed' ? 'open' : state.ui.drawerMode,
+        ...(pairedPanelTab ? { activeRailTab: pairedPanelTab, isPanelCollapsed: false } : {}),
+      },
+    };
+  }),
   setActiveRailTab: (tab) => set((state) => ({
     ui: { ...state.ui, activeRailTab: tab, isPanelCollapsed: false },
   })),
   togglePanelCollapsed: () => set((state) => ({
     ui: { ...state.ui, isPanelCollapsed: !state.ui.isPanelCollapsed },
   })),
+  toggleRailExpanded: () => set((state) => ({
+    ui: { ...state.ui, isRailExpanded: !state.ui.isRailExpanded },
+  })),
+  requestWorkflowFit: () => set({ workflowFitRequest: Date.now() }),
   setDrawerMode: (mode) => set((state) => ({
     ui: { ...state.ui, drawerMode: mode },
   })),
@@ -533,13 +625,17 @@ export const useStore = create<AppState>()(persist((set, get) => ({
   setActiveDrawerTab: (tab) => set((state) => ({
     ui: { ...state.ui, activeDrawerTab: tab },
   })),
-  openDrawerTab: (tab) => set((state) => ({
-    ui: {
-      ...state.ui,
-      activeDrawerTab: tab,
-      drawerMode: state.ui.drawerMode === 'collapsed' ? 'open' : state.ui.drawerMode,
-    },
-  })),
+  openDrawerTab: (tab) => set((state) => {
+    const pairedPanelTab = PANEL_FOR_DRAWER_TAB[tab];
+    return {
+      ui: {
+        ...state.ui,
+        activeDrawerTab: tab,
+        drawerMode: state.ui.drawerMode === 'collapsed' ? 'open' : state.ui.drawerMode,
+        ...(pairedPanelTab ? { activeRailTab: pairedPanelTab } : {}),
+      },
+    };
+  }),
   setSettingsOpen: (open) => set((state) => ({
     ui: { ...state.ui, isSettingsOpen: open },
   })),
@@ -635,6 +731,7 @@ export const useStore = create<AppState>()(persist((set, get) => ({
     selectedNodeId: null,
     selectedLayerId: null,
     layerFocusRequest: null,
+  workflowFitRequest: 0,
     nodeSchemas: {},
     nodeExecutionStates: {},
     visualAnalytics: emptyVisualAnalytics(),

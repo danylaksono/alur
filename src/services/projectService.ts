@@ -1,5 +1,5 @@
 import packageJson from '../../package.json';
-import { useStore, type AppState, type MapLayer, type WorkflowNode } from '../store/useStore';
+import { pickLayoutPreferences, useStore, type AppState, type MapLayer, type WorkflowNode } from '../store/useStore';
 import type { ExplainDocument, VisualAnalyticsState } from '../types/visualAnalytics';
 import {
   PROJECT_MANIFEST_VERSION,
@@ -334,11 +334,9 @@ export const applyProjectManifest = (manifest: ProjectManifest | ProjectManifest
     restylingLayerIds: {},
     ui: {
       ...state.ui,
-      activeRailTab: valid.workspace.activeRailTab,
-      activeDrawerTab: valid.workspace.activeDrawerTab,
-      drawerMode: valid.workspace.drawerMode,
-      drawerHeight: valid.workspace.drawerHeight,
-      isPanelCollapsed: valid.workspace.isPanelCollapsed,
+      // Same validator the localStorage path uses, so a hand-edited or
+      // stale project file cannot install an unreachable layout.
+      ...pickLayoutPreferences(valid.workspace),
       workspaceMode: valid.workspace.workspaceMode || 'explore',
       isPresentationMode: false,
       mapCamera: valid.workspace.mapCamera || state.ui.mapCamera,

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { pickLayoutPreferences, useStore, type WorkflowNode } from './useStore';
+import { isDestinationActive, pickLayoutPreferences, useStore, type WorkflowNode } from './useStore';
 
 const fc = (count = 1): GeoJSON.FeatureCollection => ({
   type: 'FeatureCollection',
@@ -425,6 +425,70 @@ describe('layout preferences', () => {
     })).toEqual({});
     // Heights from an older, larger window are clamped rather than trusted.
     expect(pickLayoutPreferences({ drawerHeight: 10_000 }).drawerHeight).toBeLessThan(10_000);
+  });
+
+  it('resolves each rail destination onto the surface that owns it', () => {
+    const store = useStore.getState();
+    store.navigate('explain');
+    expect(useStore.getState().ui.workspaceMode).toBe('explain');
+
+    // A panel destination returns to Explore and opens the panel.
+    store.navigate('charts');
+    expect(useStore.getState().ui).toMatchObject({
+      workspaceMode: 'explore', activeRailTab: 'charts', isPanelCollapsed: false,
+    });
+
+    // A drawer destination opens the drawer without disturbing the panel tab.
+    useStore.getState().setDrawerMode('collapsed');
+    store.navigate('sql');
+    expect(useStore.getState().ui).toMatchObject({
+      activeDrawerTab: 'sql', drawerMode: 'open', activeRailTab: 'charts',
+    });
+
+    // Workflow is the one paired surface: canvas plus its palette.
+    store.navigate('workflow');
+    expect(useStore.getState().ui).toMatchObject({
+      activeDrawerTab: 'workflow', drawerMode: 'open', activeRailTab: 'nodes', isPanelCollapsed: false,
+    });
+
+    // Reaching the canvas any other way keeps the palette in step.
+    store.navigate('layers');
+    store.openDrawerTab('workflow');
+    expect(useStore.getState().ui.activeRailTab).toBe('nodes');
+
+    store.navigate('compare');
+    expect(useStore.getState().ui).toMatchObject({ workspaceMode: 'compare', isPresentationMode: false });
+  });
+
+  it('treats workflow as active only once both its surfaces are showing', () => {
+    const store = useStore.getState();
+    store.navigate('layers');
+    const ui = () => useStore.getState().ui;
+
+    // Boot state: drawer already open on the workflow tab, palette not showing.
+    // Marking workflow active here would make the first click close the canvas.
+    expect(ui()).toMatchObject({ activeDrawerTab: 'workflow', drawerMode: 'open', activeRailTab: 'layers' });
+    expect(isDestinationActive(ui(), 'workflow')).toBe(false);
+    expect(isDestinationActive(ui(), 'layers')).toBe(true);
+
+    store.navigate('workflow');
+    expect(isDestinationActive(ui(), 'workflow')).toBe(true);
+    expect(isDestinationActive(ui(), 'layers')).toBe(false);
+
+    // Closing either surface drops it out of the active state.
+    useStore.getState().togglePanelCollapsed();
+    expect(isDestinationActive(ui(), 'workflow')).toBe(false);
+
+    store.navigate('workflow');
+    useStore.getState().setDrawerMode('collapsed');
+    expect(isDestinationActive(ui(), 'workflow')).toBe(false);
+
+    // Workspace destinations ignore panel and drawer state entirely.
+    store.navigate('compare');
+    expect(isDestinationActive(ui(), 'compare')).toBe(true);
+    expect(isDestinationActive(ui(), 'layers')).toBe(false);
+    useStore.getState().setPresentationMode(true);
+    expect(isDestinationActive(ui(), 'explain')).toBe(true);
   });
 
   it('names a project, carries it into a reset, and bounds absurd names', () => {

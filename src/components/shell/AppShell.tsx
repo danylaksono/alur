@@ -19,7 +19,7 @@ import { GlobalLoadingOverlay } from '../GlobalLoadingOverlay';
 import { CommandPalette } from './CommandPalette';
 import { DatasetOverviewDialog } from '../Visualisation/DatasetOverviewDialog';
 import { RecoveryDialog } from './RecoveryDialog';
-import { AnalyseWorkspace } from '../Analyse/AnalyseWorkspace';
+import { CompareWorkspace } from '../Compare/CompareWorkspace';
 import { ExplainWorkspace } from '../Explain/ExplainWorkspace';
 import { AnalysisContextBar } from './AnalysisContextBar';
 import { EvidenceTray } from './EvidenceTray';
@@ -30,7 +30,8 @@ export const AppShell = () => {
   const isMaximized = drawerMode === 'maximized';
   const workspaceMode = useStore((s) => s.ui.workspaceMode);
   const isExplain = workspaceMode === 'explain' || workspaceMode === 'board';
-  const isAnalyse = workspaceMode === 'compare';
+  const isCompare = workspaceMode === 'compare';
+  const isExplore = !isExplain && !isCompare;
   const isPresenting = useStore((s) => s.ui.isPresentationMode);
   const [isDragOver, setIsDragOver] = useState(false);
 
@@ -64,12 +65,14 @@ export const AppShell = () => {
       {!isExplain && <AnalysisContextBar />}
 
       <div className="relative flex min-h-0 flex-1">
-        {!isExplain && !isAnalyse && <LeftRail />}
-        {!isExplain && !isAnalyse && <LeftPanel />}
+        {/* The rail is the app's primary navigation, so it persists across
+            every workspace rather than vanishing when the mode changes. */}
+        {!isPresenting && <LeftRail />}
+        {isExplore && <LeftPanel />}
 
-        {isAnalyse && <AnalyseWorkspace />}
+        {isCompare && <CompareWorkspace />}
         {isExplain && <ExplainWorkspace />}
-        {!isAnalyse && !isExplain && <main className="flex min-h-0 min-w-0 flex-1 flex-col">
+        {isExplore && <main className="flex min-h-0 min-w-0 flex-1 flex-col">
           {/* The map stays mounted at all times; a maximized drawer just squeezes
               it to a sliver instead of unmounting (map init is expensive). */}
           <div className="relative flex min-h-0 overflow-hidden" style={{ flexGrow: isMaximized ? 0 : 1, flexBasis: isMaximized ? 2 : '0%' }}>

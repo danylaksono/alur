@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { Edge } from '@xyflow/react';
 import App from './App';
 import { WorkflowTab } from './components/shell/WorkflowTab';
+import { NodePalette } from './components/shell/NodePalette';
 import { SqlTab } from './components/shell/SqlTab';
 import { Chat } from './components/Chat';
 import { CohortPanel } from './components/Visualisation/CohortPanel';
@@ -137,7 +138,7 @@ describe('sample visual analytics workflow smoke test', () => {
     expect(shellHtml).toContain('Add data or run a workflow');
     expect(shellHtml).toContain('Basemap');
     expect(shellHtml).toContain('About');
-    expect(shellHtml).toContain('aria-label="Cohorts and bookmarks"');
+    expect(shellHtml).toContain('aria-label="Cohorts"');
     expect(shellHtml).toContain('Workflow');
     expect(shellHtml).toContain('Table');
     expect(shellHtml).toContain('SQL');
@@ -146,13 +147,19 @@ describe('sample visual analytics workflow smoke test', () => {
     const cohortsHtml = renderToString(<CohortPanel />);
     expect(cohortsHtml).toContain('Save subsets, compare groups, and revisit analytical states.');
 
-    const workflowHtml = renderToString(<WorkflowTab />);
-    expect(workflowHtml).toContain('Data Input');
-    expect(workflowHtml).toContain('Layer Output');
+    // The palette is a left-panel surface now; the drawer holds only the canvas.
+    const paletteHtml = renderToString(<NodePalette />);
+    expect(paletteHtml).toContain('Data Input');
+    expect(paletteHtml).toContain('Layer Output');
     // Spatial functions are reached through the palette's top search field;
     // their results render only once a query narrows them.
-    expect(workflowHtml).toContain('Search nodes and');
-    expect(workflowHtml).toContain('Execute Workflow');
+    expect(paletteHtml).toContain('Search nodes and');
+    expect(paletteHtml).toContain('Execute Workflow');
+    // Scenario tools moved here from the deleted Analyse landing page.
+    expect(paletteHtml).toContain('Scenarios');
+
+    const workflowHtml = renderToString(<WorkflowTab />);
+    expect(workflowHtml).toContain('react-flow');
 
     const chatHtml = renderToString(<Chat />);
     expect(chatHtml).toContain('ALUR Copilot');

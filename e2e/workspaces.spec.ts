@@ -6,18 +6,25 @@ const sample = path.resolve('data_sample/need_london.parquet');
 
 const loadSample = async (page: Page) => {
   await page.goto('/');
-  await expect(page.getByTitle('DuckDB engine ready')).toHaveText('Engine ready', { timeout: 45_000 });
+  // The header only reports the engine while it is starting, so readiness is
+  // read from the store rather than from a permanent status chip.
+  await page.waitForFunction(
+    () => (window as unknown as { __alurStore?: { getState: () => { duckdbReady: boolean } } }).__alurStore?.getState().duckdbReady === true,
+    undefined,
+    { timeout: 45_000 },
+  );
   await page.locator('#alur-file-input').setInputFiles(sample);
   await expect(page.getByText(/need_london/i).first()).toBeVisible({ timeout: 45_000 });
   await expect(page.locator('[aria-busy="false"]')).toBeVisible({ timeout: 45_000 });
   await expect(page.getByText('Loading data')).toBeHidden({ timeout: 45_000 });
 };
 
-const switchMode = async (page: Page, mode: 'explore' | 'compare' | 'explain') => {
-  const label = mode === 'compare' ? 'analyse' : mode;
-  const button = page.getByRole('button', { name: new RegExp(`^${label}$`, 'i') }).first();
-  if (await button.isVisible()) { await button.focus(); await page.keyboard.press('Enter'); }
-  else await page.locator('select[aria-label="Workspace mode"]').selectOption(mode);
+/** Every workspace is now one destination in the persistent left rail. */
+const RAIL_DESTINATION = { explore: 'Layers', compare: 'Compare', explain: 'Report' } as const;
+
+const switchMode = async (page: Page, mode: keyof typeof RAIL_DESTINATION) => {
+  const rail = page.getByRole('navigation', { name: 'Primary' });
+  await rail.getByRole('button', { name: RAIL_DESTINATION[mode], exact: true }).click();
 };
 
 const noOverlap = async (a: Locator, b: Locator) => {
@@ -53,15 +60,13 @@ test('@a11y populated Explore, Compare, Explain, and inspector workflows', async
   });
 
   await test.step('two and four operand Compare', async () => {
+    // Compare is a rail destination now — no landing page in between.
     await switchMode(page, 'compare');
-    await expect(page.getByRole('heading', { name: 'What would you like to understand?' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Comparison sessions' })).toBeVisible();
     await expect(page.getByText('Spatial Intervention Loop')).toHaveCount(0);
-    await expect(page.getByText(/Scenario tools/)).toBeHidden();
     await page.screenshot({ path: testInfo.outputPath('analyse-home.png'), fullPage: true });
     const analyseResults = await new AxeBuilder({ page }).analyze();
     expect(analyseResults.violations.filter((violation) => ['serious', 'critical'].includes(violation.impact || ''))).toEqual([]);
-    await page.getByRole('button', { name: /Compare groups/ }).click();
-    await expect(page.getByRole('heading', { name: 'Comparison sessions' })).toBeVisible();
     await expect(page.getByText(/Comparing 2 groups/)).toBeVisible();
     await expect(page.getByText('Common scale · denominator shown').first()).toBeVisible({ timeout: 30_000 });
     await page.screenshot({ path: testInfo.outputPath('compare-two-operands.png'), fullPage: true });

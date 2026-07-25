@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { useReactFlow } from '@xyflow/react';
-import { Calculator, Database, Eye, Filter, GitMerge, Layers, Loader2, Palette, Plus, Search, Zap } from 'lucide-react';
+import { Calculator, Database, Eye, Filter, GitMerge, Layers, Loader2, Palette, Plus, Search, Workflow, Zap } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { buildWorkflowSQL } from '../../utils/workflowEngine';
 import { nextNodePosition } from '../../utils/nodePlacement';
 import { spatialFunctions } from '../../utils/spatialFunctions';
 import { materializeWorkflowMapLayer } from '../../services/layerMaterialization';
+import { VariantPanel } from '../Variants/VariantPanel';
 import { cn } from '../../utils/cn';
 
 const colorStyles: Record<string, { hoverBg: string; hoverBorder: string; iconBg: string; iconHoverBg: string }> = {
@@ -47,9 +47,10 @@ export const NodePalette = () => {
   const duckdbReady = useStore((s) => s.duckdbReady);
   const addMapLayer = useStore((s) => s.addMapLayer);
   const addToast = useStore((s) => s.addToast);
+  const requestWorkflowFit = useStore((s) => s.requestWorkflowFit);
+  const nodeCount = useStore((s) => s.nodes.length);
   const [executing, setExecuting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const { fitView } = useReactFlow();
 
   const normalizedQuery = searchQuery.trim().toLowerCase();
   const isSearching = normalizedQuery.length > 0;
@@ -77,8 +78,9 @@ export const NodePalette = () => {
         config,
       },
     });
-    // Bring the whole graph (including the just-added node) into view.
-    window.setTimeout(() => fitView({ duration: 300, padding: 0.2, maxZoom: 1 }), 50);
+    // Bring the whole graph (including the just-added node) into view. The
+    // canvas owns fitView; this panel only asks for it.
+    requestWorkflowFit();
   };
 
   const handleExecute = async () => {
@@ -108,7 +110,16 @@ export const NodePalette = () => {
   };
 
   return (
-    <div className="flex h-full w-60 shrink-0 flex-col border-r bg-white">
+    <div className="flex h-full min-h-0 w-full flex-col bg-white">
+      <div className="shrink-0 border-b bg-slate-50 px-4 py-3">
+        <h3 className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+          <Workflow className="h-3.5 w-3.5" /> Workflow
+          <span className="ml-auto rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-slate-500 ring-1 ring-slate-200">
+            {nodeCount} {nodeCount === 1 ? 'node' : 'nodes'}
+          </span>
+        </h3>
+      </div>
+
       <div className="shrink-0 border-b p-3">
         <label htmlFor="alur-node-search" className="sr-only">Search nodes and spatial functions</label>
         <div className="relative">
@@ -186,6 +197,19 @@ export const NodePalette = () => {
               )}
             </div>
           </div>
+        )}
+
+        {!isSearching && (
+          /* Scenarios branch a workflow specification, so they belong with the
+             nodes rather than behind two disclosures in a separate mode. */
+          <details className="rounded-xl border border-slate-200 bg-slate-50/60">
+            <summary className="cursor-pointer px-3 py-2.5 text-[11px] font-semibold text-slate-600">
+              Scenarios <span className="font-normal text-slate-500">(advanced)</span>
+            </summary>
+            <div className="border-t border-slate-200 px-3 pb-3">
+              <VariantPanel />
+            </div>
+          </details>
         )}
       </div>
 
