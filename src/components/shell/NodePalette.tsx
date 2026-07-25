@@ -52,12 +52,18 @@ export const NodePalette = () => {
   const { fitView } = useReactFlow();
 
   const normalizedQuery = searchQuery.trim().toLowerCase();
-  const matchedFunctions = normalizedQuery
-    ? spatialFunctions
-        .filter((fn) =>
-          fn.name.toLowerCase().includes(normalizedQuery) || fn.summary.toLowerCase().includes(normalizedQuery)
-        )
-        .slice(0, 30)
+  const isSearching = normalizedQuery.length > 0;
+  // One field searches both lists: beginners type "buffer" without knowing
+  // whether that is a node type or a spatial function.
+  const matchedNodes = isSearching
+    ? nodeCards.filter((item) =>
+        item.title.toLowerCase().includes(normalizedQuery) || item.desc.toLowerCase().includes(normalizedQuery)
+      )
+    : nodeCards;
+  const matchedFunctions = isSearching
+    ? spatialFunctions.filter((fn) =>
+        fn.name.toLowerCase().includes(normalizedQuery) || fn.summary.toLowerCase().includes(normalizedQuery)
+      )
     : [];
 
   const handleAddNode = (type: NodeType, config: Record<string, unknown> = {}, label?: string) => {
@@ -103,11 +109,31 @@ export const NodePalette = () => {
 
   return (
     <div className="flex h-full w-60 shrink-0 flex-col border-r bg-white">
+      <div className="shrink-0 border-b p-3">
+        <label htmlFor="alur-node-search" className="sr-only">Search nodes and spatial functions</label>
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
+          <input
+            id="alur-node-search"
+            type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={`Search nodes and ${spatialFunctions.length} functions…`}
+            className="w-full rounded-lg border bg-slate-50 py-1.5 pl-7 pr-2 text-[11px] outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
+          />
+        </div>
+      </div>
+
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-3">
         <div>
-          <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Nodes</h3>
+          <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            Nodes{isSearching && ` (${matchedNodes.length})`}
+          </h3>
+          {isSearching && matchedNodes.length === 0 && (
+            <p className="pb-1 text-[11px] italic text-muted-foreground">No node types matched</p>
+          )}
           <div className="grid grid-cols-1 gap-1.5">
-            {nodeCards.map((item) => {
+            {matchedNodes.map((item) => {
               const Icon = item.icon;
               const cs = colorStyles[item.color] || colorStyles.blue;
               return (
@@ -133,22 +159,16 @@ export const NodePalette = () => {
           </div>
         </div>
 
-        <div>
-          <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Spatial Functions</h3>
-          <div className="relative mb-2">
-            <Search className="absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={`Search ${spatialFunctions.length} functions…`}
-              className="w-full rounded-lg border bg-slate-50 py-1.5 pl-7 pr-2 text-[11px] outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
-            />
-          </div>
-          {normalizedQuery && (
-            <div className="max-h-56 space-y-1 overflow-y-auto">
+        {isSearching && (
+          <div>
+            <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              Spatial Functions ({matchedFunctions.length})
+            </h3>
+            {/* Rendered inline rather than in a nested scroller — one scroll
+                region per panel keeps trackpad and keyboard navigation sane. */}
+            <div className="space-y-1">
               {matchedFunctions.length === 0 ? (
-                <div className="p-2 text-[11px] italic text-muted-foreground">No functions matched</div>
+                <p className="p-2 text-[11px] italic text-muted-foreground">No functions matched</p>
               ) : (
                 matchedFunctions.map((fn) => (
                   <button
@@ -165,8 +185,8 @@ export const NodePalette = () => {
                 ))
               )}
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       <div className="border-t bg-muted/20 p-3">

@@ -92,8 +92,10 @@ body {
   stroke-dasharray: 6 3;
 }
 
+/* The canvas reads as a node graph only if its grid is actually perceptible;
+   the dots carry the snap rhythm, the lines mark every fifth step. */
 .react-flow__background {
-  @apply opacity-50;
+  background-color: #fbfdfd;
 }
 
 @keyframes toast-slide-in {

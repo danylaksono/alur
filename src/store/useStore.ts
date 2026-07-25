@@ -146,7 +146,15 @@ export type ChatMessage = {
   };
 };
 
+export type ProjectState = {
+  /** Empty until the user names it; the UI falls back to "Untitled project". */
+  name: string;
+};
+
+export const UNTITLED_PROJECT_NAME = 'Untitled project';
+
 export interface AppState {
+  project: ProjectState;
   nodes: WorkflowNode[];
   edges: Edge[];
   duckdbReady: boolean;
@@ -170,6 +178,7 @@ export interface AppState {
   restylingLayerIds: Record<string, true>;
   analysisHistory: AnalysisHistoryState;
 
+  setProjectName: (name: string) => void;
   setActiveRailTab: (tab: RailTab) => void;
   togglePanelCollapsed: () => void;
   setDrawerMode: (mode: DrawerMode) => void;
@@ -350,6 +359,38 @@ const initialUIState: UIState = {
   isPresentationMode: false,
 };
 
+const clampDrawerHeight = (height: number) => {
+  const maxHeight = typeof window === 'undefined' ? 800 : window.innerHeight - 160;
+  return Math.max(160, Math.min(height, maxHeight));
+};
+
+/** UI keys that represent a deliberate layout choice and are safe to restore. */
+export type LayoutPreferences = Pick<
+  UIState,
+  'activeRailTab' | 'isPanelCollapsed' | 'drawerMode' | 'drawerHeight' | 'activeDrawerTab'
+>;
+
+const RAIL_TAB_VALUES: RailTab[] = ['layers', 'charts', 'cohorts', 'chat'];
+const DRAWER_TAB_VALUES: DrawerTab[] = ['workflow', 'table', 'sql'];
+const DRAWER_MODE_VALUES: DrawerMode[] = ['collapsed', 'open', 'maximized'];
+
+/**
+ * Narrows persisted UI state to the layout keys, discarding anything malformed.
+ * Values come from localStorage, so every field is validated rather than trusted.
+ */
+export const pickLayoutPreferences = (ui?: Partial<UIState>): Partial<LayoutPreferences> => {
+  if (!ui) return {};
+  const preferences: Partial<LayoutPreferences> = {};
+  if (RAIL_TAB_VALUES.includes(ui.activeRailTab as RailTab)) preferences.activeRailTab = ui.activeRailTab;
+  if (typeof ui.isPanelCollapsed === 'boolean') preferences.isPanelCollapsed = ui.isPanelCollapsed;
+  if (DRAWER_MODE_VALUES.includes(ui.drawerMode as DrawerMode)) preferences.drawerMode = ui.drawerMode;
+  if (DRAWER_TAB_VALUES.includes(ui.activeDrawerTab as DrawerTab)) preferences.activeDrawerTab = ui.activeDrawerTab;
+  if (typeof ui.drawerHeight === 'number' && Number.isFinite(ui.drawerHeight)) {
+    preferences.drawerHeight = clampDrawerHeight(ui.drawerHeight);
+  }
+  return preferences;
+};
+
 const initialSettings: SettingsState = {
   openRouterApiKey: '',
   openRouterModelId: 'openai/gpt-4o-mini',
@@ -425,6 +466,7 @@ const historyActionForMapPatch = (layerId: string, patch: Record<string, unknown
 };
 
 export const useStore = create<AppState>()(persist((set, get) => ({
+  project: { name: '' },
   nodes: [],
   edges: [],
   duckdbReady: false,
@@ -485,10 +527,9 @@ export const useStore = create<AppState>()(persist((set, get) => ({
   setDrawerMode: (mode) => set((state) => ({
     ui: { ...state.ui, drawerMode: mode },
   })),
-  setDrawerHeight: (height) => set((state) => {
-    const maxHeight = typeof window === 'undefined' ? 800 : window.innerHeight - 160;
-    return { ui: { ...state.ui, drawerHeight: Math.max(160, Math.min(height, maxHeight)) } };
-  }),
+  setDrawerHeight: (height) => set((state) => ({
+    ui: { ...state.ui, drawerHeight: clampDrawerHeight(height) },
+  })),
   setActiveDrawerTab: (tab) => set((state) => ({
     ui: { ...state.ui, activeDrawerTab: tab },
   })),
@@ -579,7 +620,10 @@ export const useStore = create<AppState>()(persist((set, get) => ({
 
   resetNodeExecutionStates: () => set({ nodeExecutionStates: {} }),
 
+  setProjectName: (name) => set({ project: { name: name.slice(0, 120) } }),
+
   resetWorkspace: () => set({
+    project: { name: '' },
     nodes: [],
     edges: [],
     selectedBasemapId: DEFAULT_BASEMAP_ID,
@@ -1458,8 +1502,23 @@ export const useStore = create<AppState>()(persist((set, get) => ({
 }), {
   name: 'alur-settings',
   version: 1,
-  // Only user settings persist; workflow/layer state is ephemeral by design.
-  partialize: (state) => ({ settings: state.settings }) as AppState,
+  // User settings and layout preferences persist; workflow/layer state is
+  // ephemeral by design. Layout keys are allow-listed so transient UI (open
+  // dialogs, recovery status, camera) never survives a reload.
+  partialize: (state) => ({
+    settings: state.settings,
+    ui: pickLayoutPreferences(state.ui),
+  }) as unknown as AppState,
+  // Zustand's default merge is shallow, which would replace the whole `ui`
+  // slice with the persisted subset and drop every transient key.
+  merge: (persisted, current) => {
+    const saved = persisted as Partial<AppState> | undefined;
+    return {
+      ...current,
+      settings: { ...current.settings, ...(saved?.settings || {}) },
+      ui: { ...current.ui, ...pickLayoutPreferences(saved?.ui) },
+    };
+  },
   storage: createJSONStorage(() => (typeof window === 'undefined' ? noopStorage : window.localStorage)),
 }));
 

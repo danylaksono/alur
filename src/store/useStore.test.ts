@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { useStore, type WorkflowNode } from './useStore';
+import { pickLayoutPreferences, useStore, type WorkflowNode } from './useStore';
 
 const fc = (count = 1): GeoJSON.FeatureCollection => ({
   type: 'FeatureCollection',
@@ -394,5 +394,46 @@ describe('layer state', () => {
     expect(useStore.getState().ui).toMatchObject({ workspaceMode: 'board', isPresentationMode: true });
     store.removeDashboardCard('note-1');
     expect(useStore.getState().visualAnalytics.dashboard?.cards).toEqual([]);
+  });
+});
+
+describe('layout preferences', () => {
+  it('keeps deliberate layout choices and drops transient or malformed UI state', () => {
+    expect(pickLayoutPreferences({
+      activeRailTab: 'charts',
+      isPanelCollapsed: true,
+      drawerMode: 'maximized',
+      activeDrawerTab: 'sql',
+      drawerHeight: 420,
+      isSettingsOpen: true,
+      isCommandPaletteOpen: true,
+      workspaceMode: 'explain',
+      recoverySave: { status: 'saving' },
+    })).toEqual({
+      activeRailTab: 'charts',
+      isPanelCollapsed: true,
+      drawerMode: 'maximized',
+      activeDrawerTab: 'sql',
+      drawerHeight: 420,
+    });
+
+    expect(pickLayoutPreferences()).toEqual({});
+    expect(pickLayoutPreferences({
+      activeRailTab: 'nonsense' as never,
+      drawerMode: 'huge' as never,
+      drawerHeight: Number.NaN,
+    })).toEqual({});
+    // Heights from an older, larger window are clamped rather than trusted.
+    expect(pickLayoutPreferences({ drawerHeight: 10_000 }).drawerHeight).toBeLessThan(10_000);
+  });
+
+  it('names a project, carries it into a reset, and bounds absurd names', () => {
+    const store = useStore.getState();
+    store.setProjectName('Rotterdam flood study');
+    expect(useStore.getState().project.name).toBe('Rotterdam flood study');
+    store.setProjectName('x'.repeat(400));
+    expect(useStore.getState().project.name).toHaveLength(120);
+    useStore.getState().resetWorkspace();
+    expect(useStore.getState().project.name).toBe('');
   });
 });

@@ -65,6 +65,8 @@ export type ProjectManifestV1 = {
 
 export type ProjectManifestV2 = Omit<ProjectManifestV1, 'version' | 'workspace'> & {
   version: typeof PROJECT_MANIFEST_VERSION;
+  /** Optional so v2 files written before naming existed still validate. */
+  name?: string;
   workspace: Omit<ProjectManifestV1['workspace'], 'activeRailTab' | 'workspaceMode'> & {
     activeRailTab: 'layers' | 'charts' | 'chat' | 'cohorts';
     workspaceMode: 'explore' | 'compare' | 'explain' | 'board';

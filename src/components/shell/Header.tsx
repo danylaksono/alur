@@ -1,6 +1,6 @@
-import { useRef, useState, type ChangeEvent } from 'react';
-import { BarChart3, ClipboardPaste, FilePlus2, FileText, FileUp, Link2, Loader2, Map, MoreHorizontal, Redo2, RotateCcw, Save, Search, Settings, Undo2, X } from 'lucide-react';
-import { useStore } from '../../store/useStore';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { BarChart3, ChevronDown, ClipboardPaste, FilePlus2, FileText, FileUp, Link2, Loader2, Map, Pencil, Redo2, RotateCcw, Save, Search, Settings, Undo2, X } from 'lucide-react';
+import { UNTITLED_PROJECT_NAME, useStore } from '../../store/useStore';
 import { ingestClipboardText, ingestFile, ingestUrl } from '../../services/dataIngestion';
 import { cn } from '../../utils/cn';
 import {
@@ -26,6 +26,8 @@ export const Header = () => {
   const recoverySave = useStore((s) => s.ui.recoverySave);
   const workspaceMode = useStore((s) => s.ui.workspaceMode);
   const setWorkspaceMode = useStore((s) => s.setWorkspaceMode);
+  const projectName = useStore((s) => s.project.name);
+  const setProjectName = useStore((s) => s.setProjectName);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const projectInputRef = useRef<HTMLInputElement>(null);
   const relinkInputRef = useRef<HTMLInputElement>(null);
@@ -37,9 +39,41 @@ export const Header = () => {
   const [dataUrl, setDataUrl] = useState('');
   const [clipboardText, setClipboardText] = useState('');
   const [isRemoteLoading, setRemoteLoading] = useState(false);
-  const [isMobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isProjectMenuOpen, setProjectMenuOpen] = useState(false);
+  const [isRenaming, setRenaming] = useState(false);
+  const [nameDraft, setNameDraft] = useState('');
+  const projectMenuRef = useRef<HTMLDivElement>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
   const undoLabel = analysisHistory.past[analysisHistory.past.length - 1]?.label;
   const redoLabel = analysisHistory.future[0]?.label;
+
+  useEffect(() => {
+    if (!isProjectMenuOpen) return;
+    const closeOnOutside = (event: MouseEvent) => {
+      if (!projectMenuRef.current?.contains(event.target as Node)) setProjectMenuOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setProjectMenuOpen(false);
+    };
+    document.addEventListener('mousedown', closeOnOutside);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('mousedown', closeOnOutside);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [isProjectMenuOpen]);
+
+  const startRename = () => {
+    setNameDraft(projectName);
+    setRenaming(true);
+    setProjectMenuOpen(false);
+    requestAnimationFrame(() => nameInputRef.current?.select());
+  };
+
+  const commitRename = () => {
+    setProjectName(nameDraft.trim());
+    setRenaming(false);
+  };
 
   const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -133,18 +167,78 @@ export const Header = () => {
 
   return (
     <header className="z-50 flex h-14 shrink-0 items-center justify-between border-b border-slate-200/80 bg-white px-2 shadow-[0_1px_0_rgba(15,23,42,0.02)] md:px-4">
-      <div className="flex items-center gap-2.5" role="group" aria-label="ALUR interactive visual analytics">
-        <img
-          src="/alur-mark.svg"
-          alt=""
-          className="h-9 w-9"
-        />
-        <div className="hidden sm:block">
-          <h1 className="text-[15px] font-extrabold leading-none tracking-[0.16em] text-slate-900">ALUR</h1>
-          <p className="mt-1 text-[10px] font-medium leading-none tracking-wide text-slate-500">
-            Interactive visual analytics
-          </p>
+      <div className="flex min-w-0 items-center gap-2" role="group" aria-label="ALUR interactive visual analytics">
+        <img src="/alur-mark.svg" alt="" className="h-8 w-8 shrink-0" />
+        <h1 className="hidden text-[13px] font-extrabold leading-none tracking-[0.16em] text-slate-900 sm:block">ALUR</h1>
+
+        <span className="hidden h-5 w-px shrink-0 bg-slate-200 sm:block" aria-hidden="true" />
+
+        {/* Project identity and its file actions live together: this is where
+            users look for "which project am I in" and "save it". */}
+        <div ref={projectMenuRef} className="relative min-w-0">
+          {isRenaming ? (
+            <input
+              ref={nameInputRef}
+              value={nameDraft}
+              onChange={(event) => setNameDraft(event.target.value)}
+              onBlur={commitRename}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') commitRename();
+                if (event.key === 'Escape') setRenaming(false);
+              }}
+              maxLength={120}
+              aria-label="Project name"
+              placeholder={UNTITLED_PROJECT_NAME}
+              className="h-8 w-44 rounded-lg border border-sky-300 px-2 text-[13px] font-semibold text-slate-800 outline-none ring-2 ring-sky-100 md:w-56"
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setProjectMenuOpen(!isProjectMenuOpen)}
+              onDoubleClick={startRename}
+              className="flex h-8 min-w-0 max-w-[9rem] items-center gap-1 rounded-lg px-2 text-[13px] font-semibold text-slate-800 transition-colors hover:bg-slate-100 md:max-w-[16rem]"
+              aria-haspopup="menu"
+              aria-expanded={isProjectMenuOpen}
+              title={`${projectName || UNTITLED_PROJECT_NAME} — project actions`}
+            >
+              <span className={cn('truncate', !projectName && 'font-medium text-slate-500')}>
+                {projectName || UNTITLED_PROJECT_NAME}
+              </span>
+              <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+            </button>
+          )}
+
+          {isProjectMenuOpen && (
+            <div role="menu" aria-label="Project actions" className="absolute left-0 top-9 z-[100] w-52 rounded-lg border border-slate-200 bg-white p-1 shadow-xl">
+              <button type="button" role="menuitem" onClick={startRename} className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-[11px] font-semibold text-slate-600 hover:bg-slate-50">
+                <Pencil className="h-3.5 w-3.5" /> Rename project
+              </button>
+              <button type="button" role="menuitem" disabled={!hasWork} onClick={() => { downloadProjectManifest(createProjectManifest()); setProjectMenuOpen(false); }} className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-[11px] font-semibold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-35" title="Save workflow, layer styling, charts, filters, and views without embedding source data or credentials">
+                <Save className="h-3.5 w-3.5" /> Save project
+              </button>
+              <button type="button" role="menuitem" onClick={() => { projectInputRef.current?.click(); setProjectMenuOpen(false); }} className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-[11px] font-semibold text-slate-600 hover:bg-slate-50">
+                <FileUp className="h-3.5 w-3.5" /> Open project…
+              </button>
+              <div className="my-1 h-px bg-slate-100" />
+              <button type="button" role="menuitem" onClick={() => { handleNewProject(); setProjectMenuOpen(false); }} className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-[11px] font-semibold text-slate-600 hover:bg-slate-50">
+                <RotateCcw className="h-3.5 w-3.5" /> New project
+              </button>
+            </div>
+          )}
         </div>
+
+        {hasWork && (
+          <span
+            className={cn(
+              'hidden shrink-0 text-[10px] font-medium lg:inline',
+              recoverySave.status === 'error' ? 'text-rose-600' : 'text-slate-500',
+            )}
+            title={recoverySave.savedAt ? `Recovery saved ${new Date(recoverySave.savedAt).toLocaleString()}` : 'Local crash recovery status'}
+            aria-live="polite"
+          >
+            {recoverySave.status === 'saving' ? 'Saving…' : recoverySave.status === 'saved' ? 'Saved locally' : recoverySave.status === 'error' ? 'Recovery unavailable' : 'Not saved yet'}
+          </span>
+        )}
       </div>
 
       <div className="flex items-center gap-2">
@@ -163,19 +257,6 @@ export const Header = () => {
           <span className={cn('h-1.5 w-1.5 rounded-full', duckdbReady ? 'bg-emerald-500' : 'animate-pulse bg-amber-400')} />
           {duckdbReady ? 'Engine ready' : 'Initializing…'}
         </span>
-
-        {hasWork && (
-          <span
-            className={cn(
-              'hidden text-[10px] font-medium lg:inline',
-              recoverySave.status === 'error' ? 'text-rose-600' : 'text-slate-600',
-            )}
-            title={recoverySave.savedAt ? `Recovery saved ${new Date(recoverySave.savedAt).toLocaleString()}` : 'Local crash recovery status'}
-            aria-live="polite"
-          >
-            {recoverySave.status === 'saving' ? 'Saving…' : recoverySave.status === 'saved' ? 'Saved locally' : recoverySave.status === 'error' ? 'Recovery unavailable' : 'Not saved yet'}
-          </span>
-        )}
 
         <button
           type="button"
@@ -210,25 +291,6 @@ export const Header = () => {
           </button>
         </div>
 
-        <div className="hidden items-center overflow-hidden rounded-lg border border-slate-200 bg-white md:flex">
-          <button
-            type="button"
-            onClick={() => downloadProjectManifest(createProjectManifest())}
-            disabled={!hasWork}
-            className="flex h-8 items-center gap-1.5 px-2.5 text-[11px] font-semibold text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-30"
-            title="Save workflow, layer styling, charts, filters, and views without embedding source data or credentials"
-          >
-            <Save className="h-3.5 w-3.5" /> Save
-          </button>
-          <button
-            type="button"
-            onClick={() => projectInputRef.current?.click()}
-            className="flex h-8 items-center gap-1.5 border-l border-slate-200 px-2.5 text-[11px] font-semibold text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-800"
-            title="Open an ALUR project file"
-          >
-            <FileUp className="h-3.5 w-3.5" /> Open
-          </button>
-        </div>
         <input ref={projectInputRef} type="file" accept=".json,.alur.json,application/json" className="hidden" onChange={handleProjectImport} />
 
         {missingSources.length > 0 && (
@@ -264,23 +326,13 @@ export const Header = () => {
 
         <button
           type="button"
-          onClick={handleNewProject}
-          className="hidden items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50 xl:flex"
-          title="Clear the workspace and start fresh"
-        >
-          <RotateCcw className="h-3.5 w-3.5" />
-          New project
-        </button>
-
-        <button
-          type="button"
           onClick={() => setSettingsOpen(true)}
-          className="hidden rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 md:block"
+          className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
           title="Settings"
+          aria-label="Settings"
         >
           <Settings className="h-4 w-4" />
         </button>
-        <div className="relative md:hidden"><button type="button" onClick={() => setMobileMenuOpen(!isMobileMenuOpen)} className="rounded-lg border border-slate-200 p-2 text-slate-500" aria-label="Project actions" aria-expanded={isMobileMenuOpen}><MoreHorizontal className="h-4 w-4" /></button>{isMobileMenuOpen && <div className="absolute right-0 top-10 z-[100] w-44 rounded-lg border border-slate-200 bg-white p-1 shadow-xl"><button type="button" disabled={!hasWork} onClick={() => { downloadProjectManifest(createProjectManifest()); setMobileMenuOpen(false); }} className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-[11px] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-30"><Save className="h-3.5 w-3.5" /> Save project</button><button type="button" onClick={() => { projectInputRef.current?.click(); setMobileMenuOpen(false); }} className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-[11px] font-semibold text-slate-600 hover:bg-slate-50"><FileUp className="h-3.5 w-3.5" /> Open project</button><button type="button" onClick={() => { handleNewProject(); setMobileMenuOpen(false); }} className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-[11px] font-semibold text-slate-600 hover:bg-slate-50"><RotateCcw className="h-3.5 w-3.5" /> New project</button><button type="button" onClick={() => { setSettingsOpen(true); setMobileMenuOpen(false); }} className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-[11px] font-semibold text-slate-600 hover:bg-slate-50"><Settings className="h-3.5 w-3.5" /> Settings</button></div>}</div>
       </div>
       <input ref={relinkInputRef} type="file" className="hidden" onChange={handleRelink} />
 

@@ -129,13 +129,15 @@ describe('sample visual analytics workflow smoke test', () => {
 
     const shellHtml = renderToString(<App />);
     expect(shellHtml).toContain('Add data');
-    expect(shellHtml).toContain('New project');
+    // Project file actions (new/save/open) now hang off the named project menu.
+    expect(shellHtml).toContain('Untitled project');
+    expect(shellHtml).toContain('aria-haspopup="menu"');
     expect(shellHtml).toContain('Data Layers');
     // The style editor is gated behind a per-layer action; the list view shows by default.
     expect(shellHtml).toContain('Add data or run a workflow');
     expect(shellHtml).toContain('Basemap');
     expect(shellHtml).toContain('About');
-    expect(shellHtml).toContain('aria-label="Cohorts"');
+    expect(shellHtml).toContain('aria-label="Cohorts and bookmarks"');
     expect(shellHtml).toContain('Workflow');
     expect(shellHtml).toContain('Table');
     expect(shellHtml).toContain('SQL');
@@ -147,7 +149,9 @@ describe('sample visual analytics workflow smoke test', () => {
     const workflowHtml = renderToString(<WorkflowTab />);
     expect(workflowHtml).toContain('Data Input');
     expect(workflowHtml).toContain('Layer Output');
-    expect(workflowHtml).toContain('Spatial Functions');
+    // Spatial functions are reached through the palette's top search field;
+    // their results render only once a query narrows them.
+    expect(workflowHtml).toContain('Search nodes and');
     expect(workflowHtml).toContain('Execute Workflow');
 
     const chatHtml = renderToString(<Chat />);

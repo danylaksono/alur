@@ -142,6 +142,7 @@ const savedTableViews = () => {
 export const createProjectManifest = (state = useStore.getState(), exportedAt = new Date()): ProjectManifest => ({
   kind: 'alur-project',
   version: PROJECT_MANIFEST_VERSION,
+  name: state.project.name || undefined,
   appVersion: packageJson.version,
   exportedAt: exportedAt.toISOString(),
   workflow: {
@@ -182,6 +183,7 @@ const validateManifest = (value: unknown): ProjectManifest => {
   const manifest = value as unknown as ProjectManifest;
   return {
     ...manifest,
+    name: typeof manifest.name === 'string' ? manifest.name.slice(0, 120) : undefined,
     visualAnalytics: normaliseAnalytics(manifest.visualAnalytics),
     workspace: {
       ...manifest.workspace,
@@ -306,7 +308,7 @@ export const parseProjectManifest = (text: string) => {
 
 export const serialiseProjectManifest = (manifest: ProjectManifest) => JSON.stringify(validateManifest(manifest), null, 2);
 
-export const downloadProjectManifest = (manifest = createProjectManifest(), projectName = 'alur-project') => {
+export const downloadProjectManifest = (manifest = createProjectManifest(), projectName = manifest.name || 'alur-project') => {
   const fileName = `${safeFilename(projectName, 'alur-project')}-${filenameTimestamp(new Date(manifest.exportedAt))}.alur.json`;
   downloadText(serialiseProjectManifest(manifest), fileName, 'application/json;charset=utf-8');
 };
@@ -315,6 +317,7 @@ export const applyProjectManifest = (manifest: ProjectManifest | ProjectManifest
   const valid = validateManifest(migrateProjectManifest(manifest));
   useStore.getState().resetWorkspace();
   useStore.setState((state) => ({
+    project: { name: valid.name || '' },
     nodes: valid.workflow.nodes.map(sanitiseNode),
     edges: valid.workflow.edges,
     mapLayers: [],
