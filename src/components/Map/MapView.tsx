@@ -24,6 +24,7 @@ import type { GlyphGridVisualisation } from '../../types/visualisation';
 import { requiredMapTileProperties } from '../../utils/mapTileProperties';
 import { queryLayerFeatureDetails } from '../../services/visualAnalyticsService';
 import { MapInteractionToolbar } from './MapInteractionToolbar';
+import { registerMap } from '../../services/mapRegistry';
 import { combineFeatureSelection, featureIdsFromRenderedFeatures, screenSelectionBox, type SelectionOperation } from '../../utils/mapSelection';
 import { applyCohortComparisonPaint, compileMapFilter } from '../../utils/mapFilterCompiler';
 
@@ -154,12 +155,17 @@ export const MapView = () => {
       zoom: mapCamera.zoom,
       bearing: mapCamera.bearing,
       pitch: mapCamera.pitch,
+      // Required to read the canvas for map evidence capture. Without it the
+      // drawing buffer is cleared after compositing and snapshots come back
+      // blank. Costs some driver-level optimisation on every frame.
+      preserveDrawingBuffer: true,
     });
     m.addControl(new maplibregl.ScaleControl({ unit: 'metric', maxWidth: 120 }), 'bottom-right');
     // Fires on the initial style load and after every setStyle — unlike
     // isStyleLoaded(), it is not perturbed by ongoing tile loads.
     m.on('style.load', () => { styleReady.current = true; });
     map.current = m;
+    registerMap(m);
     if (import.meta.env.DEV) {
       // Debug handle for driving/inspecting the map in dev tools and E2E runs.
       (window as unknown as Record<string, unknown>).__alurMap = m;
@@ -227,6 +233,7 @@ export const MapView = () => {
       locationMarker.current?.remove();
       locationMarker.current = null;
       m.remove();
+      registerMap(null);
       map.current = null;
       popup.current = null;
     };

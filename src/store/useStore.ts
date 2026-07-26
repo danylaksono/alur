@@ -40,6 +40,7 @@ import type { LayerSource } from '../types/layers';
 import type { LayerBounds } from '../types/layers';
 import { DATASET_SOURCE_VERSION, type DatasetDescriptor } from '../types/datasets';
 import { migrateLocalStorageKey } from '../utils/storageMigration';
+import type { AlurStory } from '../types/story';
 import {
   captureAnalysisSnapshot,
   emptyAnalysisHistory,
@@ -202,6 +203,8 @@ export type UIState = {
 export type SettingsState = {
   openRouterApiKey: string;
   openRouterModelId: string;
+  /** Stamped onto exported stories so a reader knows whose account it is. */
+  authorName: string;
 };
 
 export type ChatMessage = {
@@ -224,6 +227,11 @@ export const UNTITLED_PROJECT_NAME = 'Untitled project';
 
 export interface AppState {
   project: ProjectState;
+  /**
+   * A story opened for reading. Non-null puts the app in a read-only mode
+   * that renders the story alone — no engine, no workspace, no editing.
+   */
+  openedStory: AlurStory | null;
   nodes: WorkflowNode[];
   edges: Edge[];
   duckdbReady: boolean;
@@ -254,6 +262,8 @@ export interface AppState {
   analysisHistory: AnalysisHistoryState;
 
   setProjectName: (name: string) => void;
+  openStory: (story: AlurStory) => void;
+  closeStory: () => void;
   navigate: (destination: NavDestination) => void;
   requestWorkflowFit: () => void;
   setActiveRailTab: (tab: RailTab) => void;
@@ -542,6 +552,7 @@ export const pickLayoutPreferences = (ui?: Partial<UIState>): Partial<LayoutPref
 const initialSettings: SettingsState = {
   openRouterApiKey: '',
   openRouterModelId: 'openai/gpt-4o-mini',
+  authorName: '',
 };
 
 const defaultExplainDocument = (): ExplainDocument => ({
@@ -615,6 +626,7 @@ const historyActionForMapPatch = (layerId: string, patch: Record<string, unknown
 
 export const useStore = create<AppState>()(persist((set, get) => ({
   project: { name: '' },
+  openedStory: null,
   nodes: [],
   edges: [],
   duckdbReady: false,
@@ -848,6 +860,8 @@ export const useStore = create<AppState>()(persist((set, get) => ({
   resetNodeExecutionStates: () => set({ nodeExecutionStates: {} }),
 
   setProjectName: (name) => set({ project: { name: name.slice(0, 120) } }),
+  openStory: (openedStory) => set({ openedStory }),
+  closeStory: () => set({ openedStory: null }),
 
   resetWorkspace: () => set({
     project: { name: '' },

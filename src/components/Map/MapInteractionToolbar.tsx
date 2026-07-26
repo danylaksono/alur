@@ -1,8 +1,9 @@
-import { BoxSelect, Check, Crosshair, Expand, Home, LocateFixed, Map as MapIcon, Minus, MousePointer2, Plus } from 'lucide-react';
+import { BoxSelect, Camera, Check, Crosshair, Expand, Home, Loader2, LocateFixed, Map as MapIcon, Minus, MousePointer2, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '../../utils/cn';
 import { BASEMAPS } from '../../utils/basemaps';
 import { useStore } from '../../store/useStore';
+import { pinMapEvidence } from '../../services/explainCapture';
 
 export const MapInteractionToolbar = ({
   selectionMode,
@@ -28,6 +29,7 @@ export const MapInteractionToolbar = ({
   onFullscreen: () => void;
 }) => {
   const [basemapsOpen, setBasemapsOpen] = useState(false);
+  const [isPinning, setPinning] = useState(false);
   const selectedBasemapId = useStore((state) => state.selectedBasemapId);
   const setSelectedBasemapId = useStore((state) => state.setSelectedBasemapId);
   return (
@@ -43,6 +45,16 @@ export const MapInteractionToolbar = ({
       </button>
       <button type="button" onClick={onGeolocate} aria-label="Find my location" className="flex h-9 w-9 items-center justify-center border-b border-slate-100 text-slate-600 hover:bg-slate-50"><LocateFixed className="h-4 w-4" /></button>
       <button type="button" onClick={onFullscreen} aria-label="Toggle map fullscreen" className="flex h-9 w-9 items-center justify-center border-b border-slate-100 text-slate-600 hover:bg-slate-50"><Expand className="h-4 w-4" /></button>
+      <button
+        type="button"
+        onClick={() => { setPinning(true); void pinMapEvidence().finally(() => setPinning(false)); }}
+        disabled={!hasLayer || isPinning}
+        aria-label="Pin this map view to your report"
+        title="Pin this map view to your report"
+        className="flex h-9 w-9 items-center justify-center border-b border-slate-100 text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-35"
+      >
+        {isPinning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
+      </button>
       <button type="button" onClick={() => setBasemapsOpen(!basemapsOpen)} aria-expanded={basemapsOpen} aria-label="Choose basemap" title="Basemap" className={cn('flex h-9 w-9 items-center justify-center rounded-b-lg text-slate-600 hover:bg-slate-50', basemapsOpen && 'bg-slate-900 text-white hover:bg-slate-900')}><MapIcon className="h-4 w-4" /></button>
       {basemapsOpen && <div className="absolute right-11 top-0 w-40 rounded-lg border border-slate-200 bg-white p-1 shadow-lg"><p className="px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-slate-400">Basemap</p>{BASEMAPS.map((basemap) => <button key={basemap.id} type="button" onClick={() => { setSelectedBasemapId(basemap.id); setBasemapsOpen(false); }} className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-[11px] font-semibold text-slate-600 hover:bg-slate-50">{basemap.name}{selectedBasemapId === basemap.id && <Check className="h-3 w-3" />}</button>)}</div>}
     </div>

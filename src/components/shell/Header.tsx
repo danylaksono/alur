@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
-import { ChevronDown, ClipboardPaste, FilePlus2, FileUp, Link2, Loader2, Pencil, Redo2, RotateCcw, Save, Search, Settings, Undo2, X } from 'lucide-react';
+import { BookOpen, ChevronDown, ClipboardPaste, FilePlus2, FileUp, Link2, Loader2, Pencil, Redo2, RotateCcw, Save, Search, Settings, Undo2, X } from 'lucide-react';
 import { UNTITLED_PROJECT_NAME, useStore } from '../../store/useStore';
 import { ingestClipboardText, ingestFile, ingestUrl } from '../../services/dataIngestion';
 import { cn } from '../../utils/cn';
@@ -12,6 +12,7 @@ import {
   sourceMatchesFile,
 } from '../../services/projectService';
 import type { ProjectManifest, ProjectSourceDescriptor } from '../../types/project';
+import { parseStory } from '../../services/storyService';
 
 export const Header = () => {
   const duckdbReady = useStore((s) => s.duckdbReady);
@@ -26,8 +27,10 @@ export const Header = () => {
   const recoverySave = useStore((s) => s.ui.recoverySave);
   const projectName = useStore((s) => s.project.name);
   const setProjectName = useStore((s) => s.setProjectName);
+  const openStory = useStore((s) => s.openStory);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const projectInputRef = useRef<HTMLInputElement>(null);
+  const storyInputRef = useRef<HTMLInputElement>(null);
   const relinkInputRef = useRef<HTMLInputElement>(null);
   const relinkTargetRef = useRef<ProjectSourceDescriptor | null>(null);
   const [importedProject, setImportedProject] = useState<ProjectManifest | null>(null);
@@ -140,6 +143,19 @@ export const Header = () => {
     }
   };
 
+  // Stories are read-only and self-contained, so opening one never touches the
+  // workspace — it just puts a reader on top of whatever is already loaded.
+  const handleStoryImport = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    try {
+      openStory(parseStory(await file.text()));
+    } catch (error: any) {
+      addToast({ type: 'error', message: `Could not open story: ${error?.message || 'Unknown error'}` });
+    }
+  };
+
   const chooseRelinkFile = (source: ProjectSourceDescriptor) => {
     relinkTargetRef.current = source;
     relinkInputRef.current?.click();
@@ -217,6 +233,9 @@ export const Header = () => {
               <button type="button" role="menuitem" onClick={() => { projectInputRef.current?.click(); setProjectMenuOpen(false); }} className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-[11px] font-semibold text-slate-600 hover:bg-slate-50">
                 <FileUp className="h-3.5 w-3.5" /> Open project…
               </button>
+              <button type="button" role="menuitem" onClick={() => { storyInputRef.current?.click(); setProjectMenuOpen(false); }} className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-[11px] font-semibold text-slate-600 hover:bg-slate-50" title="Read a shared explanation — no data needed">
+                <BookOpen className="h-3.5 w-3.5" /> Open story…
+              </button>
               <div className="my-1 h-px bg-slate-100" />
               <button type="button" role="menuitem" onClick={() => { handleNewProject(); setProjectMenuOpen(false); }} className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-[11px] font-semibold text-slate-600 hover:bg-slate-50">
                 <RotateCcw className="h-3.5 w-3.5" /> New project
@@ -283,6 +302,7 @@ export const Header = () => {
         </div>
 
         <input ref={projectInputRef} type="file" accept=".json,.alur.json,application/json" className="hidden" onChange={handleProjectImport} />
+        <input ref={storyInputRef} type="file" accept=".json,.alur-story.json,application/json" className="hidden" onChange={handleStoryImport} />
 
         {missingSources.length > 0 && (
           <button

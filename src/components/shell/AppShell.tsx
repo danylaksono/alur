@@ -22,6 +22,7 @@ import { DatasetOverviewDialog } from '../Visualisation/DatasetOverviewDialog';
 import { RecoveryDialog } from './RecoveryDialog';
 import { CompareWorkspace } from '../Compare/CompareWorkspace';
 import { ExplainWorkspace } from '../Explain/ExplainWorkspace';
+import { StoryViewer } from '../Explain/StoryViewer';
 import { AnalysisContextBar } from './AnalysisContextBar';
 import { EvidenceTray } from './EvidenceTray';
 
@@ -34,6 +35,7 @@ const DOCK_DIRECTION: Record<DockSide, string> = {
 };
 
 export const AppShell = () => {
+  const openedStory = useStore((s) => s.openedStory);
   const dockSide = useStore((s) => s.ui.dockSide);
   const drawerMode = useStore((s) => s.ui.drawerMode);
   const isGlobalLoading = useStore((s) => Object.keys(s.loadingOperations).length > 0);
@@ -68,6 +70,10 @@ export const AppShell = () => {
       await ingestFile(file);
     }
   };
+
+  // A story is a finished, read-only artefact: it replaces the workspace
+  // rather than docking inside it, so a reader is never shown analysis tools.
+  if (openedStory) return <StoryViewer story={openedStory} />;
 
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-background" aria-busy={isGlobalLoading}>
