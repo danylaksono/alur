@@ -491,6 +491,79 @@ describe('layout preferences', () => {
     expect(isDestinationActive(ui(), 'explain')).toBe(true);
   });
 
+  it('applies layout presets and drops to custom once anything is hand-adjusted', () => {
+    const store = useStore.getState();
+    const ui = () => useStore.getState().ui;
+
+    store.applyLayoutPreset('side-by-side');
+    expect(ui()).toMatchObject({
+      layoutPreset: 'side-by-side', dockSide: 'right', drawerMode: 'open',
+      activeDrawerTab: 'table', workspaceMode: 'explore',
+    });
+
+    // The workflow preset also brings its palette into the panel.
+    store.applyLayoutPreset('workflow');
+    expect(ui()).toMatchObject({
+      layoutPreset: 'workflow', dockSide: 'left', activeDrawerTab: 'workflow',
+      activeRailTab: 'nodes', isPanelCollapsed: false,
+    });
+
+    store.applyLayoutPreset('map-focus');
+    expect(ui()).toMatchObject({ layoutPreset: 'map-focus', dockSide: 'bottom', drawerMode: 'collapsed' });
+
+    store.applyLayoutPreset('map-below');
+    expect(ui()).toMatchObject({ layoutPreset: 'map-below', dockSide: 'top', drawerMode: 'open' });
+
+    // Any manual adjustment stops the label claiming a preset it no longer matches.
+    store.setDrawerHeight(300);
+    expect(ui().layoutPreset).toBe('custom');
+    store.applyLayoutPreset('side-by-side');
+    store.setDockSide('left');
+    expect(ui()).toMatchObject({ layoutPreset: 'custom', dockSide: 'left' });
+    store.applyLayoutPreset('side-by-side');
+    store.setPanelWidth(420);
+    expect(ui()).toMatchObject({ layoutPreset: 'custom', panelWidth: 420 });
+
+    // A preset reached from another workspace returns to Explore.
+    store.navigate('compare');
+    store.applyLayoutPreset('map-focus');
+    expect(ui().workspaceMode).toBe('explore');
+  });
+
+  it('clamps every dragged dimension into a usable range', () => {
+    const store = useStore.getState();
+    const ui = () => useStore.getState().ui;
+
+    store.setDrawerHeight(-500);
+    expect(ui().drawerHeight).toBe(160);
+    store.setDrawerWidth(-500);
+    expect(ui().drawerWidth).toBe(280);
+    store.setPanelWidth(-500);
+    expect(ui().panelWidth).toBe(240);
+
+    // Dragging past the far edge must still leave the map something to occupy.
+    store.setDrawerHeight(100_000);
+    store.setDrawerWidth(100_000);
+    store.setPanelWidth(100_000);
+    expect(ui().drawerHeight).toBeLessThan(100_000);
+    expect(ui().drawerWidth).toBeLessThan(100_000);
+    expect(ui().panelWidth).toBeLessThan(100_000);
+
+    // The two horizontal panes are clamped against each other: separately
+    // valid widths must not add up to squeezing the map out of existence.
+    store.applyLayoutPreset('side-by-side');
+    store.setDrawerWidth(100_000);
+    store.setPanelWidth(100_000);
+    const viewportWidth = typeof window === 'undefined' ? 1440 : window.innerWidth;
+    const railWidth = ui().isRailExpanded ? 176 : 48;
+    expect(viewportWidth - railWidth - ui().panelWidth - ui().drawerWidth).toBeGreaterThanOrEqual(0);
+
+    expect(pickLayoutPreferences({ dockSide: 'sideways' as never, layoutPreset: 'fancy' as never })).toEqual({});
+    expect(pickLayoutPreferences({ dockSide: 'left', layoutPreset: 'workflow' })).toEqual({
+      dockSide: 'left', layoutPreset: 'workflow',
+    });
+  });
+
   it('names a project, carries it into a reset, and bounds absurd names', () => {
     const store = useStore.getState();
     store.setProjectName('Rotterdam flood study');

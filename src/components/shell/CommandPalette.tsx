@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
-import { BarChart3, Database, FilePlus2, Gauge, GitCompareArrows, Layers, LayoutDashboard, MapPinned, PanelLeft, Redo2, ScanSearch, Search, Sparkles, Table2, Terminal, Undo2, Users, Workflow, X } from 'lucide-react';
-import { useStore, type NavDestination } from '../../store/useStore';
+import { BarChart3, Database, FilePlus2, Gauge, GitCompareArrows, Layers, LayoutDashboard, LayoutGrid, MapPinned, PanelLeft, Redo2, ScanSearch, Search, Sparkles, Table2, Terminal, Undo2, Users, Workflow, X } from 'lucide-react';
+import { LAYOUT_PRESETS, useStore, type LayoutPresetId, type NavDestination } from '../../store/useStore';
 import { useAnalyticsCommands } from '../../hooks/useAnalyticsCommands';
 import { metadataForLayer, preferredExplorationField } from '../../utils/datasetMetadata';
 
@@ -64,6 +64,13 @@ export const CommandPalette = () => {
       { id: 'compare', label: 'Open Compare', keywords: 'analyse compare groups cohorts time scenarios difference', icon: GitCompareArrows, run: goTo('compare') },
       { id: 'explain', label: 'Open Report', keywords: 'explain presentation story evidence board layout', icon: LayoutDashboard, run: goTo('explain') },
       { id: 'toggle-nav', label: 'Toggle navigation labels', keywords: 'rail sidebar collapse expand icons', icon: PanelLeft, run: state.toggleRailExpanded },
+      ...(Object.keys(LAYOUT_PRESETS) as Array<Exclude<LayoutPresetId, 'custom'>>).map((preset) => ({
+        id: `layout-${preset}`,
+        label: `Layout: ${LAYOUT_PRESETS[preset].label}`,
+        keywords: `layout arrange dock split side by side map below workflow ${LAYOUT_PRESETS[preset].description}`,
+        icon: LayoutGrid,
+        run: () => state.applyLayoutPreset(preset),
+      })),
       { id: 'focus-layer', label: 'Zoom to active layer', keywords: 'map home extent fit', icon: MapPinned, disabled: !selectedLayerId, run: () => { if (selectedLayerId) state.focusLayer(selectedLayerId); } },
       { id: 'dataset-overview', label: 'Open dataset overview', keywords: 'profile quality fields missing distinct', icon: ScanSearch, disabled: !selectedLayerId, run: () => { if (selectedLayerId) state.setDatasetOverviewLayerId(selectedLayerId); } },
       { id: 'focus-selection', label: 'Zoom to selection', keywords: 'map selected extent fit', icon: MapPinned, disabled: !selectedLayerState?.selectedFeatureIds.length, run: async () => { if (selectedLayerId) await executeAnalyticsCommand({ type: 'focus-selection', datasetId: selectedLayerId }); } },

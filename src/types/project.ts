@@ -70,6 +70,12 @@ export type ProjectManifestV2 = Omit<ProjectManifestV1, 'version' | 'workspace'>
   workspace: Omit<ProjectManifestV1['workspace'], 'activeRailTab' | 'workspaceMode'> & {
     activeRailTab: 'layers' | 'charts' | 'chat' | 'cohorts' | 'nodes';
     workspaceMode: 'explore' | 'compare' | 'explain' | 'board';
+    /** Optional so v2 files written before layouts existed still validate. */
+    isRailExpanded?: boolean;
+    drawerWidth?: number;
+    panelWidth?: number;
+    dockSide?: 'bottom' | 'top' | 'left' | 'right';
+    layoutPreset?: 'map-focus' | 'side-by-side' | 'workflow' | 'map-below' | 'custom';
   };
 };
 

@@ -113,6 +113,55 @@ export type RailTab = 'layers' | 'charts' | 'cohorts' | 'chat' | 'nodes';
 export type DrawerTab = 'workflow' | 'table' | 'sql';
 export type DrawerMode = 'collapsed' | 'open' | 'maximized';
 
+/** Which edge of the map the workflow/table/SQL surface is docked against. */
+export type DockSide = 'bottom' | 'top' | 'left' | 'right';
+export type LayoutPresetId = 'map-focus' | 'side-by-side' | 'workflow' | 'map-below' | 'custom';
+
+export const isHorizontalDock = (dock: DockSide) => dock === 'bottom' || dock === 'top';
+
+export type LayoutPresetSpec = {
+  label: string;
+  description: string;
+  dock: DockSide;
+  drawerMode: DrawerMode;
+  drawerTab?: DrawerTab;
+};
+
+/**
+ * Named arrangements, so the common cases are one click and the free-form
+ * controls stay out of the way. Anything the user adjusts by hand drops the
+ * layout to 'custom' rather than silently contradicting the chosen preset.
+ */
+export const LAYOUT_PRESETS: Record<Exclude<LayoutPresetId, 'custom'>, LayoutPresetSpec> = {
+  'map-focus': {
+    label: 'Map focus',
+    description: 'Map fills the workspace; data surfaces stay closed.',
+    dock: 'bottom',
+    drawerMode: 'collapsed',
+  },
+  'side-by-side': {
+    label: 'Side by side',
+    description: 'Table and SQL sit beside the map instead of beneath it.',
+    dock: 'right',
+    drawerMode: 'open',
+    drawerTab: 'table',
+  },
+  workflow: {
+    label: 'Workflow',
+    description: 'Canvas takes the main area with the map kept alongside.',
+    dock: 'left',
+    drawerMode: 'open',
+    drawerTab: 'workflow',
+  },
+  'map-below': {
+    label: 'Map below',
+    description: 'Data on top, map along the bottom.',
+    dock: 'top',
+    drawerMode: 'open',
+    drawerTab: 'table',
+  },
+};
+
 /**
  * Every place the rail can send you. One list replaces what used to be three
  * competing navigations (workspace mode, panel tab, drawer tab): each entry
@@ -132,7 +181,12 @@ export type UIState = {
   /** Rail shows labels when expanded, icons only when collapsed. */
   isRailExpanded: boolean;
   drawerMode: DrawerMode;
+  /** Used when docked top or bottom; drawerWidth applies to the side docks. */
   drawerHeight: number;
+  drawerWidth: number;
+  panelWidth: number;
+  dockSide: DockSide;
+  layoutPreset: LayoutPresetId;
   activeDrawerTab: DrawerTab;
   isSettingsOpen: boolean;
   isAboutOpen: boolean;
@@ -207,6 +261,10 @@ export interface AppState {
   toggleRailExpanded: () => void;
   setDrawerMode: (mode: DrawerMode) => void;
   setDrawerHeight: (height: number) => void;
+  setDrawerWidth: (width: number) => void;
+  setPanelWidth: (width: number) => void;
+  setDockSide: (dock: DockSide) => void;
+  applyLayoutPreset: (preset: Exclude<LayoutPresetId, 'custom'>) => void;
   setActiveDrawerTab: (tab: DrawerTab) => void;
   openDrawerTab: (tab: DrawerTab) => void;
   setSettingsOpen: (open: boolean) => void;
@@ -372,6 +430,10 @@ const initialUIState: UIState = {
   isRailExpanded: typeof window === 'undefined' || window.innerWidth >= 1280,
   drawerMode: 'open',
   drawerHeight: 320,
+  drawerWidth: 520,
+  panelWidth: 384,
+  dockSide: 'bottom',
+  layoutPreset: 'custom',
   activeDrawerTab: 'workflow',
   isSettingsOpen: false,
   isAboutOpen: false,
@@ -405,20 +467,51 @@ export const isDestinationActive = (ui: UIState, destination: NavDestination): b
   return panelShowing(destination);
 };
 
-const clampDrawerHeight = (height: number) => {
-  const maxHeight = typeof window === 'undefined' ? 800 : window.innerHeight - 160;
-  return Math.max(160, Math.min(height, maxHeight));
+const viewport = (axis: 'width' | 'height', fallback: number) =>
+  typeof window === 'undefined' ? fallback : (axis === 'width' ? window.innerWidth : window.innerHeight);
+
+/** Floor for the map pane, so no combination of drags can squeeze it away. */
+const MIN_MAP_WIDTH = 280;
+const RAIL_WIDTH_EXPANDED = 176;
+const RAIL_WIDTH_COLLAPSED = 48;
+
+type SizingContext = Pick<UIState, 'isRailExpanded' | 'isPanelCollapsed' | 'panelWidth' | 'dockSide' | 'drawerMode' | 'drawerWidth'>;
+
+// Sizes are re-clamped on read as well as on write: a width saved on a large
+// monitor must not swallow the workspace when restored on a laptop. The two
+// horizontal panes are clamped against each other, since separately-valid
+// widths can still add up to leaving the map a sliver.
+const clampDrawerHeight = (height: number) => Math.max(160, Math.min(height, viewport('height', 960) - 160));
+
+const spaceBesideMap = (context?: SizingContext) => {
+  const rail = context?.isRailExpanded === false ? RAIL_WIDTH_COLLAPSED : RAIL_WIDTH_EXPANDED;
+  return viewport('width', 1440) - rail - MIN_MAP_WIDTH;
+};
+
+const clampDrawerWidth = (width: number, context?: SizingContext) => {
+  const panel = !context || context.isPanelCollapsed ? 0 : context.panelWidth;
+  return Math.max(280, Math.min(width, Math.max(280, spaceBesideMap(context) - panel)));
+};
+
+const clampPanelWidth = (width: number, context?: SizingContext) => {
+  const docked = !context || context.drawerMode === 'collapsed' || isHorizontalDock(context.dockSide)
+    ? 0
+    : context.drawerWidth;
+  return Math.max(240, Math.min(width, Math.max(240, spaceBesideMap(context) - docked)));
 };
 
 /** UI keys that represent a deliberate layout choice and are safe to restore. */
 export type LayoutPreferences = Pick<
   UIState,
-  'activeRailTab' | 'isPanelCollapsed' | 'isRailExpanded' | 'drawerMode' | 'drawerHeight' | 'activeDrawerTab'
+  | 'activeRailTab' | 'isPanelCollapsed' | 'isRailExpanded' | 'drawerMode' | 'activeDrawerTab'
+  | 'drawerHeight' | 'drawerWidth' | 'panelWidth' | 'dockSide' | 'layoutPreset'
 >;
 
 const RAIL_TAB_VALUES: RailTab[] = [...PANEL_DESTINATIONS];
 const DRAWER_TAB_VALUES: DrawerTab[] = ['workflow', 'table', 'sql'];
 const DRAWER_MODE_VALUES: DrawerMode[] = ['collapsed', 'open', 'maximized'];
+const DOCK_SIDE_VALUES: DockSide[] = ['bottom', 'top', 'left', 'right'];
+const LAYOUT_PRESET_VALUES: LayoutPresetId[] = [...(Object.keys(LAYOUT_PRESETS) as LayoutPresetId[]), 'custom'];
 
 /**
  * Narrows persisted UI state to the layout keys, discarding anything malformed.
@@ -432,8 +525,16 @@ export const pickLayoutPreferences = (ui?: Partial<UIState>): Partial<LayoutPref
   if (typeof ui.isRailExpanded === 'boolean') preferences.isRailExpanded = ui.isRailExpanded;
   if (DRAWER_MODE_VALUES.includes(ui.drawerMode as DrawerMode)) preferences.drawerMode = ui.drawerMode;
   if (DRAWER_TAB_VALUES.includes(ui.activeDrawerTab as DrawerTab)) preferences.activeDrawerTab = ui.activeDrawerTab;
+  if (DOCK_SIDE_VALUES.includes(ui.dockSide as DockSide)) preferences.dockSide = ui.dockSide;
+  if (LAYOUT_PRESET_VALUES.includes(ui.layoutPreset as LayoutPresetId)) preferences.layoutPreset = ui.layoutPreset;
   if (typeof ui.drawerHeight === 'number' && Number.isFinite(ui.drawerHeight)) {
     preferences.drawerHeight = clampDrawerHeight(ui.drawerHeight);
+  }
+  if (typeof ui.drawerWidth === 'number' && Number.isFinite(ui.drawerWidth)) {
+    preferences.drawerWidth = clampDrawerWidth(ui.drawerWidth);
+  }
+  if (typeof ui.panelWidth === 'number' && Number.isFinite(ui.panelWidth)) {
+    preferences.panelWidth = clampPanelWidth(ui.panelWidth);
   }
   return preferences;
 };
@@ -619,9 +720,39 @@ export const useStore = create<AppState>()(persist((set, get) => ({
   setDrawerMode: (mode) => set((state) => ({
     ui: { ...state.ui, drawerMode: mode },
   })),
+  // Hand-resizing or re-docking means the arrangement is no longer whichever
+  // preset was picked, so the label stops claiming otherwise.
   setDrawerHeight: (height) => set((state) => ({
-    ui: { ...state.ui, drawerHeight: clampDrawerHeight(height) },
+    ui: { ...state.ui, drawerHeight: clampDrawerHeight(height), layoutPreset: 'custom' },
   })),
+  setDrawerWidth: (width) => set((state) => ({
+    ui: { ...state.ui, drawerWidth: clampDrawerWidth(width, state.ui), layoutPreset: 'custom' },
+  })),
+  setPanelWidth: (width) => set((state) => ({
+    ui: { ...state.ui, panelWidth: clampPanelWidth(width, state.ui), layoutPreset: 'custom' },
+  })),
+  setDockSide: (dockSide) => set((state) => ({
+    ui: { ...state.ui, dockSide, layoutPreset: 'custom' },
+  })),
+  applyLayoutPreset: (preset) => set((state) => {
+    const spec = LAYOUT_PRESETS[preset];
+    const drawerTab = spec.drawerTab ?? state.ui.activeDrawerTab;
+    return {
+      ui: {
+        ...state.ui,
+        // Layouts describe the Explore workspace, so applying one goes there.
+        workspaceMode: 'explore',
+        isPresentationMode: false,
+        layoutPreset: preset,
+        dockSide: spec.dock,
+        drawerMode: spec.drawerMode,
+        activeDrawerTab: drawerTab,
+        ...(spec.drawerMode !== 'collapsed' && PANEL_FOR_DRAWER_TAB[drawerTab]
+          ? { activeRailTab: PANEL_FOR_DRAWER_TAB[drawerTab]!, isPanelCollapsed: false }
+          : {}),
+      },
+    };
+  }),
   setActiveDrawerTab: (tab) => set((state) => ({
     ui: { ...state.ui, activeDrawerTab: tab },
   })),

@@ -13,6 +13,7 @@ import {
   Workflow,
 } from 'lucide-react';
 import { isDestinationActive, useStore, type NavDestination } from '../../store/useStore';
+import { LayoutMenu } from './LayoutMenu';
 import { cn } from '../../utils/cn';
 
 type Destination = {
@@ -133,6 +134,7 @@ export const LeftRail = () => {
 
       <div className={cn('mt-auto flex flex-col gap-0.5 pt-3', isRailExpanded ? 'w-full' : 'items-center')}>
         {renderItem(COPILOT)}
+        <LayoutMenu expanded={isRailExpanded} />
 
         <button
           type="button"
