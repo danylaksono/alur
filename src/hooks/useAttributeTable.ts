@@ -14,6 +14,7 @@ import type { VisualFilter } from '../types/visualAnalytics';
 import type { ComputedField } from '../utils/fieldCalculator';
 import type { AppliedTableLayout, SavedTableView, TableLayout } from '../types/table';
 import { migrateLocalStorageKey } from '../utils/storageMigration';
+import { visualFilterKey } from '../utils/visualFilters';
 
 const EMPTY_FILTERS: VisualFilter[] = [];
 const EMPTY_FEATURE_IDS: string[] = [];
@@ -31,11 +32,7 @@ const loadSavedViews = (): Record<string, SavedTableView[]> => {
   }
 };
 
-const filterKeyOf = (filter: VisualFilter) => {
-  if (filter.kind === 'category') return `${filter.field}:category:${filter.values.join('|')}`;
-  if (filter.kind === 'temporal') return `${filter.field}:temporal:${filter.start ?? ''}:${filter.end ?? ''}`;
-  return `${filter.field}:range:${filter.min ?? ''}:${filter.max ?? ''}`;
-};
+const filterKeyOf = visualFilterKey;
 
 /**
  * Owns all attribute-table state for both data sources: a selected map layer
@@ -50,6 +47,7 @@ export function useAttributeTable() {
   const selectedLayerId = useStore((s) => s.selectedLayerId);
   const nodeSchemas = useStore((s) => s.nodeSchemas);
   const visualAnalytics = useStore((s) => s.visualAnalytics);
+  const datasetRegistry = useStore((s) => s.datasetRegistry);
   const isManualSQL = useStore((s) => s.isManualSQL);
   const setLayerFilters = useStore((s) => s.setLayerFilters);
   const clearLayerFilters = useStore((s) => s.clearLayerFilters);
@@ -86,6 +84,12 @@ export function useAttributeTable() {
   // Manual-SQL results shown when the query produced no map layer (no geometry column).
   const [manualPreview, setManualPreview] = useState<Record<string, any>[] | null>(null);
 
+  useEffect(() => {
+    const refreshImportedViews = () => setSavedViewsBySource(loadSavedViews());
+    window.addEventListener('alur-table-views-imported', refreshImportedViews);
+    return () => window.removeEventListener('alur-table-views-imported', refreshImportedViews);
+  }, []);
+
   const selectedLayer = useMemo(
     () => mapLayers.find((layer) => layer.id === selectedLayerId) || null,
     [mapLayers, selectedLayerId]
@@ -94,15 +98,26 @@ export function useAttributeTable() {
     () => nodes.find((node) => node.id === selectedNodeId) || null,
     [nodes, selectedNodeId]
   );
-  const sourceKey = selectedLayer ? `layer:${selectedLayer.id}` : selectedNodeId ? `node:${selectedNodeId}` : 'manual';
-  const filters = selectedLayer
-    ? visualAnalytics.layers[selectedLayer.id]?.filters || EMPTY_FILTERS
+  const selectedDataset = useMemo(() => {
+    if (selectedLayer) return datasetRegistry[selectedLayer.id];
+    if (!selectedNode) return undefined;
+    const configuredId = selectedNode.data.config?.datasetId;
+    if (configuredId && datasetRegistry[configuredId]) return datasetRegistry[configuredId];
+    const tableName = selectedNode.data.config?.tableName;
+    return Object.values(datasetRegistry).find((dataset) => (
+      dataset.source.kind === 'workflow-node' && dataset.source.nodeId === selectedNode.id
+    ) || (tableName && (dataset.originTableName === tableName || dataset.relationName === tableName)));
+  }, [datasetRegistry, selectedLayer, selectedNode]);
+  const linkedDatasetId = selectedDataset?.id;
+  const sourceKey = linkedDatasetId ? `dataset:${linkedDatasetId}` : selectedNodeId ? `node:${selectedNodeId}` : 'manual';
+  const filters = linkedDatasetId
+    ? visualAnalytics.datasets[linkedDatasetId]?.filters || EMPTY_FILTERS
     : localFiltersBySource[sourceKey] || EMPTY_FILTERS;
-  const selectedFeatureIds = selectedLayer
-    ? visualAnalytics.layers[selectedLayer.id]?.selectedFeatureIds || EMPTY_FEATURE_IDS
+  const selectedFeatureIds = linkedDatasetId
+    ? visualAnalytics.datasets[linkedDatasetId]?.selectedFeatureIds || EMPTY_FEATURE_IDS
     : EMPTY_FEATURE_IDS;
-  const hoveredFeatureId = selectedLayer
-    ? visualAnalytics.layers[selectedLayer.id]?.hoveredFeatureId
+  const hoveredFeatureId = linkedDatasetId
+    ? visualAnalytics.datasets[linkedDatasetId]?.hoveredFeatureId
     : undefined;
   const activeFilterKeys = filters.map(filterKeyOf);
   const sourceLabel = selectedLayer
@@ -288,38 +303,52 @@ export function useAttributeTable() {
     const nextKey = filterKeyOf(nextFilter);
     const nextFilters = filters.filter((filter) => filterKeyOf(filter) !== nextKey);
     const updatedFilters = nextFilters.length === filters.length ? [...filters, nextFilter] : nextFilters;
-    if (selectedLayer) setLayerFilters(selectedLayer.id, updatedFilters);
+    if (linkedDatasetId) setLayerFilters(linkedDatasetId, updatedFilters);
     else setLocalFiltersBySource((current) => ({ ...current, [sourceKey]: updatedFilters }));
     setPageIndex(0);
-  }, [selectedLayer, filters, setLayerFilters, sourceKey]);
+  }, [linkedDatasetId, filters, setLayerFilters, sourceKey]);
 
   const onRemoveFilter = useCallback((index: number) => {
     const updatedFilters = filters.filter((_, filterIndex) => filterIndex !== index);
-    if (selectedLayer) setLayerFilters(selectedLayer.id, updatedFilters);
+    if (linkedDatasetId) setLayerFilters(linkedDatasetId, updatedFilters);
     else setLocalFiltersBySource((current) => ({ ...current, [sourceKey]: updatedFilters }));
     setPageIndex(0);
-  }, [selectedLayer, filters, setLayerFilters, sourceKey]);
+  }, [linkedDatasetId, filters, setLayerFilters, sourceKey]);
+
+  const onUpdateFilter = useCallback((index: number, filter: VisualFilter) => {
+    const updatedFilters = filters.map((current, filterIndex) => filterIndex === index ? filter : current);
+    if (linkedDatasetId) setLayerFilters(linkedDatasetId, updatedFilters);
+    else setLocalFiltersBySource((current) => ({ ...current, [sourceKey]: updatedFilters }));
+    setPageIndex(0);
+  }, [linkedDatasetId, filters, setLayerFilters, sourceKey]);
+
+  const onAddFilter = useCallback((filter: VisualFilter) => {
+    const updatedFilters = [...filters.filter((current) => !(current.field === filter.field && current.kind === filter.kind)), filter];
+    if (linkedDatasetId) setLayerFilters(linkedDatasetId, updatedFilters);
+    else setLocalFiltersBySource((current) => ({ ...current, [sourceKey]: updatedFilters }));
+    setPageIndex(0);
+  }, [linkedDatasetId, filters, setLayerFilters, sourceKey]);
 
   const onClearFilters = useCallback(() => {
-    if (selectedLayer) clearLayerFilters(selectedLayer.id);
+    if (linkedDatasetId) clearLayerFilters(linkedDatasetId);
     else setLocalFiltersBySource((current) => ({ ...current, [sourceKey]: [] }));
     setPageIndex(0);
-  }, [selectedLayer, clearLayerFilters, sourceKey]);
+  }, [linkedDatasetId, clearLayerFilters, sourceKey]);
 
   const onClearSelection = useCallback(() => {
-    if (!selectedLayer) return;
-    clearFeatureSelection(selectedLayer.id);
-  }, [selectedLayer, clearFeatureSelection]);
+    if (!linkedDatasetId) return;
+    clearFeatureSelection(linkedDatasetId);
+  }, [linkedDatasetId, clearFeatureSelection]);
 
   const onToggleSelection = useCallback((featureId: string) => {
-    if (!selectedLayer || !featureId) return;
-    toggleSelectedFeature(selectedLayer.id, featureId);
-  }, [selectedLayer, toggleSelectedFeature]);
+    if (!linkedDatasetId || !featureId) return;
+    toggleSelectedFeature(linkedDatasetId, featureId);
+  }, [linkedDatasetId, toggleSelectedFeature]);
 
   const onSetSelection = useCallback((featureIds: string[]) => {
-    if (!selectedLayer) return;
-    setFeatureSelection(selectedLayer.id, featureIds);
-  }, [selectedLayer, setFeatureSelection]);
+    if (!linkedDatasetId) return;
+    setFeatureSelection(linkedDatasetId, featureIds);
+  }, [linkedDatasetId, setFeatureSelection]);
 
   const onZoomSelection = useCallback(async () => {
     if (!selectedLayer || !selectedFeatureIds.length) return;
@@ -377,8 +406,8 @@ export function useAttributeTable() {
   }, [addToast, fetchFilteredFeatureIds, selectedFeatureIds, selectedLayer, setFeatureSelection]);
 
   const onHoverFeature = useCallback((featureId: string | null) => {
-    if (selectedLayer) setHoveredFeature(selectedLayer.id, featureId);
-  }, [selectedLayer, setHoveredFeature]);
+    if (linkedDatasetId) setHoveredFeature(linkedDatasetId, featureId);
+  }, [linkedDatasetId, setHoveredFeature]);
 
   const onCreateSelectionLayer = useCallback(async () => {
     if (!selectedLayer || !selectedFeatureIds.length) return;
@@ -467,12 +496,12 @@ export function useAttributeTable() {
   const onApplyTableView = useCallback((viewId: string) => {
     const view = savedViews.find((item) => item.id === viewId);
     if (!view) return;
-    if (selectedLayer) setLayerFilters(selectedLayer.id, view.filters);
+    if (linkedDatasetId) setLayerFilters(linkedDatasetId, view.filters);
     else setLocalFiltersBySource((current) => ({ ...current, [sourceKey]: view.filters }));
     setComputedFieldsBySource((current) => ({ ...current, [sourceKey]: view.computedFields }));
     setAppliedLayout({ ...view.layout, revision: Date.now() });
     setPageIndex(0);
-  }, [savedViews, selectedLayer, setLayerFilters, sourceKey]);
+  }, [savedViews, linkedDatasetId, setLayerFilters, sourceKey]);
 
   const onDeleteTableView = useCallback((viewId: string) => {
     setSavedViewsBySource((current) => ({
@@ -513,6 +542,7 @@ export function useAttributeTable() {
   return {
     selectedLayer,
     selectedNode,
+    selectedDataset,
     sourceLabel,
     data,
     totalRows: selectedLayer ? layerTotal : selectedNodeId ? nodeTotal : manualPreview?.length,
@@ -541,6 +571,8 @@ export function useAttributeTable() {
     onPageSizeChange,
     onApplyProfileFilter,
     onRemoveFilter,
+    onUpdateFilter,
+    onAddFilter,
     onClearFilters,
     onClearSelection,
     onToggleSelection,

@@ -11,6 +11,7 @@ export const SettingsDialog = () => {
 
   const [apiKey, setApiKey] = useState(settings.openRouterApiKey);
   const [modelId, setModelId] = useState(settings.openRouterModelId);
+  const [authorName, setAuthorName] = useState(settings.authorName);
   const [showKey, setShowKey] = useState(false);
   const [testState, setTestState] = useState<'idle' | 'testing' | 'ok' | 'failed'>('idle');
 
@@ -18,10 +19,11 @@ export const SettingsDialog = () => {
     if (isOpen) {
       setApiKey(settings.openRouterApiKey);
       setModelId(settings.openRouterModelId);
+      setAuthorName(settings.authorName);
       setTestState('idle');
       setShowKey(false);
     }
-  }, [isOpen, settings.openRouterApiKey, settings.openRouterModelId]);
+  }, [isOpen, settings.openRouterApiKey, settings.openRouterModelId, settings.authorName]);
 
   if (!isOpen) return null;
 
@@ -35,6 +37,7 @@ export const SettingsDialog = () => {
     updateSettings({
       openRouterApiKey: apiKey.trim(),
       openRouterModelId: modelId.trim() || 'openai/gpt-4o-mini',
+      authorName: authorName.trim(),
     });
     setSettingsOpen(false);
   };
@@ -64,6 +67,21 @@ export const SettingsDialog = () => {
 
         <div className="space-y-4 px-4 py-4">
           <div>
+            <h3 className="mb-1 text-xs font-semibold text-slate-700">You</h3>
+            <label className="block">
+              <span className="mb-1 block text-[11px] font-semibold text-slate-600">Name</span>
+              <input
+                type="text"
+                value={authorName}
+                onChange={(e) => setAuthorName(e.target.value)}
+                placeholder="Shown as the author of stories you share"
+                maxLength={80}
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
+              />
+            </label>
+          </div>
+
+          <div className="border-t border-slate-100 pt-4">
             <h3 className="mb-1 text-xs font-semibold text-slate-700">AI Copilot (bring your own key)</h3>
             <p className="mb-3 text-[11px] leading-relaxed text-slate-500">
               The copilot calls OpenRouter directly from your browser. Your key is stored only in

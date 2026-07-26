@@ -28,10 +28,14 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { VisualFilter } from '../types/visualAnalytics';
+import type { DatasetMetadata } from '../types/datasets';
 import type { ComputedField } from '../utils/fieldCalculator';
 import type { AppliedTableLayout, SavedTableView, TableLayout } from '../types/table';
 import { cn } from '../utils/cn';
 import { FilterChips } from './Visualisation/FilterChips';
+import { FilterEditorDialog } from './Visualisation/FilterEditorDialog';
+import { FieldQuickExploreMenu } from './Visualisation/FieldQuickExploreMenu';
+import { visualFilterKey } from '../utils/visualFilters';
 
 export type HistogramBin = {
   label: string;
@@ -87,8 +91,14 @@ interface DataTableProps {
   filters?: VisualFilter[];
   activeFilterKeys?: string[];
   onRemoveFilter?: (index: number) => void;
+  onUpdateFilter?: (index: number, filter: VisualFilter) => void;
   onClearFilters?: () => void;
   onApplyProfileFilter?: (profile: ColumnProfile, bin: HistogramBin) => void;
+  datasetMetadata?: DatasetMetadata;
+  onQuickChart?: (field: string) => void;
+  onQuickStyle?: (field: string) => void;
+  onPinMetric?: (field: string) => void;
+  onAddFilter?: (filter: VisualFilter) => void;
   onSearchChange: (search: string) => void;
   onSortChange: (column: string) => void;
   onProfileColumn: (column: string) => void;
@@ -112,9 +122,11 @@ const formatCellValue = (value: unknown) => {
   return String(value);
 };
 
-const profileFilterKey = (profile: ColumnProfile, bin: HistogramBin) => profile.kind === 'numeric'
-  ? `${profile.column}:range:${bin.min ?? ''}:${bin.max ?? ''}`
-  : `${profile.column}:category:${bin.value ?? bin.label}`;
+const profileFilterKey = (profile: ColumnProfile, bin: HistogramBin) => visualFilterKey(
+  profile.kind === 'numeric'
+    ? { kind: 'range', field: profile.column, min: bin.min, max: bin.max }
+    : { kind: 'category', field: profile.column, values: [bin.value ?? bin.label] },
+);
 
 const MiniHistogram = ({
   profile,
@@ -194,8 +206,14 @@ export const DataTable = ({
   filters = [],
   activeFilterKeys = [],
   onRemoveFilter,
+  onUpdateFilter,
   onClearFilters,
   onApplyProfileFilter,
+  datasetMetadata,
+  onQuickChart,
+  onQuickStyle,
+  onPinMetric,
+  onAddFilter,
   onSearchChange,
   onSortChange,
   onProfileColumn,
@@ -213,6 +231,7 @@ export const DataTable = ({
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
   const [resizing, setResizing] = useState<{ column: string; startX: number; startWidth: number } | null>(null);
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
+  const [newFilter, setNewFilter] = useState<VisualFilter | null>(null);
   const keys = useMemo(() => {
     const names = new Set<string>();
     data.slice(0, 20).forEach((row) => Object.keys(row).forEach((key) => {
@@ -312,6 +331,7 @@ export const DataTable = ({
       const profile = columnProfiles[key];
       const loading = loadingSet.has(key);
       const canFilter = Boolean(onApplyProfileFilter);
+      const datasetField = datasetMetadata?.fields.find((field) => field.name === key);
       return (
         <div className="group/column relative space-y-1.5" style={{ width: widthForColumn(key) }}>
           <div className="flex gap-1">
@@ -331,6 +351,16 @@ export const DataTable = ({
             <button type="button" onClick={() => hideColumn(key)} aria-label={`Hide ${key}`} title={`Hide ${key}`} className="h-7 w-0 overflow-hidden rounded-md border-0 bg-white p-0 text-slate-400 opacity-0 transition-all hover:text-slate-700 focus-visible:w-7 focus-visible:border focus-visible:border-slate-200 focus-visible:opacity-100 group-hover/column:w-7 group-hover/column:border group-hover/column:border-slate-200 group-hover/column:p-1.5 group-hover/column:opacity-100">
               <EyeOff className="h-3.5 w-3.5" />
             </button>
+            {datasetField && onAddFilter && (
+              <FieldQuickExploreMenu
+                field={datasetField}
+                onChart={onQuickChart ? () => onQuickChart(key) : undefined}
+                onFilter={setNewFilter}
+                onProfile={() => onProfileColumn(key)}
+                onStyle={onQuickStyle ? () => onQuickStyle(key) : undefined}
+                onPinMetric={datasetField.semanticType === 'numeric' && onPinMetric ? () => onPinMetric(key) : undefined}
+              />
+            )}
           </div>
           {showHistograms && (
             <div className="relative">
@@ -372,7 +402,7 @@ export const DataTable = ({
         ? <span className="italic text-slate-300">null</span>
         : <span title={formatted}>{formatted}</span>;
     },
-  })), [activeFilterSet, columnProfiles, computedNames, hideColumn, loadingSet, moveColumn, onApplyProfileFilter, onProfileColumn, onSortChange, orderedColumns, pinnedColumns, showHistograms, sortBy, sortDirection, togglePinnedColumn, visibleColumnNames, widthForColumn]);
+  })), [activeFilterSet, columnProfiles, computedNames, datasetMetadata, hideColumn, loadingSet, moveColumn, onAddFilter, onApplyProfileFilter, onPinMetric, onProfileColumn, onQuickChart, onQuickStyle, onSortChange, orderedColumns, pinnedColumns, showHistograms, sortBy, sortDirection, togglePinnedColumn, visibleColumnNames, widthForColumn]);
 
   const table = useReactTable({ data, columns, getCoreRowModel: getCoreRowModel() });
   const rowCount = totalRows ?? data.length;
@@ -521,7 +551,15 @@ export const DataTable = ({
         )}
       </div>
 
-      <FilterChips filters={filters} onRemove={(index) => onRemoveFilter?.(index)} onClear={() => onClearFilters?.()} />
+      <FilterChips filters={filters} onRemove={(index) => onRemoveFilter?.(index)} onUpdate={onUpdateFilter} onClear={() => onClearFilters?.()} />
+      {newFilter && onAddFilter && (
+        <FilterEditorDialog
+          title={`Filter ${newFilter.field}`}
+          filter={newFilter}
+          onApply={(filter) => { onAddFilter(filter); setNewFilter(null); }}
+          onCancel={() => setNewFilter(null)}
+        />
+      )}
 
       <div className="min-h-0 flex-1 overflow-auto bg-white">
         <table className="border-separate border-spacing-0 text-[11px]">

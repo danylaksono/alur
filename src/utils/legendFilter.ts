@@ -1,13 +1,10 @@
 import type { LegendSpec } from '../types/visualisation';
 import type { VisualFilter } from '../types/visualAnalytics';
+import { visualFilterKey } from './visualFilters';
 
 export type LegendItemLike = { label: string; value?: string; min?: number; max?: number };
 
-export const visualFilterKey = (filter: VisualFilter) => {
-  if (filter.kind === 'category') return `${filter.field}:category:${filter.values.join('|')}`;
-  if (filter.kind === 'temporal') return `${filter.field}:temporal:${filter.start ?? ''}:${filter.end ?? ''}`;
-  return `${filter.field}:range:${filter.min ?? ''}:${filter.max ?? ''}`;
-};
+export { visualFilterKey } from './visualFilters';
 
 export const buildLegendItemFilter = (
   legend: Pick<LegendSpec, 'title' | 'kind'>,

@@ -1,6 +1,10 @@
 import { duckdbService } from './duckdb';
 import {
   FEATURE_ID_PROPERTY,
+  type KpiResult,
+  type KpiSpec,
+  type CohortComparisonResult,
+  type CohortSpec,
   type LayerAnalyticsSummary,
   type SelectionDivergence,
   type SelectionExplanation,
@@ -8,12 +12,19 @@ import {
   type VisualChartSpec,
   type VisualFilter,
   type VisualScatterResult,
+  type VisualTemporalResult,
 } from '../types/visualAnalytics';
 import { compileVisualFilterPredicate, compileVisualFiltersWhereClause, quoteIdentifier } from '../utils/visualFilterSql';
-import { CATEGORICAL_PALETTE, getPalette } from '../utils/palettes';
+import { visualFilterKey } from '../utils/visualFilters';
+import { CATEGORICAL_PALETTE, CATEGORICAL_PALETTE_META, getPalette } from '../utils/palettes';
 import type { MapLayer } from '../store/useStore';
 import type { FieldProfile } from '../utils/classification';
 import { buildComputedRelation, type ComputedField } from '../utils/fieldCalculator';
+import { chooseTimeGrain, enumerateTimeBuckets, temporalBucketKey } from '../utils/temporalChart';
+import type { DatasetFieldProfile, DatasetGeometryProfile, DatasetProfile, DatasetProfileIssue } from '../types/datasets';
+import { metadataForLayer } from '../utils/datasetMetadata';
+import { boundsForLayer } from '../utils/layerSource';
+import { analyticalQueryClient, analyticalQueryKey } from './analyticalQueryClient';
 
 type AnalyticsLayer = { id: string; source?: MapLayer['source']; geojson?: GeoJSON.FeatureCollection };
 
@@ -21,6 +32,8 @@ const tableNameForLayer = (layerId: string) => `visual_layer_${layerId.replace(/
 
 const registeredLayerTables = new Map<string, string>();
 const registrationLocks = new Map<string, Promise<void>>();
+const kpiQueryCache = new Map<string, Promise<KpiResult>>();
+const datasetProfileCache = new Map<string, Promise<DatasetProfile>>();
 
 const toRows = (layer: { id: string; geojson: GeoJSON.FeatureCollection }) =>
   layer.geojson.features.map((feature, index) => ({
@@ -166,9 +179,15 @@ export const registerLayerForAnalytics = async (layer: { id: string; geojson: Ge
 export const clearLayerAnalyticsCache = (layerId?: string) => {
   if (!layerId) {
     registeredLayerTables.clear();
+    kpiQueryCache.clear();
+    datasetProfileCache.clear();
+    analyticalQueryClient.clear();
     return;
   }
   registeredLayerTables.delete(tableNameForLayer(layerId));
+  [...kpiQueryCache.keys()].filter((key) => key.startsWith(`${layerId}:`)).forEach((key) => kpiQueryCache.delete(key));
+  [...datasetProfileCache.keys()].filter((key) => key.startsWith(`${layerId}:`)).forEach((key) => datasetProfileCache.delete(key));
+  analyticalQueryClient.invalidateDataset(layerId);
 };
 
 export const queryLayerRows = async ({
@@ -376,17 +395,338 @@ export const materializeLayerSelection = async ({
   if (!layer.source || layer.source.kind === 'legacy-geojson') return null;
   const tableName = await analyticsTableForLayer(layer);
   const relation = buildComputedRelation(`"${tableName}"`, computedFields);
-  const ids = featureIds.map((id) => `'${String(id).replace(/'/g, "''")}'`).join(', ');
-  if (!ids) return null;
+  if (!featureIds.length) return null;
   const safeTableName = outputTableName.replace(/[^a-zA-Z0-9_]/g, '_');
-  await duckdbService.materializeQueryAsTable(
-    `SELECT * FROM ${relation} WHERE CAST(${quoteIdentifier(layer.source.featureIdColumn)} AS VARCHAR) IN (${ids})`,
-    safeTableName,
-  );
+  const idTableName = `__alur_ids_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  await duckdbService.registerJsonRows(idTableName, [...new Set(featureIds)].map((featureId) => ({ feature_id: String(featureId) })));
+  try {
+    await duckdbService.materializeQueryAsTable(
+      `SELECT source_rows.* FROM ${relation} AS source_rows INNER JOIN "${idTableName}" AS selected_ids ON CAST(source_rows.${quoteIdentifier(layer.source.featureIdColumn)} AS VARCHAR) = selected_ids.feature_id`,
+      safeTableName,
+    );
+  } finally {
+    await duckdbService.query(`DROP TABLE IF EXISTS "${idTableName}";`).catch(() => undefined);
+  }
   const source = await duckdbService.prepareLayerSource(safeTableName, { kind: 'duckdb-query', originalTableName: safeTableName });
   if (!source) return null;
   return { source, featureCount: await duckdbService.getTableFeatureCount(safeTableName) };
 };
+
+const kpiAggregateExpression = (spec: KpiSpec, predicate?: string) => {
+  const filter = predicate ? ` FILTER (WHERE ${predicate})` : '';
+  if (spec.aggregation === 'count' || !spec.field) return `COUNT(*)${filter}`;
+  const field = `TRY_CAST(${quoteIdentifier(spec.field)} AS DOUBLE)`;
+  const fn = spec.aggregation.toUpperCase();
+  return `${fn}(${field})${filter}`;
+};
+
+const kpiSourceVersion = (layer: AnalyticsLayer) => {
+  if (layer.source?.kind === 'duckdb-table' || layer.source?.kind === 'duckdb-query') {
+    return `${layer.source.tableName}:${layer.source.renderVersion}`;
+  }
+  if (layer.geojson) return layerSignature({ id: layer.id, geojson: layer.geojson });
+  return 'unknown';
+};
+
+export const queryLayerKpi = async ({
+  layer,
+  filters,
+  spec,
+  selectedFeatureIds = [],
+}: {
+  layer: AnalyticsLayer;
+  filters: VisualFilter[];
+  spec: KpiSpec;
+  selectedFeatureIds?: string[];
+}): Promise<KpiResult> => {
+  const key = `${layer.id}:${kpiSourceVersion(layer)}:${JSON.stringify(filters)}:${selectedFeatureIds.join('|')}:${JSON.stringify(spec)}`;
+  const cached = kpiQueryCache.get(key);
+  if (cached) return cached;
+  if (kpiQueryCache.size >= 100) kpiQueryCache.clear();
+
+  const promise = analyticalQueryClient.run({
+    key: analyticalQueryKey('kpi', { datasetId: layer.id, sourceVersion: kpiSourceVersion(layer), filters, selectedFeatureIds, spec }),
+    datasetId: layer.id,
+  }, async () => {
+    const tableName = await analyticsTableForLayer(layer);
+    const table = `"${tableName.replace(/"/g, '""')}"`;
+    const predicate = filters.map(compileVisualFilterPredicate).filter((item): item is string => Boolean(item)).join(' AND ');
+    let comparisonPredicate: string | undefined;
+    let comparisonNote: string | undefined;
+    if (spec.comparison === 'previous-period') {
+      const window = filters.find((filter): filter is Extract<VisualFilter, { kind: 'temporal' }> => filter.kind === 'temporal' && Boolean(filter.start && filter.end));
+      const start = window?.start ? new Date(window.start).getTime() : Number.NaN;
+      const end = window?.end ? new Date(window.end).getTime() : Number.NaN;
+      if (window && Number.isFinite(start) && Number.isFinite(end) && end >= start) {
+        const duration = end - start + 1;
+        const previousEnd = start - 1;
+        const previousStart = previousEnd - duration + 1;
+        const otherFilters = filters.filter((filter) => filter !== window).map(compileVisualFilterPredicate).filter((item): item is string => Boolean(item));
+        const field = `TRY_CAST(${quoteIdentifier(window.field)} AS TIMESTAMP)`;
+        comparisonPredicate = [...otherFilters, `${field} >= TRY_CAST(${sqlString(new Date(previousStart).toISOString())} AS TIMESTAMP)`, `${field} <= TRY_CAST(${sqlString(new Date(previousEnd).toISOString())} AS TIMESTAMP)`].join(' AND ');
+      } else {
+        comparisonNote = 'Apply a bounded temporal filter to compare with the preceding period.';
+      }
+    } else if (spec.comparison === 'cohort') {
+      if (selectedFeatureIds.length) {
+        comparisonPredicate = selectedWhereClause(selectedFeatureIds.slice(0, 25_000), featureIdColumnForLayer(layer)).replace(/^WHERE\s+/, '');
+      } else {
+        comparisonNote = 'Select records to use the current selection as a comparison cohort.';
+      }
+    }
+    const comparisonExpression = spec.comparison === 'total'
+      ? kpiAggregateExpression(spec)
+      : comparisonPredicate
+        ? kpiAggregateExpression(spec, comparisonPredicate)
+        : 'NULL';
+    const result = await duckdbService.query(
+      `SELECT ${kpiAggregateExpression(spec, predicate)} AS active_value,
+              ${kpiAggregateExpression(spec)} AS total_value,
+              ${comparisonExpression} AS comparison_value,
+              ${predicate ? `COUNT(*) FILTER (WHERE ${predicate})` : 'COUNT(*)'} AS active_rows,
+              COUNT(*) AS total_rows
+       FROM ${table};`,
+    );
+    const row = normalizeRows(result.toArray())[0] || {};
+    const finiteOrNull = (value: unknown) => {
+      if (value === null || value === undefined) return null;
+      const number = Number(value);
+      return Number.isFinite(number) ? number : null;
+    };
+    const value = finiteOrNull(row.active_value);
+    const comparisonValue = spec.comparison === 'none' ? null : finiteOrNull(row.comparison_value);
+    const comparisonAvailable = spec.comparison !== 'none' && comparisonValue !== null;
+    const delta = comparisonAvailable && value !== null && comparisonValue !== null && comparisonValue !== 0
+      ? (value - comparisonValue) / Math.abs(comparisonValue)
+      : null;
+    if (comparisonAvailable && comparisonValue === 0) comparisonNote = 'Delta is unavailable because the comparison value is zero.';
+    return {
+      specId: spec.id,
+      value,
+      comparisonValue,
+      delta,
+      activeRows: Number(row.active_rows ?? 0),
+      totalRows: Number(row.total_rows ?? 0),
+      comparisonAvailable,
+      comparisonNote,
+    };
+  }).catch((error) => {
+    kpiQueryCache.delete(key);
+    throw error;
+  });
+  kpiQueryCache.set(key, promise);
+  return promise;
+};
+
+export const queryTableKpi = async ({
+  tableName,
+  rowIdColumn,
+  filters,
+  spec,
+  selectedFeatureIds = [],
+}: {
+  tableName: string;
+  rowIdColumn: string;
+  filters: VisualFilter[];
+  spec: KpiSpec;
+  selectedFeatureIds?: string[];
+}): Promise<KpiResult> => {
+  const key = `table:${tableName}:${rowIdColumn}:${JSON.stringify(filters)}:${selectedFeatureIds.join('|')}:${JSON.stringify(spec)}`;
+  const cached = kpiQueryCache.get(key);
+  if (cached) return cached;
+  if (kpiQueryCache.size >= 100) kpiQueryCache.clear();
+  const promise = analyticalQueryClient.run({
+    key: analyticalQueryKey('kpi', { tableName, rowIdColumn, filters, selectedFeatureIds, spec }),
+    datasetId: spec.datasetId || `table:${tableName}`,
+  }, async () => {
+    const table = `"${tableName.replace(/"/g, '""')}"`;
+    const predicate = filters.map(compileVisualFilterPredicate).filter((item): item is string => Boolean(item)).join(' AND ');
+    let comparisonPredicate: string | undefined;
+    let comparisonNote: string | undefined;
+    if (spec.comparison === 'previous-period') {
+      const window = filters.find((filter): filter is Extract<VisualFilter, { kind: 'temporal' }> => filter.kind === 'temporal' && Boolean(filter.start && filter.end));
+      const start = window?.start ? new Date(window.start).getTime() : Number.NaN;
+      const end = window?.end ? new Date(window.end).getTime() : Number.NaN;
+      if (window && Number.isFinite(start) && Number.isFinite(end) && end >= start) {
+        const duration = end - start + 1;
+        const previousEnd = start - 1;
+        const previousStart = previousEnd - duration + 1;
+        const otherFilters = filters.filter((filter) => filter !== window).map(compileVisualFilterPredicate).filter((item): item is string => Boolean(item));
+        const field = `TRY_CAST(${quoteIdentifier(window.field)} AS TIMESTAMP)`;
+        comparisonPredicate = [...otherFilters, `${field} >= TRY_CAST(${sqlString(new Date(previousStart).toISOString())} AS TIMESTAMP)`, `${field} <= TRY_CAST(${sqlString(new Date(previousEnd).toISOString())} AS TIMESTAMP)`].join(' AND ');
+      } else comparisonNote = 'Apply a bounded temporal filter to compare with the preceding period.';
+    } else if (spec.comparison === 'cohort') {
+      if (selectedFeatureIds.length) comparisonPredicate = selectedWhereClause(selectedFeatureIds.slice(0, 25_000), rowIdColumn).replace(/^WHERE\s+/, '');
+      else comparisonNote = 'Select records to use the current selection as a comparison cohort.';
+    }
+    const comparisonExpression = spec.comparison === 'total'
+      ? kpiAggregateExpression(spec)
+      : comparisonPredicate ? kpiAggregateExpression(spec, comparisonPredicate) : 'NULL';
+    const result = await duckdbService.query(
+      `SELECT ${kpiAggregateExpression(spec, predicate)} AS active_value,
+              ${kpiAggregateExpression(spec)} AS total_value,
+              ${comparisonExpression} AS comparison_value,
+              ${predicate ? `COUNT(*) FILTER (WHERE ${predicate})` : 'COUNT(*)'} AS active_rows,
+              COUNT(*) AS total_rows
+       FROM ${table};`,
+    );
+    const row = normalizeRows(result.toArray())[0] || {};
+    const finite = (value: unknown) => value === null || value === undefined || !Number.isFinite(Number(value)) ? null : Number(value);
+    const value = finite(row.active_value);
+    const comparisonValue = spec.comparison === 'none' ? null : finite(row.comparison_value);
+    const comparisonAvailable = spec.comparison !== 'none' && comparisonValue !== null;
+    const delta = comparisonAvailable && value !== null && comparisonValue !== 0 ? (value - comparisonValue!) / Math.abs(comparisonValue!) : null;
+    if (comparisonAvailable && comparisonValue === 0) comparisonNote = 'Delta is unavailable because the comparison value is zero.';
+    return { specId: spec.id, value, comparisonValue, delta, activeRows: Number(row.active_rows ?? 0), totalRows: Number(row.total_rows ?? 0), comparisonAvailable, comparisonNote };
+  }).catch((error) => { kpiQueryCache.delete(key); throw error; });
+  kpiQueryCache.set(key, promise);
+  return promise;
+};
+
+export const __kpiQueryCacheSizeForTests = () => kpiQueryCache.size;
+
+const numberList = (value: unknown) => {
+  const source = Array.isArray(value)
+    ? value
+    : value && typeof value === 'object' && 'toArray' in value && typeof (value as { toArray?: unknown }).toArray === 'function'
+      ? (value as { toArray: () => unknown[] }).toArray()
+      : [];
+  return source.map(Number).filter(Number.isFinite);
+};
+
+export const queryLayerDatasetProfile = async (layer: MapLayer): Promise<DatasetProfile> => {
+  const key = `${layer.id}:${kpiSourceVersion(layer)}`;
+  const cached = datasetProfileCache.get(key);
+  if (cached) return cached;
+  if (datasetProfileCache.size >= 24) datasetProfileCache.clear();
+
+  const promise = analyticalQueryClient.run({
+    key: analyticalQueryKey('dataset-profile', { datasetId: layer.id, sourceVersion: kpiSourceVersion(layer) }),
+    datasetId: layer.id,
+  }, async () => {
+    const metadata = metadataForLayer(layer);
+    const tableName = await analyticsTableForLayer(layer);
+    const table = `"${tableName.replace(/"/g, '""')}"`;
+    const expressions = ['COUNT(*) AS profile_row_count'];
+    metadata.fields.forEach((field, index) => {
+      const column = quoteIdentifier(field.name);
+      expressions.push(`COUNT(*) FILTER (WHERE ${column} IS NULL) AS p${index}_nulls`);
+      expressions.push(`${layer.featureCount <= 100_000 ? 'COUNT(DISTINCT ' : 'APPROX_COUNT_DISTINCT('}${column}) AS p${index}_distinct`);
+      if (field.semanticType === 'numeric') {
+        const numeric = `TRY_CAST(${column} AS DOUBLE)`;
+        expressions.push(`MIN(${numeric}) AS p${index}_min`);
+        expressions.push(`MAX(${numeric}) AS p${index}_max`);
+        expressions.push(`AVG(${numeric}) AS p${index}_mean`);
+        expressions.push(`APPROX_QUANTILE(${numeric}, [0.0, 0.25, 0.5, 0.75, 1.0]) AS p${index}_quantiles`);
+      } else if (field.semanticType === 'temporal') {
+        const temporal = `TRY_CAST(${column} AS TIMESTAMP)`;
+        expressions.push(`MIN(${temporal}) AS p${index}_start`);
+        expressions.push(`MAX(${temporal}) AS p${index}_end`);
+      }
+    });
+    const result = await duckdbService.query(`SELECT ${expressions.join(', ')} FROM ${table};`);
+    const row = normalizeRows(result.toArray())[0] || {};
+    const rowCount = Number(row.profile_row_count ?? layer.featureCount ?? 0);
+    const fields: DatasetFieldProfile[] = metadata.fields.map((field, index) => {
+      const nullCount = Number(row[`p${index}_nulls`] ?? 0);
+      const profile: DatasetFieldProfile = {
+        ...field,
+        nullCount,
+        nullPercent: rowCount > 0 ? nullCount / rowCount : 0,
+        distinctCount: Number(row[`p${index}_distinct`] ?? 0),
+      };
+      if (field.semanticType === 'numeric') {
+        const finite = (value: unknown) => value === null || value === undefined || !Number.isFinite(Number(value)) ? undefined : Number(value);
+        profile.min = finite(row[`p${index}_min`]);
+        profile.max = finite(row[`p${index}_max`]);
+        profile.mean = finite(row[`p${index}_mean`]);
+        profile.quantiles = numberList(row[`p${index}_quantiles`]);
+      } else if (field.semanticType === 'temporal') {
+        profile.temporalStart = dateIso(row[`p${index}_start`]) || undefined;
+        profile.temporalEnd = dateIso(row[`p${index}_end`]) || undefined;
+      }
+      return profile;
+    });
+
+    const issues: DatasetProfileIssue[] = [];
+    fields.forEach((field) => {
+      if (field.nullPercent >= 0.25) issues.push({
+        id: `missing-${field.name}`,
+        severity: field.nullPercent >= 0.5 ? 'warning' : 'info',
+        field: field.name,
+        message: `${field.name} is missing for ${(field.nullPercent * 100).toLocaleString(undefined, { maximumFractionDigits: 1 })}% of rows. Confirm whether this is expected.`,
+        action: 'filter-missing',
+      });
+      const nonNull = Math.max(0, rowCount - field.nullCount);
+      if (field.semanticType === 'identifier' && nonNull > 0 && field.distinctCount < nonNull) issues.push({
+        id: `duplicate-${field.name}`,
+        severity: 'warning',
+        field: field.name,
+        message: `${field.name} has ${(nonNull - field.distinctCount).toLocaleString()} repeated non-null values and may not be a unique identifier.`,
+        action: 'inspect-identifiers',
+      });
+      if (field.semanticType === 'categorical' && field.distinctCount > 50) issues.push({
+        id: `cardinality-${field.name}`,
+        severity: 'info',
+        field: field.name,
+        message: `${field.name} has ${field.distinctCount.toLocaleString()} distinct values; use search or top-N grouping for readable categories.`,
+        action: 'inspect-field',
+      });
+    });
+
+    const sample = layer.geojson?.features.slice(0, 200) || [];
+    let sampledFeatures = sample.length;
+    let sampledValid = sample.filter((feature) => Boolean(feature.geometry)).length;
+    if ((layer.source.kind === 'duckdb-table' || layer.source.kind === 'duckdb-query') && layer.source.geometryColumn) {
+      try {
+        const geometry = quoteIdentifier(layer.source.geometryColumn);
+        const validityResult = await duckdbService.query(
+          `SELECT COUNT(*) AS sample_count,
+                  COUNT(*) FILTER (WHERE ${geometry} IS NOT NULL AND ST_IsValid(${geometry})) AS valid_count
+           FROM (SELECT ${geometry} FROM ${table} LIMIT 200) AS geometry_sample;`,
+        );
+        const validity = normalizeRows(validityResult.toArray())[0] || {};
+        sampledFeatures = Number(validity.sample_count ?? 0);
+        sampledValid = Number(validity.valid_count ?? 0);
+      } catch {
+        // Geometry validity is an optional progressive signal; core field profiling remains usable.
+      }
+    }
+    if (sampledFeatures && sampledValid < sampledFeatures) issues.push({
+      id: 'missing-geometry',
+      severity: 'warning',
+      message: `${(sampledFeatures - sampledValid).toLocaleString()} of ${sampledFeatures.toLocaleString()} sampled features have missing or invalid geometry.`,
+      action: 'inspect-geometry',
+    });
+    const declaredCrs = layer.source.kind === 'duckdb-table' || layer.source.kind === 'duckdb-query' ? layer.source.crs : undefined;
+    const crsConfidence: DatasetGeometryProfile['crsConfidence'] = layer.source.kind === 'duckdb-table' || layer.source.kind === 'duckdb-query'
+      ? layer.source.crsConfidence || (declaredCrs ? 'medium' : 'unknown')
+      : layer.geojson ? 'assumed' : 'unknown';
+    return {
+      datasetId: layer.id,
+      rowCount,
+      fieldCount: fields.length,
+      generatedAt: Date.now(),
+      fields,
+      geometry: {
+        kind: layer.source.geometryKind,
+        crs: declaredCrs || 'EPSG:4326',
+        extent: boundsForLayer(layer),
+        crsConfidence,
+        sampledFeatures,
+        sampledValid,
+      },
+      issues,
+    };
+  }).catch((error) => {
+    datasetProfileCache.delete(key);
+    throw error;
+  });
+  datasetProfileCache.set(key, promise);
+  return promise;
+};
+
+export const __datasetProfileCacheSizeForTests = () => datasetProfileCache.size;
 
 const aggregationExpression = (chart: VisualChartSpec, filterPredicate?: string) => {
   const filterSuffix = filterPredicate ? ` FILTER (WHERE ${filterPredicate})` : '';
@@ -405,7 +745,7 @@ const chartPalette = (chart: VisualChartSpec, count: number) => {
     return Array.from({ length: count }, (_, index) => palette[Math.min(palette.length - 1, Math.floor((index / Math.max(1, count - 1)) * (palette.length - 1)))]);
   }
 
-  const sequential = getPalette(chart.paletteId, { id: 'categorical', name: 'Categorical', colors: CATEGORICAL_PALETTE }).colors;
+  const sequential = getPalette(chart.paletteId, CATEGORICAL_PALETTE_META).colors;
   const source = chart.paletteId === 'categorical' ? CATEGORICAL_PALETTE : sequential;
   return Array.from({ length: count }, (_, index) => source[index % source.length]);
 };
@@ -428,6 +768,7 @@ const chartTableForLayer = async (layer: AnalyticsLayer, chart: VisualChartSpec)
   const requiredColumns = [
     chart.dimensionField,
     ...(chart.aggregation !== 'count' && chart.measureField ? [chart.measureField] : []),
+    ...(chart.seriesField ? [chart.seriesField] : []),
   ].filter(Boolean);
 
   if (!layer.source || layer.source.kind === 'legacy-geojson') {
@@ -477,11 +818,7 @@ const featureIdsFromValue = (value: unknown) =>
     .filter(Boolean)
     .slice(0, 200);
 
-export const visualChartFilterKey = (filter: VisualFilter) => {
-  if (filter.kind === 'category') return `${filter.field}:category:${filter.values.join('|')}:${filter.includeNull ? 'null' : ''}`;
-  if (filter.kind === 'temporal') return `${filter.field}:temporal:${filter.start ?? ''}:${filter.end ?? ''}:${filter.includeNull ? 'null' : ''}`;
-  return `${filter.field}:range:${filter.min ?? ''}:${filter.max ?? ''}:${filter.includeNull ? 'null' : ''}`;
-};
+export const visualChartFilterKey = visualFilterKey;
 
 export type ChartFacet = { field: string; value: string };
 
@@ -502,21 +839,170 @@ export const queryLayerChart = async ({
   facet?: ChartFacet;
 }): Promise<VisualChartResult> => {
   const { tableName, featureIdExpression } = await chartTableForLayer(layer, chart);
-  return runChartQuery({ tableName, featureIdExpression, filters, chart, facet });
+  return analyticalQueryClient.run({
+    key: analyticalQueryKey('chart', { datasetId: layer.id, sourceVersion: kpiSourceVersion(layer), filters, chart, facet }),
+    datasetId: layer.id,
+  }, () => runChartQuery({ tableName, featureIdExpression, filters, chart, facet }));
 };
 
-/** Chart an arbitrary DuckDB table (workflow output, SQL result). Unlinked:
- *  no layer filters apply and no feature ids flow back. */
+/** Chart an arbitrary DuckDB dataset with the same cross-filter semantics as a layer. */
 export const queryTableChart = async ({
   tableName,
   chart,
   facet,
+  filters = [],
+  rowIdColumn,
 }: {
   tableName: string;
   chart: VisualChartSpec;
   facet?: ChartFacet;
+  filters?: VisualFilter[];
+  rowIdColumn?: string;
 }): Promise<VisualChartResult> =>
-  runChartQuery({ tableName, featureIdExpression: 'NULL', filters: [], chart, facet });
+  analyticalQueryClient.run({
+    key: analyticalQueryKey('chart', { tableName, rowIdColumn, filters, chart, facet }),
+    datasetId: chart.source && 'datasetId' in chart.source ? chart.source.datasetId : `table:${tableName}`,
+  }, () => runChartQuery({ tableName, featureIdExpression: rowIdColumn ? quoteIdentifier(rowIdColumn) : 'NULL', filters, chart, facet }));
+
+const sqlString = (value: string) => `'${value.replace(/'/g, "''")}'`;
+
+const dateIso = (value: unknown) => {
+  const date = value instanceof Date ? value : new Date(String(value));
+  return Number.isFinite(date.getTime()) ? date.toISOString() : null;
+};
+
+const runTemporalChartQuery = async ({
+  tableName,
+  filters,
+  chart,
+}: {
+  tableName: string;
+  filters: VisualFilter[];
+  chart: VisualChartSpec;
+}): Promise<VisualTemporalResult> => {
+  const table = `"${tableName.replace(/"/g, '""')}"`;
+  const field = quoteIdentifier(chart.dimensionField);
+  const timestamp = `TRY_CAST(${field} AS TIMESTAMP)`;
+  const whereClause = compileVisualFiltersWhereClause(filters);
+  const contextPredicate = filters
+    .filter((filter) => filter.field !== chart.dimensionField)
+    .map(compileVisualFilterPredicate)
+    .filter((item): item is string => Boolean(item))
+    .join(' AND ');
+  const [totalResult, filteredResult, extentResult] = await Promise.all([
+    duckdbService.query(`SELECT COUNT(*) AS row_count FROM ${table};`),
+    duckdbService.query(`SELECT COUNT(*) AS row_count FROM ${table} ${whereClause};`),
+    duckdbService.query(`SELECT MIN(${timestamp}) AS min_date, MAX(${timestamp}) AS max_date FROM ${table};`),
+  ]);
+  const totalRows = Number(normalizeRows(totalResult.toArray())[0]?.row_count ?? 0);
+  const filteredRows = Number(normalizeRows(filteredResult.toArray())[0]?.row_count ?? 0);
+  const extent = normalizeRows(extentResult.toArray())[0] || {};
+  const minDate = dateIso(extent.min_date);
+  const maxDate = dateIso(extent.max_date);
+  const requestedGrain = chart.timeGrain || 'auto';
+  const grain = chooseTimeGrain(minDate || '', maxDate || '', requestedGrain);
+  if (!minDate || !maxDate) {
+    return { chartId: chart.id, grain, totalRows, filteredRows, minDate: '', maxDate: '', series: [], hasOtherSeries: false };
+  }
+
+  const seriesLimit = Math.max(2, Math.min(8, chart.maxCategories || 6));
+  let seriesLabels = ['All'];
+  let hasOtherSeries = false;
+  let seriesExpression = sqlString('All');
+  if (chart.seriesField) {
+    const seriesField = quoteIdentifier(chart.seriesField);
+    const rawSeries = `COALESCE(CAST(${seriesField} AS VARCHAR), 'Missing')`;
+    const topResult = await duckdbService.query(
+      `SELECT ${rawSeries} AS series FROM ${table}
+       GROUP BY series ORDER BY COUNT(*) DESC, series LIMIT ${seriesLimit + 1};`,
+    );
+    const ranked = normalizeRows(topResult.toArray()).map((row) => String(row.series));
+    const top = ranked.slice(0, seriesLimit);
+    hasOtherSeries = ranked.length > seriesLimit;
+    seriesLabels = [...top, ...(hasOtherSeries ? ['Other'] : [])];
+    if (!seriesLabels.length) seriesLabels = ['Missing'];
+    seriesExpression = hasOtherSeries
+      ? `CASE WHEN ${rawSeries} IN (${top.map(sqlString).join(', ')}) THEN ${rawSeries} ELSE 'Other' END`
+      : rawSeries;
+  }
+
+  const totalAggregate = aggregationExpression(chart);
+  const aggregate = contextPredicate ? aggregationExpression(chart, contextPredicate) : totalAggregate;
+  const filteredCount = contextPredicate ? `COUNT(*) FILTER (WHERE ${contextPredicate})` : 'COUNT(*)';
+  const result = await duckdbService.query(
+    `SELECT DATE_TRUNC('${grain}', ${timestamp}) AS bucket,
+            ${seriesExpression} AS series,
+            COUNT(*) AS total_count, ${totalAggregate} AS total_value,
+            ${filteredCount} AS count_value, ${aggregate} AS aggregate_value
+     FROM ${table}
+     WHERE ${timestamp} IS NOT NULL
+     GROUP BY bucket, series
+     ORDER BY bucket, series;`,
+  );
+  const rowMap = new Map<string, Record<string, unknown>>();
+  normalizeRows(result.toArray()).forEach((row) => {
+    const bucket = temporalBucketKey(row.bucket, grain);
+    if (bucket) rowMap.set(`${bucket}\u001f${String(row.series)}`, row);
+  });
+  const buckets = enumerateTimeBuckets(minDate, maxDate, grain);
+  const colors = chartPalette(chart, seriesLabels.length);
+  return {
+    chartId: chart.id,
+    grain,
+    totalRows,
+    filteredRows,
+    minDate,
+    maxDate,
+    hasOtherSeries,
+    series: seriesLabels.map((label, seriesIndex) => ({
+      key: label,
+      label,
+      color: colors[seriesIndex],
+      points: buckets.map((bucket) => {
+        const row = rowMap.get(`${bucket.start}\u001f${label}`);
+        const hasObservation = Boolean(row);
+        return {
+          bucketStart: bucket.start,
+          bucketEnd: bucket.end,
+          label: bucket.label,
+          value: hasObservation ? Number(row?.aggregate_value ?? row?.count_value ?? 0) : null,
+          count: hasObservation ? Number(row?.count_value ?? 0) : 0,
+          totalValue: hasObservation ? Number(row?.total_value ?? 0) : null,
+          totalCount: hasObservation ? Number(row?.total_count ?? 0) : 0,
+        };
+      }),
+    })),
+  };
+};
+
+export const queryLayerTemporalChart = async ({
+  layer,
+  filters,
+  chart,
+}: {
+  layer: AnalyticsLayer;
+  filters: VisualFilter[];
+  chart: VisualChartSpec;
+}): Promise<VisualTemporalResult> => {
+  const { tableName } = await chartTableForLayer(layer, chart);
+  return analyticalQueryClient.run({
+    key: analyticalQueryKey('temporal-chart', { datasetId: layer.id, sourceVersion: kpiSourceVersion(layer), filters, chart }),
+    datasetId: layer.id,
+  }, () => runTemporalChartQuery({ tableName, filters, chart }));
+};
+
+export const queryTableTemporalChart = async ({
+  tableName,
+  chart,
+  filters = [],
+}: {
+  tableName: string;
+  chart: VisualChartSpec;
+  filters?: VisualFilter[];
+}): Promise<VisualTemporalResult> => analyticalQueryClient.run({
+  key: analyticalQueryKey('temporal-chart', { tableName, filters, chart }),
+  datasetId: chart.source && 'datasetId' in chart.source ? chart.source.datasetId : `table:${tableName}`,
+}, () => runTemporalChartQuery({ tableName, filters, chart }));
 
 /** Top facet values (by row count) for a small-multiples chart. */
 export const queryChartFacetValues = async ({
@@ -695,18 +1181,26 @@ export const queryLayerScatter = async ({
 }): Promise<VisualScatterResult> => {
   // Force the measure field into the required-column check regardless of aggregation.
   const { tableName } = await chartTableForLayer(layer, { ...chart, aggregation: 'avg' });
-  return runScatterQuery({ tableName, filters, chart });
+  return analyticalQueryClient.run({
+    key: analyticalQueryKey('scatter-chart', { datasetId: layer.id, sourceVersion: kpiSourceVersion(layer), filters, chart }),
+    datasetId: layer.id,
+  }, () => runScatterQuery({ tableName, filters, chart }));
 };
 
 /** Scatter over an arbitrary DuckDB table — see queryTableChart. */
 export const queryTableScatter = async ({
   tableName,
   chart,
+  filters = [],
 }: {
   tableName: string;
   chart: VisualChartSpec;
+  filters?: VisualFilter[];
 }): Promise<VisualScatterResult> =>
-  runScatterQuery({ tableName, filters: [], chart });
+  analyticalQueryClient.run({
+    key: analyticalQueryKey('scatter-chart', { tableName, filters, chart }),
+    datasetId: chart.source && 'datasetId' in chart.source ? chart.source.datasetId : `table:${tableName}`,
+  }, () => runScatterQuery({ tableName, filters, chart }));
 
 const runScatterQuery = async ({
   tableName,
@@ -816,10 +1310,10 @@ export const queryLayerTemporalRange = async ({
   return { field: column, minDate, maxDate, rowCount: dateCount };
 };
 
-const selectedWhereClause = (selectedFeatureIds: string[]) => {
+const selectedWhereClause = (selectedFeatureIds: string[], field = FEATURE_ID_PROPERTY) => {
   if (!selectedFeatureIds.length) return '';
   const values = selectedFeatureIds.map((id) => `'${id.replace(/'/g, "''")}'`).join(', ');
-  return `WHERE CAST(${quoteIdentifier(FEATURE_ID_PROPERTY)} AS VARCHAR) IN (${values})`;
+  return `WHERE CAST(${quoteIdentifier(field)} AS VARCHAR) IN (${values})`;
 };
 
 const candidateColumns = (layer: Pick<AnalyticsLayer, 'source' | 'geojson'>) =>
@@ -831,70 +1325,101 @@ export const queryLayerSummary = async ({
   layer,
   filters,
   selectedFeatureIds,
+  summaryFields,
 }: {
   layer: AnalyticsLayer;
   filters: VisualFilter[];
   selectedFeatureIds: string[];
+  summaryFields?: string[];
 }): Promise<LayerAnalyticsSummary> => {
   const tableName = await analyticsTableForLayer(layer);
-  const table = `"${tableName}"`;
-  const totalResult = await duckdbService.query(`SELECT COUNT(*) AS row_count FROM ${table};`);
-  const totalRaw = normalizeRows(totalResult.toArray())[0] || {};
-  const totalRows = Number(totalRaw.row_count ?? 0);
+  const table = `"${tableName.replace(/"/g, '""')}"`;
+  const activePredicate = filters.map(compileVisualFilterPredicate).filter((item): item is string => Boolean(item)).join(' AND ') || 'TRUE';
+  const selectionWhere = selectedWhereClause(selectedFeatureIds.slice(0, 25_000), featureIdColumnForLayer(layer));
+  const selectedPredicate = selectionWhere.replace(/^WHERE\s+/, '') || 'FALSE';
+  const countResult = await duckdbService.query(
+    `SELECT COUNT(*) AS total_rows,
+            COUNT(*) FILTER (WHERE ${activePredicate}) AS active_rows,
+            COUNT(*) FILTER (WHERE ${selectedPredicate}) AS selected_rows
+     FROM ${table};`,
+  );
+  const counts = normalizeRows(countResult.toArray())[0] || {};
+  const totalRows = Number(counts.total_rows ?? 0);
+  const filteredRows = Number(counts.active_rows ?? 0);
+  const selectedRows = Number(counts.selected_rows ?? 0);
 
-  const canQuerySelection = !layer.source || layer.source.kind === 'legacy-geojson';
-  const baseWhere = selectedFeatureIds.length && canQuerySelection
-    ? selectedWhereClause(selectedFeatureIds)
-    : compileVisualFiltersWhereClause(filters);
-  const filteredResult = await duckdbService.query(`SELECT COUNT(*) AS row_count FROM ${table} ${baseWhere};`);
-  const filteredRaw = normalizeRows(filteredResult.toArray())[0] || {};
-  const filteredRows = Number(filteredRaw.row_count ?? 0);
-  const selectedRows = selectedFeatureIds.length && canQuerySelection ? filteredRows : 0;
-
-  const columns = candidateColumns(layer);
+  const available = candidateColumns(layer);
+  const requested = summaryFields?.filter((field) => available.includes(field));
+  const columns = requested?.length ? requested.slice(0, 8) : available.slice(0, 5);
+  if (!columns.length) return { totalRows, filteredRows, selectedRows, numericMetrics: [], categoryBreakdowns: [] };
   const statsResult = await duckdbService.query(
-    `SELECT ${columns.map((column) => `COUNT(TRY_CAST(${quoteIdentifier(column)} AS DOUBLE)) AS ${quoteIdentifier(`${column}__numeric_count`)}`).join(', ')} FROM ${table} ${baseWhere};`
+    `SELECT ${columns.map((column) => `COUNT(TRY_CAST(${quoteIdentifier(column)} AS DOUBLE)) AS ${quoteIdentifier(`${column}__numeric_count`)}, COUNT(${quoteIdentifier(column)}) AS ${quoteIdentifier(`${column}__non_null_count`)}`).join(', ')} FROM ${table};`
   );
   const statsRaw = normalizeRows(statsResult.toArray())[0] || {};
   const numericColumns = columns
-    .filter((column) => Number(statsRaw[`${column}__numeric_count`] ?? 0) > 0)
-    .slice(0, 3);
+    .filter((column) => {
+      const numericCount = Number(statsRaw[`${column}__numeric_count`] ?? 0);
+      const nonNullCount = Number(statsRaw[`${column}__non_null_count`] ?? 0);
+      return numericCount > 0 && numericCount >= nonNullCount * 0.8;
+    });
   const categoryColumns = columns
-    .filter((column) => !numericColumns.includes(column))
-    .slice(0, 2);
+    .filter((column) => !numericColumns.includes(column));
 
   const numericMetrics = await Promise.all(numericColumns.map(async (field) => {
     const q = quoteIdentifier(field);
+    const numeric = `TRY_CAST(${q} AS DOUBLE)`;
+    const aggregate = (name: string, expression: string, predicate: string) => `${expression} FILTER (WHERE ${predicate}) AS ${name}`;
     const result = await duckdbService.query(
-      `SELECT COUNT(TRY_CAST(${q} AS DOUBLE)) AS count_value, MIN(TRY_CAST(${q} AS DOUBLE)) AS min_value, MAX(TRY_CAST(${q} AS DOUBLE)) AS max_value, AVG(TRY_CAST(${q} AS DOUBLE)) AS mean_value, SUM(TRY_CAST(${q} AS DOUBLE)) AS sum_value FROM ${table} ${baseWhere};`
+      `SELECT ${['selected', 'active', 'total'].flatMap((scope) => {
+        const predicate = scope === 'selected' ? selectedPredicate : scope === 'active' ? activePredicate : 'TRUE';
+        return [
+          aggregate(`${scope}_count`, `COUNT(${numeric})`, predicate),
+          aggregate(`${scope}_min`, `MIN(${numeric})`, predicate),
+          aggregate(`${scope}_max`, `MAX(${numeric})`, predicate),
+          aggregate(`${scope}_mean`, `AVG(${numeric})`, predicate),
+          aggregate(`${scope}_sum`, `SUM(${numeric})`, predicate),
+        ];
+      }).join(', ')} FROM ${table};`
     );
     const raw = normalizeRows(result.toArray())[0] || {};
     const valueOrNull = (value: unknown) => {
+      if (value === null || value === undefined) return null;
       const number = Number(value);
       return Number.isFinite(number) ? number : null;
     };
+    const scope = (name: 'selected' | 'active' | 'total') => ({
+      count: Number(raw[`${name}_count`] ?? 0),
+      min: valueOrNull(raw[`${name}_min`]),
+      max: valueOrNull(raw[`${name}_max`]),
+      mean: valueOrNull(raw[`${name}_mean`]),
+      sum: valueOrNull(raw[`${name}_sum`]),
+    });
     return {
       field,
       kind: 'numeric' as const,
-      count: Number(raw.count_value ?? 0),
-      min: valueOrNull(raw.min_value),
-      max: valueOrNull(raw.max_value),
-      mean: valueOrNull(raw.mean_value),
-      sum: valueOrNull(raw.sum_value),
+      selected: scope('selected'),
+      active: scope('active'),
+      total: scope('total'),
     };
   }));
 
   const categoryBreakdowns = await Promise.all(categoryColumns.map(async (field) => {
     const q = quoteIdentifier(field);
-    const andOrWhere = baseWhere ? `${baseWhere} AND` : 'WHERE';
     const result = await duckdbService.query(
-      `SELECT CAST(${q} AS VARCHAR) AS label, COUNT(*) AS count FROM ${table} ${andOrWhere} ${q} IS NOT NULL GROUP BY label ORDER BY count DESC LIMIT 4;`
+      `SELECT CAST(${q} AS VARCHAR) AS label,
+              COUNT(*) FILTER (WHERE ${selectedPredicate}) AS selected_count,
+              COUNT(*) FILTER (WHERE ${activePredicate}) AS active_count,
+              COUNT(*) AS total_count
+       FROM ${table} WHERE ${q} IS NOT NULL
+       GROUP BY label ORDER BY selected_count DESC, active_count DESC, total_count DESC LIMIT 6;`
     );
     return {
       field,
       values: normalizeRows(result.toArray()).map((row) => ({
         label: String(row.label),
-        count: Number(row.count),
+        selectedCount: Number(row.selected_count ?? 0),
+        activeCount: Number(row.active_count ?? 0),
+        totalCount: Number(row.total_count ?? 0),
       })),
     };
   }));
@@ -905,6 +1430,164 @@ export const queryLayerSummary = async ({
     selectedRows,
     numericMetrics,
     categoryBreakdowns,
+  };
+};
+
+const safeCohortTableName = (value: string) => {
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(value)) throw new Error('The saved selection cohort has an invalid table reference.');
+  return value;
+};
+
+export const cohortPredicate = (cohort: CohortSpec, featureIdColumn: string) => {
+  if (cohort.definition.kind === 'filters') {
+    return cohort.definition.filters.map(compileVisualFilterPredicate).filter((item): item is string => Boolean(item)).join(' AND ') || 'TRUE';
+  }
+  const tableName = safeCohortTableName(cohort.definition.tableName);
+  const featureId = quoteIdentifier(featureIdColumn);
+  return `EXISTS (SELECT 1 FROM "${tableName}" AS cohort_row WHERE CAST(cohort_row.${featureId} AS VARCHAR) = CAST(base.${featureId} AS VARCHAR))`;
+};
+
+const finiteNumberOrNull = (value: unknown) => {
+  if (value === null || value === undefined) return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+};
+
+export const queryCohortComparison = async ({
+  layer,
+  cohortA,
+  cohortB,
+  compareToRemainder = false,
+  remainderFilters = [],
+}: {
+  layer: MapLayer;
+  cohortA: CohortSpec;
+  cohortB?: CohortSpec;
+  compareToRemainder?: boolean;
+  remainderFilters?: VisualFilter[];
+}): Promise<CohortComparisonResult> => {
+  if (cohortA.datasetId !== layer.id || (cohortB && cohortB.datasetId !== layer.id)) throw new Error('Both cohorts must belong to the selected dataset.');
+  if (!cohortB && !compareToRemainder) throw new Error('Choose a second cohort or compare with the remainder.');
+  const tableName = await analyticsTableForLayer(layer);
+  const table = `"${tableName.replace(/"/g, '""')}"`;
+  const idColumn = featureIdColumnForLayer(layer);
+  const predicateA = cohortPredicate(cohortA, idColumn);
+  const activePredicate = remainderFilters.map(compileVisualFilterPredicate).filter((item): item is string => Boolean(item)).join(' AND ') || 'TRUE';
+  const predicateB = compareToRemainder ? `(${activePredicate}) AND NOT (${predicateA})` : cohortPredicate(cohortB!, idColumn);
+  const countResult = await duckdbService.query(
+    `SELECT COUNT(*) AS total_rows,
+            COUNT(*) FILTER (WHERE ${predicateA}) AS a_rows,
+            COUNT(*) FILTER (WHERE ${predicateB}) AS b_rows,
+            COUNT(*) FILTER (WHERE (${predicateA}) AND (${predicateB})) AS overlap_rows
+     FROM ${table} AS base;`,
+  );
+  const countRow = normalizeRows(countResult.toArray())[0] || {};
+  const totalRows = Number(countRow.total_rows ?? 0);
+  const aRows = Number(countRow.a_rows ?? 0);
+  const bRows = Number(countRow.b_rows ?? 0);
+  const overlapRows = Number(countRow.overlap_rows ?? 0);
+  const metadata = metadataForLayer(layer);
+  const numericFields = metadata.fields.filter((field) => field.semanticType === 'numeric').slice(0, 4);
+  const categoricalFields = metadata.fields.filter((field) => ['categorical', 'boolean'].includes(field.semanticType)).slice(0, 3);
+  const temporalField = metadata.fields.find((field) => field.semanticType === 'temporal');
+
+  const numeric = await Promise.all(numericFields.map(async ({ name: field }) => {
+    const numericValue = `TRY_CAST(${quoteIdentifier(field)} AS DOUBLE)`;
+    const statsResult = await duckdbService.query(
+      `SELECT
+        COUNT(${numericValue}) FILTER (WHERE ${predicateA}) AS a_count,
+        COUNT(${numericValue}) FILTER (WHERE ${predicateB}) AS b_count,
+        AVG(${numericValue}) FILTER (WHERE ${predicateA}) AS a_mean,
+        AVG(${numericValue}) FILTER (WHERE ${predicateB}) AS b_mean,
+        STDDEV_SAMP(${numericValue}) FILTER (WHERE ${predicateA}) AS a_sd,
+        STDDEV_SAMP(${numericValue}) FILTER (WHERE ${predicateB}) AS b_sd,
+        MIN(${numericValue}) FILTER (WHERE (${predicateA}) OR (${predicateB})) AS range_min,
+        MAX(${numericValue}) FILTER (WHERE (${predicateA}) OR (${predicateB})) AS range_max
+       FROM ${table} AS base;`,
+    );
+    const stats = normalizeRows(statsResult.toArray())[0] || {};
+    const aCount = Number(stats.a_count ?? 0);
+    const bCount = Number(stats.b_count ?? 0);
+    const aMean = finiteNumberOrNull(stats.a_mean);
+    const bMean = finiteNumberOrNull(stats.b_mean);
+    const aSd = finiteNumberOrNull(stats.a_sd);
+    const bSd = finiteNumberOrNull(stats.b_sd);
+    const pooledSd = aSd !== null && bSd !== null ? Math.sqrt((aSd * aSd + bSd * bSd) / 2) : null;
+    const effectSize = aMean !== null && bMean !== null && pooledSd && pooledSd > 0 ? (aMean - bMean) / pooledSd : null;
+    const min = finiteNumberOrNull(stats.range_min);
+    const max = finiteNumberOrNull(stats.range_max);
+    const binCount = 8;
+    const bins = min === null || max === null ? [] : await (async () => {
+      const width = max === min ? 1 : (max - min) / binCount;
+      const expressions = Array.from({ length: binCount }, (_, index) => {
+        const lower = min + width * index;
+        const upper = index === binCount - 1 ? max : min + width * (index + 1);
+        const range = index === binCount - 1
+          ? `${numericValue} >= ${lower} AND ${numericValue} <= ${upper}`
+          : `${numericValue} >= ${lower} AND ${numericValue} < ${upper}`;
+        return `COUNT(*) FILTER (WHERE (${predicateA}) AND ${range}) AS a_bin_${index}, COUNT(*) FILTER (WHERE (${predicateB}) AND ${range}) AS b_bin_${index}`;
+      });
+      const result = await duckdbService.query(`SELECT ${expressions.join(', ')} FROM ${table} AS base;`);
+      const row = normalizeRows(result.toArray())[0] || {};
+      return Array.from({ length: binCount }, (_, index) => {
+        const lower = min + width * index;
+        const upper = index === binCount - 1 ? max : min + width * (index + 1);
+        return { label: `${lower.toLocaleString(undefined, { maximumFractionDigits: 2 })}–${upper.toLocaleString(undefined, { maximumFractionDigits: 2 })}`, aCount: Number(row[`a_bin_${index}`] ?? 0), bCount: Number(row[`b_bin_${index}`] ?? 0) };
+      });
+    })();
+    return { field, aCount, bCount, aMissing: Math.max(0, aRows - aCount), bMissing: Math.max(0, bRows - bCount), aMean, bMean, effectSize, bins };
+  }));
+
+  const categorical = await Promise.all(categoricalFields.map(async ({ name: field }) => {
+    const column = quoteIdentifier(field);
+    const result = await duckdbService.query(
+      `SELECT COALESCE(CAST(${column} AS VARCHAR), '∅ Missing') AS label,
+              COUNT(*) FILTER (WHERE ${predicateA}) AS a_count,
+              COUNT(*) FILTER (WHERE ${predicateB}) AS b_count
+       FROM ${table} AS base
+       WHERE (${predicateA}) OR (${predicateB})
+       GROUP BY label ORDER BY (a_count + b_count) DESC, label LIMIT 10;`,
+    );
+    return {
+      field,
+      values: normalizeRows(result.toArray()).map((row) => {
+        const aCount = Number(row.a_count ?? 0);
+        const bCount = Number(row.b_count ?? 0);
+        const aShare = aRows ? aCount / aRows : 0;
+        const bShare = bRows ? bCount / bRows : 0;
+        return { label: String(row.label), aCount, bCount, aShare, bShare, shareDifference: aShare - bShare };
+      }),
+    };
+  }));
+
+  let temporal: CohortComparisonResult['temporal'];
+  if (temporalField) {
+    const column = quoteIdentifier(temporalField.name);
+    const result = await duckdbService.query(
+      `SELECT CAST(DATE_TRUNC('month', TRY_CAST(${column} AS TIMESTAMP)) AS VARCHAR) AS period,
+              COUNT(*) FILTER (WHERE ${predicateA}) AS a_count,
+              COUNT(*) FILTER (WHERE ${predicateB}) AS b_count
+       FROM ${table} AS base
+       WHERE TRY_CAST(${column} AS TIMESTAMP) IS NOT NULL AND ((${predicateA}) OR (${predicateB}))
+       GROUP BY period ORDER BY period;`,
+    );
+    temporal = { field: temporalField.name, grain: 'month', points: normalizeRows(result.toArray()).map((row) => ({ period: String(row.period), aCount: Number(row.a_count ?? 0), bCount: Number(row.b_count ?? 0) })) };
+  }
+
+  return {
+    totalRows,
+    aRows,
+    bRows,
+    overlapRows,
+    aOnlyRows: Math.max(0, aRows - overlapRows),
+    bOnlyRows: Math.max(0, bRows - overlapRows),
+    denominatorNote: compareToRemainder
+      ? `B is the current active subset excluding A. The dataset contains ${totalRows.toLocaleString()} rows; overlap is necessarily zero.`
+      : `Percentages use each cohort's own row count. ${overlapRows.toLocaleString()} rows belong to both cohorts and are reported in both denominators.`,
+    missingValueNote: 'Numeric means and effect sizes exclude missing or non-numeric values; missing counts are reported per cohort. Category shares include missing values as “∅ Missing”.',
+    numeric,
+    categorical,
+    temporal,
   };
 };
 

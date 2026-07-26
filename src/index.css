@@ -20,6 +20,27 @@ body {
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
 }
 
+:where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid #0284c7;
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media print {
+  @page { margin: 12mm; }
+  html, body, #root { height: auto !important; overflow: visible !important; background: white !important; }
+  article, section { break-inside: avoid; }
+  button, select { print-color-adjust: exact; }
+}
+
 .react-flow__node,
 .react-flow__node-input,
 .react-flow__node-default,
@@ -71,8 +92,10 @@ body {
   stroke-dasharray: 6 3;
 }
 
+/* The canvas reads as a node graph only if its grid is actually perceptible;
+   the dots carry the snap rhythm, the lines mark every fifth step. */
 .react-flow__background {
-  @apply opacity-50;
+  background-color: #fbfdfd;
 }
 
 @keyframes toast-slide-in {

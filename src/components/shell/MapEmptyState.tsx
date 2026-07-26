@@ -30,7 +30,7 @@ export const MapEmptyState = () => {
         </div>
         <h2 className="text-sm font-bold text-slate-800">Start exploring your data</h2>
         <p className="text-xs leading-relaxed text-slate-500">
-          Drop a <span className="font-semibold">Parquet</span> or <span className="font-semibold">CSV</span> file
+          Drop a <span className="font-semibold">Parquet, CSV, JSON, or GeoJSON</span> file
           to inspect rows, compare distributions, build charts, map spatial patterns and create a reproducible workflow.
           Everything runs in your browser.
         </p>
@@ -47,7 +47,7 @@ export const MapEmptyState = () => {
           ref={fileInputRef}
           type="file"
           multiple
-          accept=".parquet,.csv"
+          accept=".parquet,.csv,.json,.geojson,application/json,application/geo+json"
           className="hidden"
           onChange={handleFileChange}
         />

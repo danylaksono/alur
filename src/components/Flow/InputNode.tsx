@@ -65,7 +65,7 @@ export const InputNode = ({ data, id, selected }: any) => {
         <label className="cursor-pointer group flex flex-col items-center justify-center py-3 border-2 border-dashed border-muted rounded-lg hover:bg-blue-50 hover:border-blue-200 transition-all">
           <Upload className="w-4 h-4 text-muted-foreground group-hover:text-blue-500 mb-1" />
           <span className="text-[11px] font-medium text-muted-foreground group-hover:text-blue-600">
-            {config.loadStatus === 'error' ? 'Try another Parquet / CSV' : 'Upload Parquet / CSV'}
+            {config.loadStatus === 'error' ? 'Try another data file' : 'Upload data file'}
           </span>
           {config.loadStatus === 'error' && (
             <span className="mt-1 max-w-[180px] truncate text-[9px] text-rose-500" title={config.loadError}>
@@ -76,7 +76,7 @@ export const InputNode = ({ data, id, selected }: any) => {
             type="file"
             className="hidden"
             onChange={handleFileUpload}
-            accept=".parquet,.csv"
+            accept=".parquet,.csv,.json,.geojson,application/json,application/geo+json"
           />
         </label>
       )}

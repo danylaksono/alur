@@ -1,4 +1,5 @@
-import { ReactFlow, ReactFlowProvider, Controls, Background, ConnectionLineType } from '@xyflow/react';
+import { useEffect } from 'react';
+import { ReactFlow, ReactFlowProvider, Controls, Background, BackgroundVariant, ConnectionLineType, useReactFlow } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useStore } from '../../store/useStore';
 import { InputNode } from '../Flow/InputNode';
@@ -10,7 +11,9 @@ import { JoinNode } from '../Flow/JoinNode';
 import { OutputNode } from '../Flow/OutputNode';
 import { VisualisationNode } from '../Flow/VisualisationNode';
 import { ErrorBoundary } from '../ErrorBoundary';
-import { NodePalette } from './NodePalette';
+
+/** One grid step. Drives both the visible dots and node snapping. */
+const GRID_SPACING = 24;
 
 const nodeTypes = {
   input: InputNode,
@@ -21,6 +24,18 @@ const nodeTypes = {
   join: JoinNode,
   visualisation: VisualisationNode,
   output: OutputNode,
+};
+
+/** Honours fit requests from the node palette, which lives outside this provider. */
+const FitRequestListener = () => {
+  const fitRequest = useStore((s) => s.workflowFitRequest);
+  const { fitView } = useReactFlow();
+  useEffect(() => {
+    if (!fitRequest) return;
+    const timer = window.setTimeout(() => fitView({ duration: 300, padding: 0.2, maxZoom: 1 }), 50);
+    return () => window.clearTimeout(timer);
+  }, [fitRequest, fitView]);
+  return null;
 };
 
 export const WorkflowTab = () => {
@@ -34,9 +49,7 @@ export const WorkflowTab = () => {
 
   return (
     <ReactFlowProvider>
-    <div className="flex h-full min-h-0">
-      <NodePalette />
-      <div className="min-w-0 flex-1">
+      <div className="h-full min-h-0">
         <ErrorBoundary
           name="Workflow"
           fallback={
@@ -66,18 +79,20 @@ export const WorkflowTab = () => {
             connectionLineType={ConnectionLineType.SmoothStep}
             connectionRadius={36}
             snapToGrid
-            snapGrid={[12, 12]}
+            // Matches the dot spacing below, so nodes land on the dots the user sees.
+            snapGrid={[GRID_SPACING, GRID_SPACING]}
             // Deletion is owned by useKeyboardShortcuts (scoped to drawer visibility);
             // React Flow's global delete key would fire even when the canvas is hidden.
             deleteKeyCode={null}
             className="h-full bg-background"
           >
-            <Background gap={24} size={1} />
+            <Background id="workflow-grid-lines" variant={BackgroundVariant.Lines} gap={GRID_SPACING * 5} lineWidth={1} color="#e2e8f0" />
+            <Background id="workflow-grid-dots" variant={BackgroundVariant.Dots} gap={GRID_SPACING} size={1.4} color="#cbd5e1" />
             <Controls />
+            <FitRequestListener />
           </ReactFlow>
         </ErrorBoundary>
       </div>
-    </div>
     </ReactFlowProvider>
   );
 };

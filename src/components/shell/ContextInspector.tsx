@@ -6,8 +6,8 @@ import { SelectionExplain } from '../Visualisation/SelectionExplain';
 import { ErrorBoundary } from '../ErrorBoundary';
 
 /**
- * Floating overlay over the map showing details for the current feature
- * selection. Replaces the old fixed right-hand "Details" column.
+ * Docked on desktop so evidence never obscures the map; a bottom sheet on
+ * compact viewports where a side dock would leave too little map.
  */
 export const ContextInspector = () => {
   const mapLayers = useStore((s) => s.mapLayers);
@@ -19,14 +19,14 @@ export const ContextInspector = () => {
     () => mapLayers.find((layer) => layer.id === selectedLayerId) || null,
     [mapLayers, selectedLayerId]
   );
-  const layerState = selectedLayer ? visualAnalytics.layers[selectedLayer.id] : undefined;
+  const layerState = selectedLayer ? visualAnalytics.datasets[selectedLayer.id] : undefined;
   const selectedFeatureIds = layerState?.selectedFeatureIds || [];
   const filters = layerState?.filters || [];
 
   if (!selectedLayer || selectedFeatureIds.length === 0) return null;
 
   return (
-    <div className="pointer-events-auto absolute left-4 top-4 z-10 max-h-[60%] w-80 overflow-y-auto rounded-lg border border-slate-200 bg-white/95 shadow-lg backdrop-blur">
+    <aside className="pointer-events-auto absolute inset-x-2 bottom-2 z-20 max-h-[55%] overflow-y-auto rounded-xl border border-slate-200 bg-white/95 shadow-xl backdrop-blur xl:static xl:z-auto xl:h-full xl:max-h-none xl:w-80 xl:shrink-0 xl:rounded-none xl:border-y-0 xl:border-r-0 xl:bg-white xl:shadow-none">
       <div className="flex items-center justify-between border-b bg-slate-50/80 px-3 py-2">
         <span className="truncate text-xs font-semibold text-slate-600">
           Selection — {selectedLayer.name}
@@ -50,6 +50,6 @@ export const ContextInspector = () => {
       <ErrorBoundary name="Selection Explain">
         <SelectionExplain layer={selectedLayer} selectedFeatureIds={selectedFeatureIds} />
       </ErrorBoundary>
-    </div>
+    </aside>
   );
 };

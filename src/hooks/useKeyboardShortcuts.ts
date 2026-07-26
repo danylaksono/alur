@@ -9,6 +9,12 @@ export function useKeyboardShortcuts() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        const state = useStore.getState();
+        state.setCommandPaletteOpen(!state.ui.isCommandPaletteOpen);
+        e.preventDefault();
+        return;
+      }
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
 
       const {
@@ -22,8 +28,29 @@ export function useKeyboardShortcuts() {
         isManualSQL,
         setIsManualSQL,
         openDrawerTab,
+        undoAnalysis,
+        redoAnalysis,
       } = useStore.getState();
       const workflowVisible = ui.drawerMode !== 'collapsed' && ui.activeDrawerTab === 'workflow';
+
+      if (e.key === 'Escape' && ui.isPresentationMode) {
+        useStore.getState().setPresentationMode(false);
+        e.preventDefault();
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'z') {
+        if (e.shiftKey) redoAnalysis();
+        else undoAnalysis();
+        e.preventDefault();
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'y') {
+        redoAnalysis();
+        e.preventDefault();
+        return;
+      }
 
       if ((e.key === 'Delete' || e.key === 'Backspace') && workflowVisible) {
         if (selectedNodeId) {

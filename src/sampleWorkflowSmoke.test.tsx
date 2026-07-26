@@ -3,8 +3,10 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { Edge } from '@xyflow/react';
 import App from './App';
 import { WorkflowTab } from './components/shell/WorkflowTab';
+import { NodePalette } from './components/shell/NodePalette';
 import { SqlTab } from './components/shell/SqlTab';
 import { Chat } from './components/Chat';
+import { CohortPanel } from './components/Visualisation/CohortPanel';
 import { useStore, type WorkflowNode } from './store/useStore';
 import { buildWorkflowSQL } from './utils/workflowEngine';
 import { llmToolDefinitions } from './utils/toolDefinitions';
@@ -128,22 +130,36 @@ describe('sample visual analytics workflow smoke test', () => {
 
     const shellHtml = renderToString(<App />);
     expect(shellHtml).toContain('Add data');
-    expect(shellHtml).toContain('New project');
+    // Project file actions (new/save/open) now hang off the named project menu.
+    expect(shellHtml).toContain('Untitled project');
+    expect(shellHtml).toContain('aria-haspopup="menu"');
     expect(shellHtml).toContain('Data Layers');
     // The style editor is gated behind a per-layer action; the list view shows by default.
     expect(shellHtml).toContain('Add data or run a workflow');
     expect(shellHtml).toContain('Basemap');
     expect(shellHtml).toContain('About');
+    expect(shellHtml).toContain('aria-label="Cohorts"');
     expect(shellHtml).toContain('Workflow');
     expect(shellHtml).toContain('Table');
     expect(shellHtml).toContain('SQL');
-    expect(shellHtml).toContain('Execute Workflow');
+    expect(shellHtml).toContain('Loading workflow editor');
+
+    const cohortsHtml = renderToString(<CohortPanel />);
+    expect(cohortsHtml).toContain('Save subsets, compare groups, and revisit analytical states.');
+
+    // The palette is a left-panel surface now; the drawer holds only the canvas.
+    const paletteHtml = renderToString(<NodePalette />);
+    expect(paletteHtml).toContain('Data Input');
+    expect(paletteHtml).toContain('Layer Output');
+    // Spatial functions are reached through the palette's top search field;
+    // their results render only once a query narrows them.
+    expect(paletteHtml).toContain('Search nodes and');
+    expect(paletteHtml).toContain('Execute Workflow');
+    // Scenario tools moved here from the deleted Analyse landing page.
+    expect(paletteHtml).toContain('Scenarios');
 
     const workflowHtml = renderToString(<WorkflowTab />);
-    expect(workflowHtml).toContain('Data Input');
-    expect(workflowHtml).toContain('Layer Output');
-    expect(workflowHtml).toContain('Spatial Functions');
-    expect(workflowHtml).toContain('Execute Workflow');
+    expect(workflowHtml).toContain('react-flow');
 
     const chatHtml = renderToString(<Chat />);
     expect(chatHtml).toContain('ALUR Copilot');

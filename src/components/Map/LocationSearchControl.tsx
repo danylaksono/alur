@@ -122,7 +122,7 @@ export const LocationSearchControl = ({
   };
 
   return (
-    <div ref={rootRef} className="pointer-events-auto absolute left-3 top-3 z-20 w-[min(22rem,calc(100%-1.5rem))]">
+    <div ref={rootRef} className="pointer-events-auto absolute left-3 top-3 z-20 w-[min(22rem,calc(100%-4.75rem))]">
       <form
         role="search"
         aria-label="Search map locations"
@@ -134,6 +134,7 @@ export const LocationSearchControl = ({
         <input
           id="map-location-search"
           type="search"
+          role="combobox"
           value={query}
           onChange={(event) => {
             requestRef.current?.abort();
@@ -152,6 +153,7 @@ export const LocationSearchControl = ({
           autoComplete="off"
           aria-autocomplete="none"
           aria-controls="map-location-results"
+          aria-haspopup="listbox"
           aria-expanded={isOpen}
           aria-activedescendant={activeIndex >= 0 ? `map-location-result-${activeIndex}` : undefined}
           className="min-w-0 flex-1 bg-transparent px-2 text-sm text-slate-700 outline-none placeholder:text-slate-400"

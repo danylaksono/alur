@@ -127,9 +127,11 @@ const temporalFieldsForLayer = (layer: MapLayer | null) => {
 
 export const VisualisationPanel = ({
   layer: selectedLayer,
+  initialField,
   onBack,
 }: {
   layer: MapLayer | null;
+  initialField?: string;
   onBack?: () => void;
 }) => {
   const mapLayers = useStore((s) => s.mapLayers);
@@ -234,6 +236,10 @@ export const VisualisationPanel = ({
     setField(fields[0] || '');
     setTemporalField(temporalCandidates[0] || '');
   }, [selectedLayer?.id, fieldsKey]);
+
+  useEffect(() => {
+    if (initialField && fields.includes(initialField)) setField(initialField);
+  }, [initialField, fieldsKey]);
 
   useEffect(() => {
     if (!selectedLayer || !field) {
@@ -446,14 +452,14 @@ export const VisualisationPanel = ({
     }
   }, [selectedLayer?.id, hasActiveStyle, field, fieldY, kind, method, classCount, paletteId, bivariatePaletteId, heightMultiplier, hexAggregate, hexCellSize, glyphMode, glyphType, glyphCellSize, glyphAggregate, glyphFields.join('|'), canApply, profile, profileY, updateLayerVisualisation, clearLayerVisualisation]);
 
-  const activeFilters = selectedLayer ? visualAnalytics.layers[selectedLayer.id]?.filters || [] : [];
+  const activeFilters = selectedLayer ? visualAnalytics.datasets[selectedLayer.id]?.filters || [] : [];
   const activeFilterKeys = new Set(activeFilters.map(visualFilterKey));
 
   const toggleDistributionFilter = (
     nextFilter: { kind: 'category'; field: string; values: string[] } | { kind: 'range'; field: string; min: number; max: number },
   ) => {
     if (!selectedLayer) return;
-    const existingFilters = visualAnalytics.layers[selectedLayer.id]?.filters || [];
+    const existingFilters = visualAnalytics.datasets[selectedLayer.id]?.filters || [];
     setLayerFilters(selectedLayer.id, toggleFilterIn(existingFilters, nextFilter));
   };
 
@@ -465,7 +471,7 @@ export const VisualisationPanel = ({
       start: temporalStart || undefined,
       end: temporalEnd || undefined,
     };
-    const existingFilters = visualAnalytics.layers[selectedLayer.id]?.filters || [];
+    const existingFilters = visualAnalytics.datasets[selectedLayer.id]?.filters || [];
     const withoutSameField = existingFilters.filter((filter) => !(filter.kind === 'temporal' && filter.field === temporalField));
     setLayerFilters(selectedLayer.id, [...withoutSameField, nextFilter]);
   };
@@ -1038,7 +1044,7 @@ export const VisualisationPanel = ({
                   currentFilter={activeFilters.find((f) => f.kind === 'temporal' && f.field === temporalField)}
                   onApply={(filter) => {
                     if (!selectedLayer) return;
-                    const existing = visualAnalytics.layers[selectedLayer.id]?.filters || [];
+                    const existing = visualAnalytics.datasets[selectedLayer.id]?.filters || [];
                     const withoutField = existing.filter((f) => !(f.kind === 'temporal' && f.field === temporalField));
                     setLayerFilters(selectedLayer.id, [...withoutField, filter]);
                   }}
