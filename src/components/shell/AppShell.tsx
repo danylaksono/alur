@@ -23,6 +23,8 @@ import { RecoveryDialog } from './RecoveryDialog';
 import { CompareWorkspace } from '../Compare/CompareWorkspace';
 import { ExplainWorkspace } from '../Explain/ExplainWorkspace';
 import { StoryViewer } from '../Explain/StoryViewer';
+import { StoryLinkStatus } from '../Explain/StoryLinkStatus';
+import { useStoryLink } from '../../hooks/useStoryLink';
 import { AnalysisContextBar } from './AnalysisContextBar';
 import { EvidenceTray } from './EvidenceTray';
 
@@ -50,6 +52,7 @@ export const AppShell = () => {
   useWorkflowSync();
   useSchemaFetcher();
   useKeyboardShortcuts();
+  const storyLink = useStoryLink();
 
   const handleDragOver = (e: DragEvent) => {
     if (!e.dataTransfer.types.includes('Files')) return;
@@ -138,6 +141,9 @@ export const AppShell = () => {
       <CommandPalette />
       <DatasetOverviewDialog />
       <RecoveryDialog />
+      {/* Overlaid rather than substituted, so dismissing a broken link leaves
+          the reader in a working workspace instead of a blank page. */}
+      <StoryLinkStatus state={storyLink.state} onDismiss={storyLink.dismiss} />
     </div>
   );
 };

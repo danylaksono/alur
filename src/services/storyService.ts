@@ -113,6 +113,21 @@ export const downloadStory = (story: AlurStory) => {
   downloadText(serialiseStory(story), fileName, 'application/json;charset=utf-8');
 };
 
+/** Bitmap data URIs only. A story can arrive from a link, so an `image` that
+ *  is really a script or a remote tracking URL must never reach an <img src>. */
+const SAFE_IMAGE_DATA_URI = /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$/;
+
+const sanitiseCard = (card: ExplainCard): ExplainCard => {
+  if (card.kind !== 'map' || !isRecord(card.frozenValues)) return card;
+  const capture = card.frozenValues as Record<string, unknown>;
+  if (typeof capture.image === 'string' && SAFE_IMAGE_DATA_URI.test(capture.image)) return card;
+  if (capture.image === undefined) return card;
+  return {
+    ...card,
+    frozenValues: { ...capture, image: undefined, failureReason: 'The map image was removed because it was not a valid embedded image.' },
+  };
+};
+
 export const parseStory = (text: string): AlurStory => {
   let value: unknown;
   try {
@@ -130,6 +145,66 @@ export const parseStory = (text: string): AlurStory => {
   return {
     ...(value as unknown as AlurStory),
     title: typeof value.title === 'string' && value.title.trim() ? value.title : 'Untitled story',
+    sections: (value.sections as AlurStory['sections']).filter((section) => isRecord(section) && typeof section.id === 'string'),
+    cards: (value.cards as ExplainCard[])
+      .filter((card) => isRecord(card) && typeof card.id === 'string' && typeof card.sectionId === 'string')
+      .map(sanitiseCard),
     sources: Array.isArray(value.sources) ? (value.sources as StorySource[]) : [],
   };
+};
+
+const STORY_URL_TIMEOUT_MS = 20_000;
+const MAX_STORY_BYTES = 25 * 1024 * 1024;
+
+/**
+ * Loads a story named in the page URL. Everything here is attacker-supplied —
+ * the link, the host, and the payload — so the scheme, size and shape are all
+ * checked before anything is rendered.
+ */
+export const fetchStory = async (input: string): Promise<AlurStory> => {
+  let url: URL;
+  try {
+    // Relative links resolve against the page when there is one; the guard
+    // keeps this callable outside a browser (tests, SSR) without throwing.
+    url = new URL(input, typeof window === 'undefined' ? undefined : window.location.href);
+  } catch {
+    throw new Error('The story link is not a valid URL.');
+  }
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') throw new Error('Story links must be HTTP or HTTPS.');
+
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), STORY_URL_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, { credentials: 'omit', signal: controller.signal });
+    if (!response.ok) throw new Error(`The server returned ${response.status} ${response.statusText}.`);
+    if (Number(response.headers.get('content-length') || 0) > MAX_STORY_BYTES) {
+      throw new Error(`The story is larger than the ${MAX_STORY_BYTES / 1024 / 1024} MB limit.`);
+    }
+    const text = await response.text();
+    if (new Blob([text]).size > MAX_STORY_BYTES) {
+      throw new Error(`The story is larger than the ${MAX_STORY_BYTES / 1024 / 1024} MB limit.`);
+    }
+    return parseStory(text);
+  } catch (error: any) {
+    if (error?.name === 'AbortError') throw new Error('The story link timed out after 20 seconds.');
+    // fetch reports every network-level failure as a bare "Failed to fetch",
+    // which tells a first-time reader nothing about what to do next.
+    if (error instanceof TypeError) {
+      throw new Error(`${url.host} could not be reached, or it does not allow this site to read the file (CORS).`);
+    }
+    throw error instanceof Error ? error : new Error('The story link could not be loaded.');
+  } finally {
+    window.clearTimeout(timeout);
+  }
+};
+
+export const STORY_URL_PARAM = 'story';
+
+export const storyLinkFor = (
+  hostedUrl: string,
+  base = typeof window === 'undefined' ? 'https://alur-app.netlify.app/' : window.location.origin + window.location.pathname,
+) => {
+  const link = new URL(base);
+  link.searchParams.set(STORY_URL_PARAM, hostedUrl);
+  return link.toString();
 };

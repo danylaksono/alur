@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useStore } from '../store/useStore';
-import { createStory, parseStory, serialiseStory, storyDisclosure, withoutRecordLevelEvidence } from './storyService';
+import { STORY_URL_PARAM, createStory, fetchStory, parseStory, serialiseStory, storyDisclosure, storyLinkFor, withoutRecordLevelEvidence } from './storyService';
 import type { AlurStory } from '../types/story';
 import type { ComparisonResult, ExplainCard } from '../types/visualAnalytics';
 
@@ -93,6 +93,54 @@ describe('story export', () => {
     const comparison = stripped.cards.find((item) => item.id === 'cmp-1')!.frozenValues as ComparisonResult;
     expect(comparison.summaries).toHaveLength(1);
     expect(comparison.alignedRecords).toBeUndefined();
+  });
+
+  it('strips map images that are not embedded bitmaps', () => {
+    const mapCard = (image: unknown) => JSON.stringify({
+      kind: 'alur-story', version: 1, title: 'Shared', sections: [], sources: [],
+      cards: [{ id: 'm', sectionId: 'evidence', kind: 'map', width: 12, height: 'tall', behaviour: 'frozen', frozenValues: { image, width: 1, height: 1, camera: {}, basemapId: 'light', layers: [], capturedAt: 1 } }],
+    });
+    const imageOf = (text: string) => (parseStory(text).cards[0].frozenValues as { image?: string }).image;
+
+    // A story can arrive from a stranger's link, so anything that is not a
+    // self-contained bitmap must not reach an <img src>.
+    expect(imageOf(mapCard('javascript:alert(1)'))).toBeUndefined();
+    expect(imageOf(mapCard('https://tracker.example/pixel.png'))).toBeUndefined();
+    expect(imageOf(mapCard('data:text/html;base64,PHNjcmlwdD4='))).toBeUndefined();
+    expect(imageOf(mapCard(42))).toBeUndefined();
+    expect(imageOf(mapCard('data:image/webp;base64,AAAA'))).toBe('data:image/webp;base64,AAAA');
+
+    // The reader is told why the picture is missing rather than seeing a blank.
+    const stripped = parseStory(mapCard('https://tracker.example/pixel.png')).cards[0].frozenValues as { failureReason?: string };
+    expect(stripped.failureReason).toMatch(/not a valid embedded image/);
+  });
+
+  it('drops malformed cards and sections instead of rendering them', () => {
+    const story = parseStory(JSON.stringify({
+      kind: 'alur-story', version: 1, title: 'Shared', sources: [],
+      sections: [{ id: 'evidence', title: 'Evidence' }, { title: 'No id' }, 'nonsense'],
+      cards: [
+        { id: 'ok', sectionId: 'evidence', kind: 'note', width: 6, height: 'compact', behaviour: 'frozen' },
+        { sectionId: 'evidence', kind: 'note' },
+        null,
+      ],
+    }));
+    expect(story.sections).toHaveLength(1);
+    expect(story.cards).toHaveLength(1);
+  });
+
+  it('builds a shareable link only from a real http(s) address', () => {
+    expect(storyLinkFor('https://example.com/a.alur-story.json', 'https://alur.app/'))
+      .toBe('https://alur.app/?story=https%3A%2F%2Fexample.com%2Fa.alur-story.json');
+    // The param survives round-tripping back out of the link.
+    const parsed = new URL(storyLinkFor('https://example.com/a.json', 'https://alur.app/'));
+    expect(parsed.searchParams.get(STORY_URL_PARAM)).toBe('https://example.com/a.json');
+  });
+
+  it('refuses story links that are not http(s)', async () => {
+    await expect(fetchStory('ftp://example.com/story.json')).rejects.toThrow(/HTTP or HTTPS/);
+    await expect(fetchStory('javascript:alert(1)')).rejects.toThrow(/HTTP or HTTPS/);
+    await expect(fetchStory('not a url at all ::::')).rejects.toThrow(/not a valid URL|HTTP or HTTPS/);
   });
 
   it('rejects files that are not readable stories', () => {

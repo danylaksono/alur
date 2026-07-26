@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
-import { AlertTriangle, Database, Download, Image, MapPin, Share2, X } from 'lucide-react';
+import { AlertTriangle, Database, Download, Image, Link2, MapPin, Share2, X } from 'lucide-react';
 import { useStore } from '../../store/useStore';
-import { createStory, downloadStory, storyDisclosure, withoutRecordLevelEvidence } from '../../services/storyService';
+import { createStory, downloadStory, storyDisclosure, storyLinkFor, withoutRecordLevelEvidence } from '../../services/storyService';
 import { cn } from '../../utils/cn';
 
 const formatBytes = (bytes: number) =>
@@ -17,6 +17,19 @@ export const StoryExportDialog = ({ open, onClose }: { open: boolean; onClose: (
   const updateSettings = useStore((state) => state.updateSettings);
   const addToast = useStore((state) => state.addToast);
   const [includeRecords, setIncludeRecords] = useState(true);
+  const [hostedUrl, setHostedUrl] = useState('');
+
+  const link = useMemo(() => {
+    const trimmed = hostedUrl.trim();
+    if (!trimmed) return '';
+    try {
+      const parsed = new URL(trimmed);
+      if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return '';
+      return storyLinkFor(trimmed);
+    } catch {
+      return '';
+    }
+  }, [hostedUrl]);
 
   const { full, shared, disclosure } = useMemo(() => {
     if (!open) return { full: null, shared: null, disclosure: null };
@@ -100,6 +113,42 @@ export const StoryExportDialog = ({ open, onClose }: { open: boolean; onClose: (
               </span>
             </label>
           )}
+
+          <details className="rounded-xl border border-slate-200">
+            <summary className="cursor-pointer px-3 py-2.5 text-[11px] font-bold text-slate-700">
+              Share as a link <span className="font-normal text-slate-500">(you host the file)</span>
+            </summary>
+            <div className="space-y-2 border-t border-slate-100 p-3">
+              <p className="text-[11px] leading-5 text-slate-600">
+                ALUR has no server, so the exported file needs a home you control — object storage, a gist, or any
+                static host that allows browser access. Paste its address to build a link that opens the story directly.
+              </p>
+              <input
+                value={hostedUrl}
+                onChange={(event) => setHostedUrl(event.target.value)}
+                placeholder="https://…/my-analysis.alur-story.json"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 font-mono text-[10px] outline-none focus:border-sky-400"
+                aria-label="Hosted story address"
+              />
+              {link && (
+                <div className="flex items-center gap-2">
+                  <code className="min-w-0 flex-1 truncate rounded-md bg-slate-50 px-2 py-1.5 text-[10px] text-slate-600">{link}</code>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void navigator.clipboard?.writeText(link).then(
+                        () => addToast({ type: 'success', message: 'Story link copied.' }),
+                        () => addToast({ type: 'warning', message: 'Could not copy the link.' }),
+                      );
+                    }}
+                    className="flex shrink-0 items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1.5 text-[10px] font-bold text-slate-700 hover:bg-slate-50"
+                  >
+                    <Link2 className="h-3 w-3" /> Copy
+                  </button>
+                </div>
+              )}
+            </div>
+          </details>
 
           {disclosure.emptyCards.length > 0 && (
             <div className="flex items-start gap-2 rounded-xl bg-slate-50 p-3 text-[11px] leading-5 text-slate-600">
