@@ -232,6 +232,8 @@ export interface AppState {
    * that renders the story alone — no engine, no workspace, no editing.
    */
   openedStory: AlurStory | null;
+  /** Two accounts being compared side by side; `left` is always the reader's own. */
+  storyComparison: { left: AlurStory; right: AlurStory } | null;
   nodes: WorkflowNode[];
   edges: Edge[];
   duckdbReady: boolean;
@@ -264,6 +266,8 @@ export interface AppState {
   setProjectName: (name: string) => void;
   openStory: (story: AlurStory) => void;
   closeStory: () => void;
+  compareStories: (left: AlurStory, right: AlurStory) => void;
+  closeStoryComparison: () => void;
   navigate: (destination: NavDestination) => void;
   requestWorkflowFit: () => void;
   setActiveRailTab: (tab: RailTab) => void;
@@ -627,6 +631,7 @@ const historyActionForMapPatch = (layerId: string, patch: Record<string, unknown
 export const useStore = create<AppState>()(persist((set, get) => ({
   project: { name: '' },
   openedStory: null,
+  storyComparison: null,
   nodes: [],
   edges: [],
   duckdbReady: false,
@@ -860,8 +865,10 @@ export const useStore = create<AppState>()(persist((set, get) => ({
   resetNodeExecutionStates: () => set({ nodeExecutionStates: {} }),
 
   setProjectName: (name) => set({ project: { name: name.slice(0, 120) } }),
-  openStory: (openedStory) => set({ openedStory }),
+  openStory: (openedStory) => set({ openedStory, storyComparison: null }),
   closeStory: () => set({ openedStory: null }),
+  compareStories: (left, right) => set({ storyComparison: { left, right }, openedStory: null }),
+  closeStoryComparison: () => set({ storyComparison: null }),
 
   resetWorkspace: () => set({
     project: { name: '' },

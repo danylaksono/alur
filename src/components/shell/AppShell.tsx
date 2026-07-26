@@ -23,6 +23,7 @@ import { RecoveryDialog } from './RecoveryDialog';
 import { CompareWorkspace } from '../Compare/CompareWorkspace';
 import { ExplainWorkspace } from '../Explain/ExplainWorkspace';
 import { StoryViewer } from '../Explain/StoryViewer';
+import { StoryDiffView } from '../Explain/StoryDiffView';
 import { StoryLinkStatus } from '../Explain/StoryLinkStatus';
 import { useStoryLink } from '../../hooks/useStoryLink';
 import { AnalysisContextBar } from './AnalysisContextBar';
@@ -38,6 +39,8 @@ const DOCK_DIRECTION: Record<DockSide, string> = {
 
 export const AppShell = () => {
   const openedStory = useStore((s) => s.openedStory);
+  const storyComparison = useStore((s) => s.storyComparison);
+  const closeStoryComparison = useStore((s) => s.closeStoryComparison);
   const dockSide = useStore((s) => s.ui.dockSide);
   const drawerMode = useStore((s) => s.ui.drawerMode);
   const isGlobalLoading = useStore((s) => Object.keys(s.loadingOperations).length > 0);
@@ -76,6 +79,7 @@ export const AppShell = () => {
 
   // A story is a finished, read-only artefact: it replaces the workspace
   // rather than docking inside it, so a reader is never shown analysis tools.
+  if (storyComparison) return <StoryDiffView left={storyComparison.left} right={storyComparison.right} onClose={closeStoryComparison} />;
   if (openedStory) return <StoryViewer story={openedStory} />;
 
   return (
@@ -91,11 +95,16 @@ export const AppShell = () => {
 
         {isCompare && <CompareWorkspace />}
         {isExplain && <ExplainWorkspace />}
-        {isExplore && (
-          /* Re-docking only changes flex direction and order — the map element
-             keeps its place in the tree, so it reflows without remounting
-             (map init is expensive) and its ResizeObserver handles the rest. */
-          <main className={cn('flex min-h-0 min-w-0 flex-1', DOCK_DIRECTION[dockSide])}>
+        {/* Always mounted, hidden by CSS in other workspaces. Map init is
+            expensive, so re-docking and workspace switches both reflow the
+            same element rather than tearing it down; `display:none` also takes
+            the hidden workspace out of the tab order and the a11y tree.
+            The flex classes are dropped rather than overridden, so the hide
+            never depends on Tailwind's utility ordering. */}
+        <main
+          className={isExplore ? cn('flex min-h-0 min-w-0 flex-1', DOCK_DIRECTION[dockSide]) : 'hidden'}
+          aria-hidden={!isExplore || undefined}
+        >
             <div className="flex min-h-0 min-w-0 flex-col" style={{ flexGrow: isMaximized ? 0 : 1, flexBasis: isMaximized ? 2 : '0%' }}>
               <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
                 <div
@@ -130,8 +139,7 @@ export const AppShell = () => {
             </div>
 
             <BottomDrawer />
-          </main>
-        )}
+        </main>
       </div>
 
       <SettingsDialog />

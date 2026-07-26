@@ -1,5 +1,7 @@
-import { BarChart3, Database, Gauge, NotebookPen, X } from 'lucide-react';
+import { useRef, type ChangeEvent } from 'react';
+import { BarChart3, Database, Gauge, GitCompareArrows, NotebookPen, X } from 'lucide-react';
 import { useStore } from '../../store/useStore';
+import { parseStory } from '../../services/storyService';
 import type { AlurStory } from '../../types/story';
 import type { ComparisonResult, ExplainCard } from '../../types/visualAnalytics';
 import { ComparisonMapEvidence, ComparisonRecordsEvidence } from '../Compare/ComparisonEvidenceViews';
@@ -135,7 +137,21 @@ const EmptyCapture = ({ title }: { title: string }) => (
  */
 export const StoryViewer = ({ story }: { story: AlurStory }) => {
   const closeStory = useStore((state) => state.closeStory);
+  const compareStories = useStore((state) => state.compareStories);
+  const addToast = useStore((state) => state.addToast);
+  const compareInputRef = useRef<HTMLInputElement>(null);
   const sections = story.sections.filter((section) => story.cards.some((card) => card.sectionId === section.id));
+
+  const handleCompareImport = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    try {
+      compareStories(story, parseStory(await file.text()));
+    } catch (error: any) {
+      addToast({ type: 'error', message: `Could not open story: ${error?.message || 'Unknown error'}` });
+    }
+  };
 
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-slate-50">
@@ -145,9 +161,20 @@ export const StoryViewer = ({ story }: { story: AlurStory }) => {
           <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-600">Story</span>
           <span className="truncate text-[13px] font-semibold text-slate-800">{story.title}</span>
         </div>
-        <button type="button" onClick={closeStory} className="flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-50">
-          <X className="h-3.5 w-3.5" /> Close story
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={() => compareInputRef.current?.click()}
+            className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-50"
+            title="Compare this story with another one"
+          >
+            <GitCompareArrows className="h-3.5 w-3.5" /> Compare with…
+          </button>
+          <input ref={compareInputRef} type="file" accept=".json,.alur-story.json,application/json" className="hidden" onChange={handleCompareImport} />
+          <button type="button" onClick={closeStory} className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-50">
+            <X className="h-3.5 w-3.5" /> Close story
+          </button>
+        </div>
       </header>
 
       <main className="min-h-0 flex-1 overflow-y-auto print:overflow-visible">
