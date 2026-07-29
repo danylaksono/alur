@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Calculator, Database, Eye, Filter, GitMerge, Layers, Loader2, Palette, Plus, Search, Workflow, Zap } from 'lucide-react';
+import { Calculator, Database, Eye, Filter, Gauge, GitMerge, Layers, Loader2, Palette, Plus, Search, Workflow, Zap } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { buildWorkflowSQL } from '../../utils/workflowEngine';
 import { nextNodePosition } from '../../utils/nodePlacement';
@@ -19,14 +19,15 @@ const colorStyles: Record<string, { hoverBg: string; hoverBorder: string; iconBg
   cyan: { hoverBg: 'hover:bg-cyan-50', hoverBorder: 'hover:border-cyan-200', iconBg: 'bg-cyan-50', iconHoverBg: 'group-hover:bg-cyan-100' },
 };
 
-type NodeType = 'input' | 'analysis' | 'attribute' | 'filter' | 'aggregate' | 'join' | 'visualisation' | 'output';
+type NodeType = 'input' | 'analysis' | 'attribute' | 'filter' | 'aggregate' | 'allocate' | 'join' | 'visualisation' | 'output';
 
 const nodeCards: Array<{ type: NodeType; icon: typeof Database; title: string; desc: string; color: string; config?: Record<string, unknown> }> = [
   { type: 'input', icon: Database, title: 'Data Input', desc: 'Load Parquet or CSV', color: 'blue' },
   { type: 'analysis', icon: Zap, title: 'Spatial Analysis', desc: 'Buffer, intersect, transform…', color: 'purple' },
   { type: 'attribute', icon: Calculator, title: 'Attribute Calc', desc: 'Add computed columns', color: 'slate' },
   { type: 'filter', icon: Filter, title: 'Filter', desc: 'SQL WHERE conditions', color: 'amber' },
-  { type: 'aggregate', icon: Layers, title: 'Aggregate', desc: 'GROUP BY, dissolve', color: 'orange' },
+  { type: 'aggregate', icon: Layers, title: 'Summarise', desc: 'Group and total, or dissolve', color: 'orange', config: { mode: 'summary', measures: [{ id: 'measure-rows', fn: 'count' }] } },
+  { type: 'allocate', icon: Gauge, title: 'Allocate', desc: 'Spend down a budget or capacity', color: 'amber', config: { mode: 'flag', direction: 'desc' } },
   { type: 'join', icon: GitMerge, title: 'Join', desc: 'Attribute or spatial join', color: 'cyan' },
   { type: 'visualisation', icon: Palette, title: 'Visualisation', desc: 'Attach a reusable map style', color: 'purple', config: { kind: 'choropleth', method: 'quantile', classCount: 5, paletteId: 'teal' } },
   { type: 'output', icon: Eye, title: 'Layer Output', desc: 'Visualize or export the result', color: 'emerald', config: { outputMode: 'visualize' } },
@@ -37,7 +38,8 @@ const nodeLabels: Record<NodeType, string> = {
   analysis: 'Spatial Op',
   attribute: 'Attribute Op',
   filter: 'Filter',
-  aggregate: 'Aggregate',
+  aggregate: 'Summarise',
+  allocate: 'Allocate',
   join: 'Join',
   visualisation: 'Visualisation',
   output: 'Layer Output',

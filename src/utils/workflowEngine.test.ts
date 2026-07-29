@@ -328,3 +328,129 @@ describe('terminal node attribution', () => {
     expect(buildUpToSQL(nodes, edges, 'filter-1').terminalNodeId).toBe('filter-1');
   });
 });
+
+describe('summary aggregation', () => {
+  const summaryNodes = (config: Record<string, unknown>) => ({
+    nodes: [
+      makeNode({ id: 'input-1', data: { label: 'In', type: 'input', config: { tableName: 'cells' } } as any }),
+      makeNode({ id: 'agg-1', type: 'aggregate', data: { label: 'Summarise', type: 'aggregate', config: { mode: 'summary', ...config } } as any }),
+    ],
+    edges: [{ id: 'e1', source: 'input-1', target: 'agg-1' }] as Edge[],
+  });
+
+  it('groups numeric measures by one or more keys', () => {
+    const { nodes, edges } = summaryNodes({
+      groupBy: ['substation_id'],
+      measures: [{ id: 'm1', fn: 'sum', field: 'proposed_kw' }, { id: 'm2', fn: 'count' }],
+    });
+    const sql = buildWorkflowSQL(nodes, edges).sql;
+    expect(sql).toContain('SUM(TRY_CAST("proposed_kw" AS DOUBLE)) AS "sum_proposed_kw"');
+    expect(sql).toContain('COUNT(*) AS "row_count"');
+    expect(sql).toContain('GROUP BY "substation_id"');
+  });
+
+  it('supports several group keys', () => {
+    const { nodes, edges } = summaryNodes({
+      groupBy: ['ward', 'year'],
+      measures: [{ id: 'm1', fn: 'avg', field: 'cost' }],
+    });
+    expect(buildWorkflowSQL(nodes, edges).sql).toContain('GROUP BY "ward", "year"');
+  });
+
+  it('aggregates the whole table when no key is given', () => {
+    const { nodes, edges } = summaryNodes({ measures: [{ id: 'm1', fn: 'sum', field: 'cost' }] });
+    const sql = buildWorkflowSQL(nodes, edges).sql;
+    expect(sql).toContain('SUM(TRY_CAST("cost" AS DOUBLE))');
+    expect(sql).not.toContain('GROUP BY');
+  });
+
+  it('unions the group geometry when asked, so the summary stays mappable', () => {
+    const { nodes, edges } = summaryNodes({
+      groupBy: ['ward'],
+      measures: [{ id: 'm1', fn: 'sum', field: 'cost' }],
+      includeGeometry: true,
+    });
+    const result = buildWorkflowSQL(nodes, edges);
+    expect(result.sql).toContain('ST_Union_Agg("geometry") AS geom_agg');
+    expect(result.geomColumn).toBe('geom_agg');
+  });
+
+  it('reports no geometry column when the summary is a plain table', () => {
+    const { nodes, edges } = summaryNodes({ groupBy: ['ward'], measures: [{ id: 'm1', fn: 'count' }] });
+    expect(buildWorkflowSQL(nodes, edges).geomColumn).toBe('');
+  });
+
+  it('refuses to compile a half-configured measure', () => {
+    const { nodes, edges } = summaryNodes({ measures: [{ id: 'm1', fn: 'sum' }] });
+    expect(() => buildWorkflowSQL(nodes, edges)).toThrow('needs a column');
+  });
+
+  it('still dissolves geometry in spatial mode', () => {
+    const nodes = [
+      makeNode({ id: 'input-1', data: { label: 'In', type: 'input', config: { tableName: 'cells' } } as any }),
+      makeNode({ id: 'agg-1', type: 'aggregate', data: { label: 'Dissolve', type: 'aggregate', config: { operation: 'ST_Union_Agg', groupBy: 'ward' } } as any }),
+    ];
+    const sql = buildWorkflowSQL(nodes, [{ id: 'e1', source: 'input-1', target: 'agg-1' }]).sql;
+    expect(sql).toContain('ST_Union_Agg("geometry") AS geom_agg');
+    expect(sql).toContain('GROUP BY "ward"');
+  });
+});
+
+describe('allocation', () => {
+  const allocateNodes = (config: Record<string, unknown>) => ({
+    nodes: [
+      makeNode({ id: 'input-1', data: { label: 'In', type: 'input', config: { tableName: 'candidates' } } as any }),
+      makeNode({ id: 'alloc-1', type: 'allocate', data: { label: 'Allocate', type: 'allocate', config } as any }),
+    ],
+    edges: [{ id: 'e1', source: 'input-1', target: 'alloc-1' }] as Edge[],
+  });
+
+  it('flags rows against the limit without dropping any', () => {
+    const { nodes, edges } = allocateNodes({ orderBy: 'score', amountField: 'cost', limit: 10000000 });
+    const sql = buildWorkflowSQL(nodes, edges).sql;
+    expect(sql).toContain('ROWS UNBOUNDED PRECEDING');
+    expect(sql).toContain('"cost_status"');
+    expect(sql).not.toContain("WHERE \"cost_status\" = 'within'");
+  });
+
+  it('drops rows past the limit in cut mode', () => {
+    const { nodes, edges } = allocateNodes({ orderBy: 'score', amountField: 'cost', limit: 5000, mode: 'cut' });
+    expect(buildWorkflowSQL(nodes, edges).sql).toContain(`WHERE "cost_status" = 'within'`);
+  });
+
+  it('gives the straddling row a partial share in scale mode', () => {
+    const { nodes, edges } = allocateNodes({ orderBy: 'score', amountField: 'cost', limit: 5000, mode: 'scale' });
+    expect(buildWorkflowSQL(nodes, edges).sql).toContain('"allocated_cost"');
+  });
+
+  it('keeps the upstream geometry, so an allocation is still mappable', () => {
+    const { nodes, edges } = allocateNodes({ orderBy: 'score', amountField: 'cost', limit: 5000 });
+    expect(buildWorkflowSQL(nodes, edges).geomColumn).toBe('geometry');
+  });
+
+  it('refuses to compile without a limit', () => {
+    const { nodes, edges } = allocateNodes({ orderBy: 'score', amountField: 'cost' });
+    expect(() => buildWorkflowSQL(nodes, edges)).toThrow('numeric limit');
+  });
+});
+
+describe('top-N filtering', () => {
+  const topNNodes = (config: Record<string, unknown>) => ({
+    nodes: [
+      makeNode({ id: 'input-1', data: { label: 'In', type: 'input', config: { tableName: 'candidates' } } as any }),
+      makeNode({ id: 'filter-1', type: 'filter', data: { label: 'Top N', type: 'filter', config: { mode: 'top-n', ...config } } as any }),
+    ],
+    edges: [{ id: 'e1', source: 'input-1', target: 'filter-1' }] as Edge[],
+  });
+
+  it('qualifies on rank rather than nesting a subquery', () => {
+    const { nodes, edges } = topNNodes({ field: 'score', count: 50 });
+    const sql = buildWorkflowSQL(nodes, edges).sql;
+    expect(sql).toContain('QUALIFY RANK() OVER (ORDER BY "score" DESC) <= 50');
+  });
+
+  it('refuses to compile without a column or a count', () => {
+    expect(() => buildWorkflowSQL(...Object.values(topNNodes({ count: 50 })) as [any, any])).toThrow('column to rank by');
+    expect(() => buildWorkflowSQL(...Object.values(topNNodes({ field: 'score' })) as [any, any])).toThrow('how many rows');
+  });
+});

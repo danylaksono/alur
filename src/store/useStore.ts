@@ -88,7 +88,7 @@ export type MapLayer = {
 export type WorkflowNode = Node & {
   data: {
     label: string;
-    type: 'input' | 'analysis' | 'attribute' | 'aggregate' | 'filter' | 'join' | 'visualisation' | 'output';
+    type: 'input' | 'analysis' | 'attribute' | 'aggregate' | 'allocate' | 'filter' | 'join' | 'visualisation' | 'output';
     config: any;
   }
 };

@@ -79,13 +79,15 @@ Coordinated visual-analytics shell: the main canvas provides geographic context 
 ## Features
 
 ### Workflow Engine
-- **8 node types**: Input, Analysis (spatial operations), Attribute (computed columns), Filter (SQL WHERE or map selection), Join (spatial predicate or attribute key), Aggregate (spatial dissolve), Visualisation (style recipe), Output (map preview or file export)
+- **9 node types**: Input, Analysis (spatial operations), Attribute (computed columns), Filter (SQL WHERE, map selection, or top-N by column), Summarise (numeric `GROUP BY`, or geometry dissolve), Allocate (spend a budget or capacity down a ranked list), Join (spatial predicate or attribute key), Visualisation (style recipe), Output (map preview or file export)
 - Unlimited branching — style the same data multiple ways
 - Step-through execution per node or full workflow run
 - Results without geometry register as datasets, so charts, comparison and the report can read them even when the map cannot
 - SQL preview for every stage
 
-Aggregate currently dissolves geometry only; there is no numeric `GROUP BY` node. See [docs/improvement-plan.md](docs/improvement-plan.md).
+**Summarise** computes count, count distinct, sum, average, median, min and max over any number of group keys. Sum, average and median cast to a number; min and max do not, so they still work on dates and text. Merging each group's geometry is optional, and keeps the summary mappable.
+
+**Allocate** answers "who gets served before the money runs out". It accumulates a column in priority order and either flags each row within/over the limit, drops the rows past it, or gives the row straddling it a partial share. Partitioning gives each group its own limit rather than sharing one.
 
 ### Map visualisation
 - **Choropleth** — numeric classification with equal interval or quantile breaks, configurable class count and palette

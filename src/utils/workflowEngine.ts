@@ -2,6 +2,15 @@ import type { Edge } from '@xyflow/react';
 import type { WorkflowNode } from '../store/useStore';
 import type { LayerVisualisation } from '../types/visualisation';
 import { spatialFunctions } from './spatialFunctions';
+import {
+  allocationErrors,
+  buildAllocationSelects,
+  buildMeasureSelect,
+  buildTopNQualify,
+  summaryMeasureErrors,
+  type AllocationConfig,
+  type SummaryMeasure,
+} from './aggregationSql';
 
 /**
  * Workflow Engine
@@ -330,19 +339,63 @@ export function buildWorkflowSQL(nodes: WorkflowNode[], edges: Edge[], options?:
       const source = parentAliases[0] || lastAlias;
       if (!source) throw new Error(`Aggregate node "${node.id}" has no source.`);
       const meta = nodeMetadata.get(source)!;
-      const operation = config?.operation || 'ST_Union_Agg';
-      const groupBy = config?.groupBy || '';
-      
-      const selectClause = groupBy 
-        ? `${qi(groupBy)}, ${operation}(${qi(meta.geom)}) AS geom_agg`
-        : `${operation}(${qi(meta.geom)}) AS geom_agg`;
-      
-      const groupByClause = groupBy ? ` GROUP BY ${qi(groupBy)}` : '';
-      
-      ctes.push(
-        `${alias} AS (\n  SELECT ${selectClause}\n  FROM ${source}${groupByClause}\n)`
-      );
-      nodeMetadata.set(alias, { geom: 'geom_agg', crs: meta.crs });
+      const mode = config?.mode === 'summary' ? 'summary' : 'spatial';
+
+      if (mode === 'summary') {
+        const groupFields: string[] = (Array.isArray(config?.groupBy) ? config.groupBy : [config?.groupBy])
+          .filter((field: unknown): field is string => typeof field === 'string' && field.length > 0);
+        const measures: SummaryMeasure[] = Array.isArray(config?.measures) ? config.measures : [];
+        const errors = summaryMeasureErrors(measures);
+        if (errors.length) throw new Error(`Aggregate node "${node.id}": ${errors[0]}`);
+
+        const measureSelects = measures.map(buildMeasureSelect).filter((select): select is string => Boolean(select));
+        // Unioning the group geometry keeps the summary mappable. Without it
+        // the result is a plain table, which is a legitimate outcome — it just
+        // cannot be drawn.
+        const keepsGeometry = Boolean(config?.includeGeometry && meta.geom && groupFields.length);
+        const selects = [
+          ...groupFields.map((field) => qi(field)),
+          ...measureSelects,
+          ...(keepsGeometry ? [`ST_Union_Agg(${qi(meta.geom)}) AS geom_agg`] : []),
+        ];
+        const groupByClause = groupFields.length ? `\n  GROUP BY ${groupFields.map(qi).join(', ')}` : '';
+
+        ctes.push(`${alias} AS (\n  SELECT ${selects.join(', ')}\n  FROM ${source}${groupByClause}\n)`);
+        nodeMetadata.set(alias, { geom: keepsGeometry ? 'geom_agg' : '', crs: meta.crs });
+        lastAlias = alias;
+      } else {
+        const operation = config?.operation || 'ST_Union_Agg';
+        const groupBy = typeof config?.groupBy === 'string' ? config.groupBy : '';
+
+        const selectClause = groupBy
+          ? `${qi(groupBy)}, ${operation}(${qi(meta.geom)}) AS geom_agg`
+          : `${operation}(${qi(meta.geom)}) AS geom_agg`;
+
+        const groupByClause = groupBy ? ` GROUP BY ${qi(groupBy)}` : '';
+
+        ctes.push(
+          `${alias} AS (\n  SELECT ${selectClause}\n  FROM ${source}${groupByClause}\n)`
+        );
+        nodeMetadata.set(alias, { geom: 'geom_agg', crs: meta.crs });
+        lastAlias = alias;
+      }
+    } else if (type === 'allocate') {
+      const source = parentAliases[0] || lastAlias;
+      if (!source) throw new Error(`Allocation node "${node.id}" has no source.`);
+      const meta = nodeMetadata.get(source)!;
+      const errors = allocationErrors(config || {});
+      if (errors.length) throw new Error(`Allocation node "${node.id}": ${errors[0]}`);
+
+      const allocation = config as AllocationConfig;
+      const { columns, selects } = buildAllocationSelects(allocation);
+      const inner = `SELECT *, ${selects.join(', ')}\n    FROM ${source}`;
+
+      // A cut-off has to filter on the window result, which cannot be
+      // referenced from the same SELECT, so it wraps rather than qualifying.
+      ctes.push(allocation.mode === 'cut'
+        ? `${alias} AS (\n  SELECT *\n  FROM (\n    ${inner}\n  )\n  WHERE ${qi(columns.status)} = 'within'\n)`
+        : `${alias} AS (\n  ${inner}\n)`);
+      nodeMetadata.set(alias, meta);
       lastAlias = alias;
     } else if (type === 'filter') {
       const source = parentAliases[0] || lastAlias;
@@ -352,7 +405,14 @@ export function buildWorkflowSQL(nodes: WorkflowNode[], edges: Edge[], options?:
       const selectionIds = Array.isArray(config?.selectionIds)
         ? config.selectionIds.map(String).filter(Boolean)
         : [];
-      if (selectionIds.length) {
+      if (config?.mode === 'top-n') {
+        if (!config?.field) throw new Error(`Filter node "${node.id}" needs a column to rank by.`);
+        const count = Number(config?.count);
+        if (!Number.isFinite(count) || count < 1) throw new Error(`Filter node "${node.id}" needs how many rows to keep.`);
+        ctes.push(
+          `${alias} AS (\n  SELECT * FROM ${source}\n  QUALIFY ${buildTopNQualify(config.field, count, config?.direction === 'asc' ? 'asc' : 'desc')}\n)`
+        );
+      } else if (selectionIds.length) {
         const selectedValues = selectionIds.map((id: string) => `'${id.replace(/'/g, "''")}'`).join(', ');
         const geometryPredicate = meta.geom ? ` WHERE ${qi(meta.geom)} IS NOT NULL` : '';
         ctes.push(

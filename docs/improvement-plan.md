@@ -1,6 +1,6 @@
 # ALUR Improvement Plan — Analytical Depth
 
-**Date:** 2026-07-29 · **Status:** Workstream 0 done, the rest proposed · **Supersedes nothing** (ROADMAP.md covers the prototype→product phases, all complete)
+**Date:** 2026-07-29 · **Status:** Workstreams 0 and 2 done, the rest proposed · **Supersedes nothing** (ROADMAP.md covers the prototype→product phases, all complete)
 
 ## Framing
 
@@ -107,41 +107,33 @@ Perturb each weight by ±x% in turn, recompute, and report how much the ranking 
 
 ---
 
-## Workstream 2 — Aggregate and constraint nodes
+## Workstream 2 — Aggregate and constraint nodes · **done**
 
 **Generic pitch:** group-by that keeps your numbers, and "take from the top until the budget runs out".
 
 ### 2.1 Numeric Aggregate node
 
-The current Aggregate node only aggregates geometry: [workflowEngine.ts:325](../src/utils/workflowEngine.ts#L325) emits `operation(geom) AS geom_agg` and drops every attribute, and the operation list is filtered to `category === 'Aggregate'` in `spatialFunctions`, which is entirely `ST_*`. **There is no SUM/AVG group-by anywhere in the node set.** For a DuckDB-backed analytics tool this is the most conspicuous hole in the product, independent of any planning use case.
+The Aggregate node only aggregated geometry: it emitted `operation(geom) AS geom_agg` and dropped every attribute, and its function list was filtered to `category === 'Aggregate'`, which is entirely `ST_*`. **There was no SUM/AVG group-by anywhere in the node set** — the most conspicuous hole in the product, independent of any planning use case.
 
-Add: multiple measures (`SUM`, `AVG`, `COUNT`, `COUNT DISTINCT`, `MIN`, `MAX`, `MEDIAN`, `QUANTILE_CONT`, `STRING_AGG`), multiple group keys, optional geometry union alongside. `GROUP BY ALL` keeps the generated SQL readable.
+**Done.** The node now has two modes, following the Join node's precedent. `summary` takes any number of group keys and any number of measures (count, count distinct, sum, average, median, min, max), with an optional merge of each group's geometry so the result stays mappable. `spatial` is the previous dissolve behaviour, unchanged, and remains the default for nodes that already exist in saved projects.
 
-### 2.2 Running-total selection node
+Sum, average and median cast through `TRY_CAST(… AS DOUBLE)` so numeric text columns still add up; min and max deliberately do not, so they keep working on dates and text.
 
-"Order by X, accumulate Y, keep rows until the cumulative total reaches L; flag the rest." One window function:
+### 2.2 Running-total allocation node
 
-```sql
-SELECT *,
-       SUM(cost) OVER (ORDER BY score DESC ROWS UNBOUNDED PRECEDING) AS cumulative_cost,
-       CASE WHEN SUM(cost) OVER (ORDER BY score DESC ROWS UNBOUNDED PRECEDING) <= 10000000
-            THEN 'within' ELSE 'over' END AS budget_status
-FROM ranked
-```
+**Done.** A new `allocate` node type. It accumulates a column in priority order with `SUM(…) OVER (… ROWS UNBOUNDED PRECEDING)` and offers three outcomes: `flag` keeps every row and marks it within or over the limit, `cut` drops the rows past it, and `scale` gives the row straddling the limit a partial share via `LEAST(amount, GREATEST(0, remaining))`.
 
-Optional partition key turns it into per-group allocation (budget per ward, capacity per substation). Optional scale-down mode emits a fractional allocation for the boundary row rather than a hard cut.
-
-This node plus 2.1 is what makes constraint reconciliation expressible in the graph instead of in the SQL tab.
+`scale` earns its place because a hard cut-off silently discards the row straddling the limit, which in an allocation is usually the most interesting one. An optional partition key gives each group its own budget rather than sharing one.
 
 ### 2.3 Top-N via `QUALIFY`
 
-`QUALIFY` filters on a window function without a subquery, which is exactly "take the top 50 by score":
+**Done.** A `top-n` mode on the Filter node, compiling to `QUALIFY RANK() OVER (ORDER BY … ) <= N`. `RANK` rather than `ROW_NUMBER` so ties are kept together — dropping one of two identically scored candidates on row order alone is not a decision anyone made, and the node's help text says so.
 
-```sql
-SELECT * FROM scored QUALIFY RANK() OVER (ORDER BY score DESC) <= 50
-```
+Previously this took an Attribute node with a hand-written `ROW_NUMBER()` followed by a second Filter node.
 
-Fold into the Filter node as a "top N by column" mode. Currently a user has to write an Attribute node with `ROW_NUMBER()` and then a second Filter node — workable but obscure.
+### Verification
+
+The generated SQL was executed against real DuckDB-Wasm in a browser, not just string-matched in unit tests: two-key `GROUP BY` over 25,000 rows producing 45 groups, `MIN` surviving on a text column, all three allocation modes emitting their expected columns, `cut` keeping strictly fewer rows than `flag` (63 vs 25,000), partitioning admitting more rows than a shared limit (58 vs 6), and a composed score → top-N → allocate → summarise chain running end to end.
 
 ---
 
@@ -273,10 +265,9 @@ Chapter 9's companion discussion flags that a natural-language interface does no
 | Order | Work | Rationale |
 | --- | --- | --- |
 | ~~1~~ | ~~W0 repairs~~ **done** | W0.1 blocked Workstreams 1 and 2; W0.3 left a score compiler that 1.1 builds on |
-| 2 | W2.1 numeric aggregate | Biggest product hole, no design risk |
+| ~~2~~ | ~~W2 aggregate, allocate, top-N~~ **done** | Biggest product hole, no design risk; verified against real DuckDB in the browser |
 | 3 | W1 composite score | Highest analytical leverage; needs W0.1 to be comparable |
 | 4 | W3 filter transparency | Independent, moderate cost |
-| 5 | W2.2 running-total, W2.3 QUALIFY | Small once W2.1 lands |
 | 6 | W5.1 OPFS, W5.2 SUMMARIZE, W5.3 duckdb_functions | Engine work, parallelisable |
 | 7 | W0.4 temporal view, W5.7 ASOF | Together they make time comparison real |
 | 8 | W4 workflow macros | Largest design surface; benefits from everything above existing first |

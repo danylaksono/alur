@@ -8,8 +8,8 @@ export const llmToolDefinitions = [
         id: { type: 'string', description: 'Unique identifier for the node (optional).' },
         type: {
           type: 'string',
-          enum: ['input', 'analysis', 'attribute', 'aggregate', 'filter', 'join', 'visualisation', 'output'],
-          description: 'The type of node to create. "join" joins two inputs (A=left keeps geometry, B=right attributes get an r_ prefix); connect A to input-0 and B to input-1.'
+          enum: ['input', 'analysis', 'attribute', 'aggregate', 'allocate', 'filter', 'join', 'visualisation', 'output'],
+          description: 'The type of node to create. "join" joins two inputs (A=left keeps geometry, B=right attributes get an r_ prefix); connect A to input-0 and B to input-1. "aggregate" summarises numbers by group (mode="summary") or dissolves geometry (mode="spatial"). "allocate" works down rows in priority order spending a budget or capacity until a limit is reached.'
         },
         label: { type: 'string', description: 'Human-readable label for the node.' },
         position: {
@@ -29,9 +29,34 @@ export const llmToolDefinitions = [
             distance: { type: 'number', description: 'For ST_Buffer: the buffer distance.' },
             expression: { type: 'string', description: 'For attribute nodes: the SQL expression.' },
             resultField: { type: 'string', description: 'For attribute nodes: the name of the new field.' },
-            groupBy: { type: 'string', description: 'For aggregate nodes: the column name to group by.' },
-            condition: { type: 'string', description: 'For filter nodes: the SQL WHERE condition (e.g. need > 10).' },
-            mode: { type: 'string', enum: ['spatial', 'attribute'], description: 'For join nodes: spatial predicate join or attribute key join.' },
+            groupBy: { type: 'string', description: 'For aggregate nodes: the column to group by. Omit to collapse the whole table to one row.' },
+            measures: {
+              type: 'array',
+              description: 'For aggregate nodes with mode="summary": what to compute per group.',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  fn: { type: 'string', enum: ['count', 'count_distinct', 'sum', 'avg', 'median', 'min', 'max'] },
+                  field: { type: 'string', description: 'The column to aggregate. Not needed for "count", which counts rows.' },
+                  alias: { type: 'string', description: 'Output column name. Derived from the function and column when omitted.' },
+                },
+                required: ['fn'],
+              },
+            },
+            includeGeometry: { type: 'boolean', description: 'For aggregate nodes with mode="summary" and a group column: merge each group\'s geometry so the summary can still be mapped.' },
+            orderBy: { type: 'string', description: 'For allocate nodes: the column deciding who is served first (usually a score).' },
+            amountField: { type: 'string', description: 'For allocate nodes: the column being consumed, such as cost or capacity.' },
+            limit: { type: 'number', description: 'For allocate nodes: how much there is to go round.' },
+            partitionBy: { type: 'string', description: 'For allocate nodes: give each value of this column its own limit instead of sharing one.' },
+            count: { type: 'number', description: 'For filter nodes with mode="top-n": how many rows to keep. Ties are kept together.' },
+            direction: { type: 'string', enum: ['desc', 'asc'], description: 'For allocate and top-n filter nodes: desc serves the highest values first.' },
+            condition: { type: 'string', description: 'For filter nodes with mode="condition": the SQL WHERE condition (e.g. need > 10).' },
+            mode: {
+              type: 'string',
+              enum: ['spatial', 'attribute', 'summary', 'condition', 'top-n', 'flag', 'cut', 'scale'],
+              description: 'Join: "spatial" or "attribute". Aggregate: "summary" (numbers) or "spatial" (dissolve geometry). Filter: "condition" or "top-n". Allocate: "flag" keeps every row and marks where the limit hit, "cut" drops rows past it, "scale" gives the straddling row a partial share.',
+            },
             joinType: { type: 'string', enum: ['left', 'inner'], description: 'For join nodes: left join keeps unmatched A rows.' },
             predicate: { type: 'string', enum: ['ST_Intersects', 'ST_Within', 'ST_Contains', 'ST_DWithin'], description: 'For spatial join nodes: the predicate.' },
             leftKey: { type: 'string', description: 'For attribute join nodes: key column on input A.' },

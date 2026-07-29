@@ -22,7 +22,9 @@ Playwright is not a project dep — install it in a scratch dir (`npm i playwrig
 `npx playwright install chromium` once. Drive with a node script, e.g.:
 
 - First-run: expect the "Start with your data" empty-state card over a world-view map.
-- Ingest data: `page.locator('header input[type="file"]').setInputFiles('data_sample/need_london.parquet')`
+- Ingest data: `page.locator('#alur-file-input').setInputFiles('data_sample/need_london.parquet')`
+  (there are now four hidden file inputs — project open, story open, data, and one more — so a
+  `header input[type="file"]` locator is a strict-mode violation; use the id)
   → success toast `Loaded 25,000 features from need_london.parquet.` (~2-5s; the 51 MB
   yogyakarta file also loads in ~3s once the dev server is warm — first-ever load can be much slower).
 - Bottom drawer tabs: buttons named **Workflow / Table / SQL**; collapse/maximize via
@@ -57,4 +59,11 @@ store state directly instead of scraping the DOM.
   before render has no effect there. Don't copy that pattern for runtime verification.
 - Toasts auto-dismiss; wait for text with a generous regex including error variants
   (`/Loaded [\d,.]+ features|Error loading file/`).
-- `npm run lint` is broken (no ESLint config in repo). Use `npx tsc --noEmit`.
+- `npm run lint` works (`.eslintrc.cjs`, `--max-warnings 0`). Run it alongside `npx tsc --noEmit`.
+- The **Execute Workflow** button only exists while the workflow surface is open. Call
+  `window.__alurStore.getState().navigate('workflow')` before looking for it.
+- Toasts auto-dismiss, so reading `store.toasts` after an action is racy. Assert on durable
+  state instead — `datasetRegistry['workflow:<nodeId>']`, `mapLayers`, feature counts.
+- `data_sample/need_london.parquet` is EPC/energy data: `REGION`, `PROP_TYPE`,
+  `COUNCIL_TAX_BAND`, `IMD_BAND_ENG`, `EPC`, `Gcons2005..2023`, `Econs2005..2023`,
+  `Latitude`, `Longitude` — 95 columns, 25,000 rows. There is no `need` or `borough` column.
