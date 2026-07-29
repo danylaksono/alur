@@ -79,7 +79,7 @@ Coordinated visual-analytics shell: the main canvas provides geographic context 
 ## Features
 
 ### Workflow Engine
-- **10 node types**: Input, Analysis (spatial operations), Attribute (computed columns), Score (weighted multi-criteria ranking), Filter (SQL WHERE, map selection, or top-N by column), Summarise (numeric `GROUP BY`, or geometry dissolve), Allocate (spend a budget or capacity down a ranked list), Join (spatial predicate or attribute key), Visualisation (style recipe), Output (map preview or file export)
+- **10 node types**: Input, Analysis (spatial operations), Attribute (computed columns), Score (weighted multi-criteria ranking), Filter (SQL WHERE, map selection, top-N by column, or named conditions that record what they excluded), Summarise (numeric `GROUP BY`, or geometry dissolve), Allocate (spend a budget or capacity down a ranked list), Join (spatial predicate or attribute key), Visualisation (style recipe), Output (map preview or file export)
 - Unlimited branching — style the same data multiple ways
 - Step-through execution per node or full workflow run
 - Results without geometry register as datasets, so charts, comparison and the report can read them even when the map cannot
@@ -108,6 +108,14 @@ All styles are compiled to native MapLibre expressions — no hand-written JSON.
 ### Composite scoring
 
 The **Score** panel in the left rail is where weights become arguable rather than declared. Moving a weight re-ranks the list underneath it against live data, each row carries a stacked bar of its criterion contributions, and a sensitivity strip reports how far the ranking moves when each weight is nudged — so a criterion that barely disturbs the top of the list is visibly not worth arguing over. Any model built there can be handed to the workflow as a Score node, which is what makes the result reproducible and feeds the rest of the pipeline.
+
+### Explaining exclusions
+
+A `WHERE` clause answers what survived; it cannot answer why a particular row did not, because the statement that produces the answer destroys the evidence. The Filter node's **named conditions** mode takes a list of labelled conditions instead of one anonymous clause, and writes on every row which ones it failed — `alur_excluded`, `alur_excluded_by` and `alur_excluded_count`. Conditions are **hard** (can remove a row) or **soft** (only marks it), so near-misses stay visible instead of being lost. Set the outcome to *keep them, marked* and nothing is removed at all.
+
+The reasons are plain text, so they group in a Summarise node, colour a map through the category renderer and export to CSV without anything downstream needing to know they are special.
+
+Inside the node, a **constraint funnel** measures each condition against the real upstream rows and reports both what it removes on its own and what it removes that the earlier conditions had not already. The gap is the useful part: a condition that removes thousands alone but nothing in sequence does not bind, which no surviving row count would ever tell you.
 
 ### Compare, cohorts and reporting
 - **Cohorts** — name and save a filtered subset, then compare it against another cohort or the remainder, with effect sizes and explicit denominator and missing-value notes
@@ -173,6 +181,7 @@ src/
 │   ├── classification.ts        # Profiling, classification, vis builders
 │   ├── scoreModel.ts            # Weighted multi-criteria score → SQL
 │   ├── aggregationSql.ts        # Group-by measures, running-total allocation, top-N
+│   ├── filterPredicates.ts      # Named conditions → exclusion columns and funnel SQL
 │   ├── visualFilterSql.ts       # VisualFilter → DuckDB WHERE clauses
 │   ├── visualisationResolver.ts # Workflow config → LayerVisualisation
 │   ├── scenarioComparison.ts    # Variant results → ComparisonSpec
@@ -184,6 +193,7 @@ src/
 │   ├── visualAnalyticsService.ts # Filtered rows, profiles, summaries, temporal range
 │   ├── comparisonService.ts     # Comparison alignment and denominators
 │   ├── scoreService.ts          # Live scoring, ranking and weight sensitivity
+│   ├── filterFunnelService.ts   # What each condition in a filter actually removes
 │   ├── layerMaterialization.ts  # Workflow result → layer or dataset
 │   ├── workflowRun.ts           # Registers a run's output across the store
 │   ├── projectService.ts        # Project manifest save / load / migrate
@@ -202,13 +212,14 @@ src/
 
 ## Tests
 
-234 tests across 40 files, covering the visualisation pipeline, workflow SQL generation, store actions, comparison and story services, and a full workflow smoke test. Some of the more load-bearing ones:
+313 tests across 42 files, covering the visualisation pipeline, workflow SQL generation, store actions, comparison and story services, and a full workflow smoke test. Some of the more load-bearing ones:
 
 | Test file | Focus |
 |-----------|-------|
 | `visualisationIntegration.test.ts` | End-to-end pipeline: vis kinds, resolver, branching, interaction state, feature IDs, clustering, cleanup |
 | `workflowEngine.test.ts` | SQL generation, joins, visualisation propagation, terminal-node attribution |
 | `scoreModel.test.ts` | Weighted score compilation: weights, direction, normalisation, missing values |
+| `filterPredicates.test.ts` | Named conditions: NULL handling, hard vs soft, exclusion columns, funnel counts |
 | `comparisonService.test.ts` | Comparison alignment, denominators and warnings |
 | `useStore.test.ts` | Layer state, layout preferences, scenario variants |
 | `storyDiff.test.ts` | Claim matching and divergence reasons between two stories |

@@ -1,6 +1,6 @@
 # ALUR Improvement Plan — Analytical Depth
 
-**Date:** 2026-07-29 · **Status:** Workstreams 0, 1 and 2 done; 3–7 proposed · **Supersedes nothing** (ROADMAP.md covers the prototype→product phases, all complete)
+**Date:** 2026-07-29 · **Status:** Workstreams 0, 1, 2 and 3 done; 4–7 proposed · **Supersedes nothing** (ROADMAP.md covers the prototype→product phases, all complete)
 
 ## Framing
 
@@ -136,28 +136,46 @@ The generated SQL was executed against real DuckDB-Wasm in a browser, not just s
 
 ---
 
-## Workstream 3 — Filter transparency
+## Workstream 3 — Filter transparency · **done**
 
 **Generic pitch:** show me what got filtered out, and which condition removed it.
 
-Today the Filter node emits `SELECT * FROM src WHERE <condition>` and excluded rows vanish. Add a *tag* mode that keeps every row and appends a `_alur_excluded_by` list column naming the failing predicates:
+A `WHERE` clause answers "what survived". It cannot answer "why isn't this row in my result", because the same statement that produces the answer destroys the evidence for it. Every analyst asks the second question.
 
-```sql
-SELECT *,
-       list_filter([
-         CASE WHEN NOT (heat_demand > 5000) THEN 'heat_demand > 5000' END,
-         CASE WHEN NOT (avg_epc < 60)       THEN 'avg_epc < 60' END
-       ], x -> x IS NOT NULL) AS _alur_excluded_by
-FROM src
-```
+### 3.1 Named conditions
 
-Downstream consumers then get this for free:
+**Done.** A third `criteria` mode on the Filter node, alongside `condition` and `top-n`. Instead of one anonymous WHERE clause it takes a list of named conditions — label, expression, severity — and writes three columns on every row:
 
-- **Constraint funnel** — rows remaining after each predicate, as a count sequence. One `COUNT(*) FILTER (WHERE …)` per predicate in a single pass.
-- **Map rendering** — excluded units greyed rather than absent, with the failing condition on hover.
-- **Hard vs soft** — a per-predicate flag. Hard predicates drop; soft predicates only tag and feed the score as a penalty.
+| Column | Meaning |
+| --- | --- |
+| `alur_excluded` | BOOLEAN — would a hard condition have removed this row |
+| `alur_excluded_by` | VARCHAR — the names of every condition it fails, joined |
+| `alur_excluded_count` | INTEGER — how many it fails |
 
-Every analyst wants "why isn't this row in my result". It is also the single change that makes exclusions explainable.
+The base name is configurable. Switching a node from `condition` to `criteria` carries the existing WHERE clause across as the first named condition, so nothing typed is lost to a dropdown.
+
+`alur_excluded_by` is text rather than a `LIST` deliberately: as text it works with the category renderer, the attribute table, the popup, CSV export and the group-by in an Aggregate node without any of them needing to know it exists. That is what "downstream consumers get this for free" has to mean in practice. It is `NULL` rather than empty for rows nothing excluded, because no reason is a genuine absence — verified end to end by grouping 25,000 tagged rows into four reason categories through a Summarise node.
+
+**The bug this mode exists to prevent, in its own compiler.** The obvious tagging expression is `NOT (area > 500)`. For a row where `area` is NULL that evaluates to NULL, so no reason is recorded — while `WHERE area > 500` drops the row anyway, since NULL is not TRUE. The row would vanish with its explanation blank, which is exactly the failure the mode is built to fix. Every condition is therefore coalesced to FALSE before use, so the recorded reason agrees with the filter for every row. Verified against 19,618 genuinely NULL rows: all excluded, none without a reason.
+
+### 3.2 Hard and soft conditions
+
+**Done.** A hard condition can remove a row; a soft one only ever annotates it. This makes near-misses visible instead of lost — a unit failing one soft preference is usually more interesting than one that passes everything.
+
+Dropping and recording are independent, so the reason columns are written either way and only the WHERE clause depends on the outcome. An `outcome` setting picks between removing failures and keeping every row marked.
+
+### 3.3 Constraint funnel
+
+**Done.** A strip inside the Filter node measures every condition against the real upstream rows — the workflow's own CTEs, not a sample — in a single query, and reports two numbers per condition:
+
+- **alone** — what it removes ignoring the others
+- **in sequence** — what it removes that the earlier conditions had not already removed
+
+The gap between them is the point. A condition that removes 7,971 rows on its own but nothing at all once the others have run does not bind, and the user is arguing about a constraint that has no effect. That is invisible from a surviving row count, and the funnel says it in words as well as bars.
+
+### Verification
+
+24 checks against real DuckDB-Wasm in the browser. Beyond the NULL case above: tag and drop modes agreeing exactly on who survives (1,359 of 25,000); no survivor carrying a hard exclusion and no excluded row lacking a reason; rows failing two conditions listing both; a soft condition removing nobody while still marking 2,317 rows; the funnel's predicted survivor count matching what the workflow actually returns; and the redundancy warning firing on a condition contributing zero.
 
 ---
 
@@ -266,7 +284,7 @@ Chapter 9's companion discussion flags that a natural-language interface does no
 | ~~1~~ | ~~W0 repairs~~ **done** | W0.1 blocked Workstreams 1 and 2; W0.3 left a score compiler that 1.1 builds on |
 | ~~2~~ | ~~W2 aggregate, allocate, top-N~~ **done** | Biggest product hole, no design risk; verified against real DuckDB in the browser |
 | ~~3~~ | ~~W1 composite score~~ **done** | Highest analytical leverage; flips Prioritise's diagnostic |
-| 4 | W3 filter transparency | Independent, moderate cost |
+| ~~4~~ | ~~W3 filter transparency~~ **done** | Independent, moderate cost; flips Filter's diagnostic |
 | 6 | W5.1 OPFS, W5.2 SUMMARIZE, W5.3 duckdb_functions | Engine work, parallelisable |
 | 7 | W0.4 temporal view, W5.7 ASOF | Together they make time comparison real |
 | 8 | W4 workflow macros | Largest design surface; benefits from everything above existing first |
@@ -292,7 +310,9 @@ Which generic capability discharges which obligation from the pattern. Read righ
 
 Standing at the time of assessment: Filter capable but failing its diagnostic; Prioritise failing; Intervene partial and resource-blind; **Evaluate already passing**; Refine with the machinery in place but a broken link.
 
-Standing now, after W0, W1 and W2: **Prioritise passes** — weights are manipulable, their effect is immediate, and each candidate's rank is decomposable into what produced it. **Refine's broken link is repaired**, though the lineage view in W6 is still outstanding. Intervene has gained resource limits through Allocate but interventions are still SQL rather than named objects, which is W4. Filter is unchanged and still fails its diagnostic, which is W3 — now the largest remaining gap.
+Standing now, after W0 to W3: **Filter passes** — an excluded row states which named conditions removed it, and the funnel says how much each one is actually doing. **Prioritise passes** — weights are manipulable, their effect is immediate, and each candidate's rank is decomposable into what produced it. **Evaluate still passes.** **Refine's broken link is repaired**, though the lineage view in W6 is still outstanding.
+
+**Intervene is now the only stage short of its diagnostic.** A user can construct a scenario, and Allocate makes its resource limits visible, but the construction is still a chain of anonymous SQL nodes rather than named, reusable operations — which is W4, and which is also where the "does a generic platform need a domain palette" question gets answered.
 
 ---
 

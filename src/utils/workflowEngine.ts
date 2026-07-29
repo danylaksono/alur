@@ -12,6 +12,13 @@ import {
   type SummaryMeasure,
 } from './aggregationSql';
 import { buildContributionSelects, buildScoreExpression, scoreModelErrors } from './scoreModel';
+import {
+  buildExclusionSelects,
+  buildKeepExpression,
+  filterPredicateErrors,
+  type FilterOutcome,
+  type FilterPredicate,
+} from './filterPredicates';
 import type { ScoreModelSpec } from '../types/visualAnalytics';
 
 /**
@@ -440,6 +447,22 @@ export function buildWorkflowSQL(nodes: WorkflowNode[], edges: Edge[], options?:
         if (!Number.isFinite(count) || count < 1) throw new Error(`Filter node "${node.id}" needs how many rows to keep.`);
         ctes.push(
           `${alias} AS (\n  SELECT * FROM ${source}\n  QUALIFY ${buildTopNQualify(config.field, count, config?.direction === 'asc' ? 'asc' : 'desc')}\n)`
+        );
+      } else if (config?.mode === 'criteria') {
+        const predicates: FilterPredicate[] = Array.isArray(config?.predicates) ? config.predicates : [];
+        const errors = filterPredicateErrors(predicates);
+        if (errors.length) throw new Error(`Filter node "${node.id}": ${errors[0]}`);
+
+        const outcome: FilterOutcome = config?.outcome === 'tag' ? 'tag' : 'drop';
+        const keep = buildKeepExpression(predicates);
+        const exclusion = buildExclusionSelects(predicates, config?.exclusionField || undefined)!;
+        // Dropping and recording are independent: a soft condition annotates a
+        // row that survives, so the reason columns are written either way and
+        // only the WHERE clause depends on the outcome.
+        const where = outcome === 'drop' && keep ? `\n    WHERE ${keep}` : '';
+
+        ctes.push(
+          `${alias} AS (\n  SELECT * EXCLUDE (${qi(exclusion.intermediate)}), ${exclusion.outer.join(', ')}\n  FROM (\n    SELECT *, ${exclusion.inner.join(', ')}\n    FROM ${source}${where}\n  )\n)`
         );
       } else if (selectionIds.length) {
         const selectedValues = selectionIds.map((id: string) => `'${id.replace(/'/g, "''")}'`).join(', ');

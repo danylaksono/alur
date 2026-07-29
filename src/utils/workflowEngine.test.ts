@@ -70,6 +70,71 @@ describe('buildWorkflowSQL', () => {
     expect(result.sql).toContain('WHERE population > 1000');
   });
 
+  it('records why each row was excluded and still removes the failures', () => {
+    const nodes: WorkflowNode[] = [
+      makeNode({ id: 'src', data: { label: 'Src', type: 'input', config: { tableName: 'data' } } }),
+      makeNode({
+        id: 'flt',
+        position: { x: 200, y: 0 },
+        data: {
+          label: 'Eligibility',
+          type: 'filter',
+          config: {
+            mode: 'criteria',
+            predicates: [
+              { id: 'a', label: 'Large enough', expression: 'area > 500', severity: 'hard' },
+              { id: 'b', label: 'Near a stop', expression: 'stop_m < 400', severity: 'soft' },
+            ],
+          },
+        },
+      }),
+    ];
+    const edges: Edge[] = [{ id: 'e1', source: 'src', target: 'flt', type: 'smoothstep' }];
+    const result = buildWorkflowSQL(nodes, edges);
+
+    expect(result.sql).toContain('WHERE COALESCE((area > 500), FALSE)');
+    expect(result.sql).toContain("THEN 'Large enough'");
+    expect(result.sql).toContain('AS "alur_excluded_by"');
+    expect(result.sql).toContain('AS "alur_excluded_count"');
+    // The intermediate list is consumed by the outer projection and dropped,
+    // so downstream nodes never see it.
+    expect(result.sql).toContain('EXCLUDE ("__alur_exclusion_reasons")');
+  });
+
+  it('keeps every row when the filter only tags', () => {
+    const nodes: WorkflowNode[] = [
+      makeNode({ id: 'src', data: { label: 'Src', type: 'input', config: { tableName: 'data' } } }),
+      makeNode({
+        id: 'flt',
+        position: { x: 200, y: 0 },
+        data: {
+          label: 'Eligibility',
+          type: 'filter',
+          config: {
+            mode: 'criteria',
+            outcome: 'tag',
+            predicates: [{ id: 'a', label: 'Large enough', expression: 'area > 500', severity: 'hard' }],
+          },
+        },
+      }),
+    ];
+    const edges: Edge[] = [{ id: 'e1', source: 'src', target: 'flt', type: 'smoothstep' }];
+    const result = buildWorkflowSQL(nodes, edges);
+
+    expect(result.sql).toContain('AS "alur_excluded"');
+    // Tagging must not filter: the exclusion is recorded, not enacted.
+    expect(result.sql).not.toContain('WHERE COALESCE');
+  });
+
+  it('rejects a criteria filter with no conditions', () => {
+    const nodes: WorkflowNode[] = [
+      makeNode({ id: 'src', data: { label: 'Src', type: 'input', config: { tableName: 'data' } } }),
+      makeNode({ id: 'flt', position: { x: 200, y: 0 }, data: { label: 'Filter', type: 'filter', config: { mode: 'criteria', predicates: [] } } }),
+    ];
+    const edges: Edge[] = [{ id: 'e1', source: 'src', target: 'flt', type: 'smoothstep' }];
+    expect(() => buildWorkflowSQL(nodes, edges)).toThrow(/at least one condition/i);
+  });
+
   it('generates a reproducible row-selection filter workflow', () => {
     const nodes: WorkflowNode[] = [
       makeNode({ id: 'src', data: { label: 'Src', type: 'input', config: { tableName: 'data' } } }),

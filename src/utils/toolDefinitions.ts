@@ -74,10 +74,26 @@ export const llmToolDefinitions = [
             count: { type: 'number', description: 'For filter nodes with mode="top-n": how many rows to keep. Ties are kept together.' },
             direction: { type: 'string', enum: ['desc', 'asc'], description: 'For allocate and top-n filter nodes: desc serves the highest values first.' },
             condition: { type: 'string', description: 'For filter nodes with mode="condition": the SQL WHERE condition (e.g. need > 10).' },
+            predicates: {
+              type: 'array',
+              description: 'For filter nodes with mode="criteria": named conditions. Each row keeps a record of which ones it fails, so exclusions can be explained instead of the rows simply disappearing.',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  label: { type: 'string', description: 'What this condition means in plain words, e.g. "Large enough site". Used as the recorded exclusion reason.' },
+                  expression: { type: 'string', description: 'The SQL condition, e.g. area_m2 >= 500.' },
+                  severity: { type: 'string', enum: ['hard', 'soft'], description: '"hard" can remove the row; "soft" only marks it, so near-misses stay visible.' },
+                },
+                required: ['expression'],
+              },
+            },
+            outcome: { type: 'string', enum: ['drop', 'tag'], description: 'For filter nodes with mode="criteria": "drop" removes rows failing a hard condition, "tag" keeps every row and only records the failures. Defaults to drop.' },
+            exclusionField: { type: 'string', description: 'For filter nodes with mode="criteria": base name for the recorded columns. Defaults to alur_excluded.' },
             mode: {
               type: 'string',
-              enum: ['spatial', 'attribute', 'summary', 'condition', 'top-n', 'flag', 'cut', 'scale'],
-              description: 'Join: "spatial" or "attribute". Aggregate: "summary" (numbers) or "spatial" (dissolve geometry). Filter: "condition" or "top-n". Allocate: "flag" keeps every row and marks where the limit hit, "cut" drops rows past it, "scale" gives the straddling row a partial share.',
+              enum: ['spatial', 'attribute', 'summary', 'condition', 'top-n', 'criteria', 'flag', 'cut', 'scale'],
+              description: 'Join: "spatial" or "attribute". Aggregate: "summary" (numbers) or "spatial" (dissolve geometry). Filter: "condition", "top-n", or "criteria" (named conditions that record why each row was excluded). Allocate: "flag" keeps every row and marks where the limit hit, "cut" drops rows past it, "scale" gives the straddling row a partial share.',
             },
             joinType: { type: 'string', enum: ['left', 'inner'], description: 'For join nodes: left join keeps unmatched A rows.' },
             predicate: { type: 'string', enum: ['ST_Intersects', 'ST_Within', 'ST_Contains', 'ST_DWithin'], description: 'For spatial join nodes: the predicate.' },
