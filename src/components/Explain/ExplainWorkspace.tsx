@@ -9,7 +9,7 @@ import type { ComparisonResult, ExplainCard, ExplainCardKind, ExplainDocument } 
 import { quoteIdentifier } from '../../utils/visualFilterSql';
 import { cn } from '../../utils/cn';
 import { queryComparison } from '../../services/comparisonService';
-import { ComparisonMapEvidence, ComparisonRecordsEvidence } from '../Compare/ComparisonEvidenceViews';
+import { ComparisonMapEvidence, ComparisonRecordsEvidence, ComparisonTimeEvidence } from '../Compare/ComparisonEvidenceViews';
 import { ExplainOutline } from './ExplainOutline';
 import { ExplainInspector } from './ExplainInspector';
 import { MapEvidence } from './MapEvidence';
@@ -26,6 +26,7 @@ const ComparisonEvidence = ({ result, card, presenting }: { result: ComparisonRe
   const [mapMode, setMapMode] = useState<'multiples' | 'difference'>(card.comparisonMapMode || 'multiples');
   if (spec && card.comparisonView === 'map') return <ComparisonMapEvidence spec={spec} result={result} differenceEligible={spec.operands.length === 2 && spec.alignment.mode === 'entity-keyed' && Boolean(result.differenceSpatialSample)} selectedKey={selectedKey} onSelectKey={setSelectedKey} mode={mapMode} onModeChange={setMapMode} interactive={!presenting || card.presentationInteraction === 'interactive'} />;
   if (spec && card.comparisonView === 'records') return <ComparisonRecordsEvidence spec={spec} result={result} selectedKey={selectedKey} onSelectKey={setSelectedKey} />;
+  if (spec && card.comparisonView === 'time' && result.temporalSeries.length) return <ComparisonTimeEvidence spec={spec} result={result} />;
   const max = Math.max(1, ...result.summaries.flatMap((summary) => summary.values.map((item) => item.value || 0)));
   return <div className="space-y-4">{result.summaries.map((summary) => <div key={summary.measureId}><h4 className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{spec?.measures.find((item) => item.id === summary.measureId)?.label || summary.measureId}</h4><div className="mt-2 space-y-2">{summary.values.map((value) => { const operand = spec?.operands.find((item) => item.id === value.operandId); return <div key={value.operandId} className="grid grid-cols-[100px_1fr_64px] items-center gap-2 text-[10px]"><span className="truncate font-semibold text-slate-600">{operand?.label || value.operandId}</span><div className="h-2 rounded-full bg-slate-100"><div className="h-full rounded-full" style={{ width: `${Math.max(2, ((value.value || 0) / max) * 100)}%`, backgroundColor: operand?.colour || '#64748b' }} /></div><span className="text-right tabular-nums">{value.value?.toLocaleString(undefined, { maximumFractionDigits: 2 }) ?? '—'}</span></div>; })}</div></div>)}</div>;
 };

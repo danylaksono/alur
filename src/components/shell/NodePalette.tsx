@@ -4,7 +4,8 @@ import { useStore } from '../../store/useStore';
 import { buildWorkflowSQL } from '../../utils/workflowEngine';
 import { nextNodePosition } from '../../utils/nodePlacement';
 import { spatialFunctions } from '../../utils/spatialFunctions';
-import { materializeWorkflowMapLayer } from '../../services/layerMaterialization';
+import { materializeWorkflowOutput } from '../../services/layerMaterialization';
+import { registerWorkflowResult } from '../../services/workflowRun';
 import { VariantPanel } from '../Variants/VariantPanel';
 import { cn } from '../../utils/cn';
 
@@ -45,7 +46,6 @@ const nodeLabels: Record<NodeType, string> = {
 export const NodePalette = () => {
   const addNode = useStore((s) => s.addNode);
   const duckdbReady = useStore((s) => s.duckdbReady);
-  const addMapLayer = useStore((s) => s.addMapLayer);
   const addToast = useStore((s) => s.addToast);
   const requestWorkflowFit = useStore((s) => s.requestWorkflowFit);
   const nodeCount = useStore((s) => s.nodes.length);
@@ -88,19 +88,26 @@ export const NodePalette = () => {
     try {
       setExecuting(true);
       const workflow = buildWorkflowSQL(nodes, edges);
-      const layer = await materializeWorkflowMapLayer({
+      const result = await materializeWorkflowOutput({
         workflow,
         layerId: workflow.outputLayerName,
         name: 'Workflow Result',
+        sourceNodeId: workflow.terminalNodeId || undefined,
         sourceKind: 'workflow',
         visualisationConfig: workflow.visualisationConfig,
       });
-      if (!layer.featureCount) {
-        addToast({ type: 'warning', message: 'Workflow executed but produced no features.' });
+      if (!result.featureCount) {
+        addToast({ type: 'warning', message: 'Workflow executed but produced no rows.' });
         return;
       }
-      addMapLayer({ ...layer, name: `Workflow Result (${layer.featureCount.toLocaleString()} features)` });
-      addToast({ type: 'success', message: `Workflow complete — ${layer.featureCount.toLocaleString()} features added to the map.` });
+      const rows = result.featureCount.toLocaleString();
+      registerWorkflowResult(result, {
+        nodeId: workflow.terminalNodeId || undefined,
+        layerName: `Workflow Result (${rows} features)`,
+      });
+      addToast({ type: 'success', message: result.kind === 'layer'
+        ? `Workflow complete — ${rows} features added to the map.`
+        : `Workflow complete — ${rows} rows registered. The result has no geometry, so it is not on the map.` });
     } catch (err: any) {
       console.error('Workflow execution error:', err);
       addToast({ type: 'error', message: `Workflow error: ${err.message}` });

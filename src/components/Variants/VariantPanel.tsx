@@ -2,13 +2,8 @@ import { GitBranch, GitCompareArrows, Plus, SlidersHorizontal } from 'lucide-rea
 import { useMemo, useState } from 'react';
 import { useStore, type WorkflowNode } from '../../store/useStore';
 import type { AnalysisVariant, VariantOperation } from '../../types/visualAnalytics';
-import { quoteIdentifier } from '../../utils/visualFilterSql';
+import { buildScoreExpression, equalWeightedScoreModel } from '../../utils/scoreModel';
 import { comparableVariants, comparisonFromVariants } from '../../utils/scenarioComparison';
-
-const weightedScoreExpression = (fields: string[]) => fields.map((field) => {
-  const quoted = quoteIdentifier(field);
-  return `(COALESCE(TRY_CAST(${quoted} AS DOUBLE), 0) - MIN(COALESCE(TRY_CAST(${quoted} AS DOUBLE), 0)) OVER ()) / NULLIF(MAX(COALESCE(TRY_CAST(${quoted} AS DOUBLE), 0)) OVER () - MIN(COALESCE(TRY_CAST(${quoted} AS DOUBLE), 0)) OVER (), 0)`;
-}).join(' + ') || '0';
 
 export const VariantPanel = () => {
   const datasets = useStore((state) => state.datasetRegistry);
@@ -42,9 +37,12 @@ export const VariantPanel = () => {
     const now = Date.now();
     const id = `variant-${now}`;
     const nodeId = `variant-score-${now}`;
-    const operation: VariantOperation = { id: `operation-${now}`, type: 'weighted-score', parameters: { scoreModel: { criteria: fields.map((field) => ({ field, weight: 1 / fields.length, direction: 'higher', normalisation: 'min-max' })), missingValueTreatment: 'zero' }, resultField: 'alur_priority_score' }, assumptions: ['Criteria are equally weighted until edited.', 'Missing numeric values contribute zero.'] };
-    const variant: AnalysisVariant = { id, name: `${dataset.name} prioritisation`, baselineDatasetId: dataset.id, workflowOutputDatasetId: `workflow:${nodeId}`, parameters: {}, assumptions: operation.assumptions || [], operations: [operation], createdAt: now, provenance: { workflowNodeIds: [nodeId], sourceVersion: dataset.sourceUpdatedAt } };
-    const node: WorkflowNode = { id: nodeId, type: 'attribute', position: { x: 360 + useStore.getState().nodes.length * 24, y: 160 + useStore.getState().nodes.length * 18 }, data: { label: 'Weighted priority score', type: 'attribute', config: { expression: `(${weightedScoreExpression(fields)}) / ${fields.length}`, resultField: 'alur_priority_score', variantId: id, scoreModel: operation.parameters.scoreModel } } };
+    const scoreModel = equalWeightedScoreModel(fields);
+    const operation: VariantOperation = { id: `operation-${now}`, type: 'weighted-score', parameters: { scoreModel, resultField: 'alur_priority_score' }, assumptions: ['Criteria are equally weighted until edited.', 'Higher values score better on every criterion.', 'Missing numeric values contribute zero.'] };
+    // No output id yet: the run decides whether the result lands as a layer or
+    // a table, and `registerWorkflowNodeOutput` fills it in afterwards.
+    const variant: AnalysisVariant = { id, name: `${dataset.name} prioritisation`, baselineDatasetId: dataset.id, parameters: {}, assumptions: operation.assumptions || [], operations: [operation], createdAt: now, provenance: { workflowNodeIds: [nodeId], sourceVersion: dataset.sourceUpdatedAt } };
+    const node: WorkflowNode = { id: nodeId, type: 'attribute', position: { x: 360 + useStore.getState().nodes.length * 24, y: 160 + useStore.getState().nodes.length * 18 }, data: { label: 'Weighted priority score', type: 'attribute', config: { expression: buildScoreExpression(scoreModel), resultField: 'alur_priority_score', variantId: id, scoreModel } } };
     addNode(node);
     const sourceNodeId = dataset.source.kind === 'workflow-node' ? dataset.source.nodeId : layers.find((layer) => layer.id === dataset.id)?.sourceNodeId;
     if (sourceNodeId) onConnect({ source: sourceNodeId, target: nodeId, sourceHandle: null, targetHandle: null });

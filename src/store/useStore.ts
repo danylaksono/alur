@@ -366,6 +366,7 @@ export interface AppState {
   removeExplainCard: (cardId: string) => void;
   addVariant: (variant: AnalysisVariant) => void;
   branchVariant: (variantId: string, newId?: string) => void;
+  registerWorkflowNodeOutput: (nodeId: string, datasetId: string) => void;
   updateVariant: (variantId: string, patch: Partial<Omit<AnalysisVariant, 'id' | 'createdAt' | 'parentVariantId'>>) => void;
   removeVariant: (variantId: string) => void;
   addChatMessage: (role: 'user' | 'assistant' | 'system', content: string, data?: { kind?: string; toolName?: string; summary?: string; icon?: string }) => void;
@@ -1723,8 +1724,30 @@ export const useStore = create<AppState>()(persist((set, get) => ({
   branchVariant: (variantId, newId = `variant-${Date.now()}`) => set((state) => {
     const parent = state.visualAnalytics.variants.find((item) => item.id === variantId);
     if (!parent) return state;
-    const branch: AnalysisVariant = structuredClone({ ...parent, id: newId, name: `${parent.name} branch`, parentVariantId: parent.id, workflowOutputDatasetId: undefined, createdAt: Date.now(), provenance: { ...parent.provenance, workflowNodeIds: [] } });
+    // The branch keeps its parent's workflow nodes: a branch with no nodes has
+    // nothing to run, and re-running is the only way it ever gets a result.
+    // The output id is cleared because the branch has not been run yet.
+    const branch: AnalysisVariant = structuredClone({ ...parent, id: newId, name: `${parent.name} branch`, parentVariantId: parent.id, workflowOutputDatasetId: undefined, createdAt: Date.now() });
     return { visualAnalytics: { ...state.visualAnalytics, variants: [...state.visualAnalytics.variants, branch] }, analysisHistory: recordCurrentAnalysis(state, { label: 'Branch analysis variant' }) };
+  }),
+
+  /**
+   * Points every variant produced by this node at the dataset the run created.
+   *
+   * A variant cannot know its output id up front: a result with geometry is
+   * registered under its layer id, one without under its node id, and neither
+   * exists until the workflow runs. Not recorded in history — this is a
+   * consequence of running, not an edit the user should be able to undo.
+   */
+  registerWorkflowNodeOutput: (nodeId, datasetId) => set((state) => {
+    const owns = (variant: AnalysisVariant) => variant.provenance.workflowNodeIds.includes(nodeId);
+    if (!state.visualAnalytics.variants.some(owns)) return state;
+    return {
+      visualAnalytics: {
+        ...state.visualAnalytics,
+        variants: state.visualAnalytics.variants.map((variant) => owns(variant) ? { ...variant, workflowOutputDatasetId: datasetId } : variant),
+      },
+    };
   }),
 
   updateVariant: (variantId, patch) => set((state) => ({

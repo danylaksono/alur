@@ -6,6 +6,7 @@ import { useStore } from '../../store/useStore';
 import type { ComparisonAlignedRecord, ComparisonResult, ComparisonSpec } from '../../types/visualAnalytics';
 import { cn } from '../../utils/cn';
 import { getBasemap } from '../../utils/basemaps';
+import { coordinateExtent, numericExtent } from '../../utils/extent';
 
 type Camera = { longitude: number; latitude: number; zoom: number };
 type Extent = [[number, number], [number, number]];
@@ -26,9 +27,7 @@ const geometryCoordinates = (geometry: GeoJSON.Geometry | null): number[][] => {
 const extentForCollections = (collections: GeoJSON.FeatureCollection[]): Extent | null => {
   const points = collections.flatMap((collection) => collection.features.flatMap((feature) => geometryCoordinates(feature.geometry)));
   if (!points.length) return null;
-  const xs = points.map((point) => point[0]);
-  const ys = points.map((point) => point[1]);
-  return [[Math.min(...xs), Math.min(...ys)], [Math.max(...xs), Math.max(...ys)]];
+  return coordinateExtent(points);
 };
 
 const cameraForExtent = (extent: Extent | null): Camera => {
@@ -42,7 +41,7 @@ const cameraForExtent = (extent: Extent | null): Camera => {
 
 const valueRange = (collections: GeoJSON.FeatureCollection[], property = '__alur_value') => {
   const values = collections.flatMap((collection) => collection.features.map((feature) => feature.properties?.[property])).filter(finite);
-  return values.length ? { min: Math.min(...values), max: Math.max(...values) } : { min: 0, max: 1 };
+  return values.length ? numericExtent(values) : { min: 0, max: 1 };
 };
 
 const colourExpression = (range: { min: number; max: number }, fallback: string, difference: boolean): maplibregl.ExpressionSpecification | string => {
@@ -221,6 +220,84 @@ export const ComparisonMapEvidence = ({ spec, result, differenceEligible, select
 };
 
 const displayValue = (value: number | null) => value === null || !Number.isFinite(value) ? '—' : value.toLocaleString(undefined, { maximumFractionDigits: 3 });
+
+const CHART = { width: 720, height: 200, padding: { top: 12, right: 12, bottom: 24, left: 48 } };
+
+/**
+ * One line per group, per measure, on a shared vertical scale.
+ *
+ * Gaps are drawn as gaps: a period a group has no observation for breaks its
+ * line rather than being bridged, because a straight segment across a missing
+ * quarter reads as measured change when it is really an absence of data.
+ */
+export const ComparisonTimeEvidence = ({ spec, result }: { spec: ComparisonSpec; result: ComparisonResult }) => {
+  const measures = [...new Set(result.temporalSeries.map((series) => series.measureId))];
+  const plotWidth = CHART.width - CHART.padding.left - CHART.padding.right;
+  const plotHeight = CHART.height - CHART.padding.top - CHART.padding.bottom;
+
+  return <div className="space-y-4">
+    {measures.map((measureId) => {
+      const series = result.temporalSeries.filter((item) => item.measureId === measureId);
+      const periods = [...new Set(series.flatMap((item) => item.points.map((point) => point.period)))].sort();
+      const values = series.flatMap((item) => item.points.map((point) => point.value)).filter((value): value is number => value !== null && Number.isFinite(value));
+      const { min, max } = numericExtent(values);
+      // A flat series would otherwise divide by zero; give it a band to sit in.
+      const low = values.length ? Math.min(min, 0) : 0;
+      const high = values.length && max > low ? max : low + 1;
+
+      const x = (period: string) => periods.length < 2
+        ? CHART.padding.left + plotWidth / 2
+        : CHART.padding.left + (periods.indexOf(period) / (periods.length - 1)) * plotWidth;
+      const y = (value: number) => CHART.padding.top + plotHeight - ((value - low) / (high - low)) * plotHeight;
+
+      const gapCount = series.reduce((total, item) => total + item.points.filter((point) => point.value === null).length, 0);
+
+      return <section key={measureId} className="rounded-xl border border-slate-200 bg-white p-4">
+        <div className="mb-3 flex flex-wrap items-baseline justify-between gap-3">
+          <h3 className="text-sm font-bold text-slate-800">{spec.measures.find((item) => item.id === measureId)?.label || measureId}</h3>
+          <div className="flex flex-wrap items-center gap-3 text-[10px] text-slate-600">{series.map((item) => {
+            const operand = spec.operands.find((entry) => entry.id === item.operandId);
+            return <span key={item.operandId} className="flex items-center gap-1.5"><i className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: operand?.colour || '#64748b' }} />{operand?.label || item.operandId}</span>;
+          })}</div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <svg viewBox={`0 0 ${CHART.width} ${CHART.height}`} className="h-52 w-full min-w-[32rem]" role="img" aria-label={`${spec.measures.find((item) => item.id === measureId)?.label || measureId} over time, one line per group`}>
+            <line x1={CHART.padding.left} y1={CHART.padding.top} x2={CHART.padding.left} y2={CHART.padding.top + plotHeight} stroke="#e2e8f0" />
+            <line x1={CHART.padding.left} y1={CHART.padding.top + plotHeight} x2={CHART.width - CHART.padding.right} y2={CHART.padding.top + plotHeight} stroke="#e2e8f0" />
+            <text x={CHART.padding.left - 6} y={CHART.padding.top + 4} textAnchor="end" className="fill-slate-400 text-[9px]">{displayValue(high)}</text>
+            <text x={CHART.padding.left - 6} y={CHART.padding.top + plotHeight} textAnchor="end" className="fill-slate-400 text-[9px]">{displayValue(low)}</text>
+            {periods.length > 0 && <text x={CHART.padding.left} y={CHART.height - 6} className="fill-slate-400 text-[9px]">{periods[0]}</text>}
+            {periods.length > 1 && <text x={CHART.width - CHART.padding.right} y={CHART.height - 6} textAnchor="end" className="fill-slate-400 text-[9px]">{periods[periods.length - 1]}</text>}
+
+            {series.map((item) => {
+              const operand = spec.operands.find((entry) => entry.id === item.operandId);
+              const colour = operand?.colour || '#64748b';
+              const ordered = [...item.points].sort((a, b) => a.period.localeCompare(b.period));
+              // Split into runs of consecutive observed periods so each gap
+              // ends one polyline and starts the next.
+              const runs: Array<Array<{ period: string; value: number }>> = [];
+              ordered.forEach((point) => {
+                if (point.value === null || !Number.isFinite(point.value)) { runs.push([]); return; }
+                if (!runs.length) runs.push([]);
+                runs[runs.length - 1].push({ period: point.period, value: point.value });
+              });
+              return <g key={item.operandId}>
+                {runs.filter((run) => run.length > 1).map((run, index) => <polyline key={`line-${index}`} fill="none" stroke={colour} strokeWidth={2} strokeLinejoin="round" points={run.map((point) => `${x(point.period)},${y(point.value)}`).join(' ')} />)}
+                {runs.flat().map((point) => <circle key={point.period} cx={x(point.period)} cy={y(point.value)} r={2.5} fill={colour}><title>{`${operand?.label || item.operandId} · ${point.period}: ${displayValue(point.value)}`}</title></circle>)}
+              </g>;
+            })}
+          </svg>
+        </div>
+
+        <p className="mt-2 text-[10px] text-slate-600">
+          {periods.length.toLocaleString()} period{periods.length === 1 ? '' : 's'} on a shared scale
+          {gapCount > 0 && ` · ${gapCount.toLocaleString()} missing observation${gapCount === 1 ? '' : 's'} left as gaps rather than joined across`}
+        </p>
+      </section>;
+    })}
+  </div>;
+};
 
 export const ComparisonRecordsEvidence = ({ spec, result, selectedKey, onSelectKey, onUseAsFilter }: {
   spec: ComparisonSpec;

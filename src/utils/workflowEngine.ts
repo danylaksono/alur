@@ -21,6 +21,8 @@ export interface WorkflowResult {
   resultSql: string;
   withClause: string;
   lastAlias: string;
+  /** The node whose output the final CTE holds, so callers can attribute the result back to the graph. */
+  terminalNodeId: string;
   geomColumn: string;
   geomCrs: string;
   outputLayerName: string;
@@ -165,9 +167,11 @@ export function buildWorkflowSQL(nodes: WorkflowNode[], edges: Edge[], options?:
   // Track geometry column and CRS per CTE
   const nodeMetadata = new Map<string, { geom: string; crs: string }>();
   const visualisationMetadata = new Map<string, WorkflowVisualisationConfig>();
+  const nodeIdByAlias = new Map<string, string>();
 
   for (const node of sorted) {
     const alias = cteAlias(node.id);
+    nodeIdByAlias.set(alias, node.id);
     const { type, config } = node.data;
     const parentEdges = [...(parentsMap.get(node.id) || [])].sort((a, b) =>
       String(a.targetHandle || '').localeCompare(String(b.targetHandle || ''))
@@ -406,6 +410,7 @@ export function buildWorkflowSQL(nodes: WorkflowNode[], edges: Edge[], options?:
     resultSql,
     withClause,
     lastAlias,
+    terminalNodeId: nodeIdByAlias.get(lastAlias) || '',
     geomColumn: finalMeta.geom,
     geomCrs: finalMeta.crs,
     outputLayerName: `workflow_${lastAlias}`,

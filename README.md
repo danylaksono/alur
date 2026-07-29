@@ -12,7 +12,7 @@ Maps are one analytical view, not the product boundary: ALUR uses MapLibre when 
 
 | Layer | Technology |
 |-------|-----------|
-| Analytical engine | DuckDB-Wasm (in-browser SQL + `spatial` + `h3` extensions) |
+| Analytical engine | DuckDB-Wasm (in-browser SQL + `spatial` extension) |
 | Linked views | TanStack Table + custom SVG charts + MapLibre GL JS |
 | Workflow editor | XYFlow (React Flow) |
 | State management | Zustand |
@@ -79,21 +79,36 @@ Coordinated visual-analytics shell: the main canvas provides geographic context 
 ## Features
 
 ### Workflow Engine
-- **7 node types**: Input, Analysis (16+ spatial operations), Attribute (computed columns), Filter (SQL WHERE), Aggregate (GROUP BY / dissolve), Visualisation (style recipe), Output (map preview or file export)
+- **8 node types**: Input, Analysis (spatial operations), Attribute (computed columns), Filter (SQL WHERE or map selection), Join (spatial predicate or attribute key), Aggregate (spatial dissolve), Visualisation (style recipe), Output (map preview or file export)
 - Unlimited branching — style the same data multiple ways
 - Step-through execution per node or full workflow run
+- Results without geometry register as datasets, so charts, comparison and the report can read them even when the map cannot
 - SQL preview for every stage
 
-### Map visualisation (7 styles)
+Aggregate currently dissolves geometry only; there is no numeric `GROUP BY` node. See [docs/improvement-plan.md](docs/improvement-plan.md).
+
+### Map visualisation
 - **Choropleth** — numeric classification with equal interval or quantile breaks, configurable class count and palette
 - **Categorical** — top-N categories with stable colour assignment
-- **Graduated symbols** — point radius proportional to a numeric field
+- **Graduated symbols / lines** — radius or width proportional to a numeric field
 - **Heatmap** — dense point aggregation with weight field and intensity controls
 - **Labels** — text annotations with halo, font size, and zoom threshold
 - **Dot density** — DuckDB `ST_GeneratePoints` creates random dots within polygons, proportional to a numeric field
+- **Hexbin / glyph grid** — binned aggregation over dense points
+- **Bivariate** — two numeric fields on a 3×3 colour matrix
+- **Extrusion** — polygon height driven by a numeric field
 - **Clustered points** — MapLibre cluster sources with drill-to-zoom
 
 All styles are compiled to native MapLibre expressions — no hand-written JSON.
+
+### Compare, cohorts and reporting
+- **Cohorts** — name and save a filtered subset, then compare it against another cohort or the remainder, with effect sizes and explicit denominator and missing-value notes
+- **Compare workspace** — two to four groups drawn from datasets, snapshotted filters or cohorts; aligned by summary, by record key, by time or by location; overview, distribution, category, time, map and record views on shared scales
+- **Difference maps** — per-record deltas rendered on a diverging scale when two groups are keyed to the same entities
+- **Scenario variants** — branch a workflow specification, run each branch, and compare the results as groups
+- **Report workspace** — pin charts, KPIs, tables, maps and comparisons as evidence cards, each carrying its own provenance and staleness state; write findings that link to the evidence supporting or contradicting them
+- **Stories** — export a finished, read-only account that renders without the source data, and diff two stories to see where their claims actually disagree
+- **Analysis history** — labelled undo/redo across filters, cohorts, charts and layout, plus bookmarks that restore a whole analytical state
 
 ### Interactive Analytics
 - **Place search** — locate a place or address with Nominatim/OpenStreetMap, then zoom to its bounds
@@ -108,8 +123,8 @@ All styles are compiled to native MapLibre expressions — no hand-written JSON.
 ### ALUR Copilot
 - Natural-language workflow creation (“add a 500m buffer around london wards”)
 - One-shot map styling (“style the need layer as a five-class quantile choropleth”)
-- H3 hexbin generation (“create H3 cells at resolution 7 covering camden”)
-- All 9 chat tools write directly to the Zustand store — map updates immediately
+- Filtering and selection in plain English (“show only wards where need is above 40”)
+- All 13 chat tools write directly to the Zustand store — the map updates immediately
 
 ### Layer Management
 - Visibility toggle, opacity slider, colour swatch, zoom-to-layer, deletion
@@ -145,74 +160,64 @@ src/
 │   ├── visualisation.ts         # LayerVisualisation union, LegendSpec
 │   └── visualAnalytics.ts       # VisualFilter, LayerFeatureSelection, summaries
 ├── utils/
+│   ├── workflowEngine.ts        # Node graph → chained-CTE SQL compiler
 │   ├── mapStyleCompiler.ts      # Visualisation → MapLibre expressions
 │   ├── classification.ts        # Profiling, classification, vis builders
-│   ├── palettes.ts              # Sequential + categorical palettes
+│   ├── scoreModel.ts            # Weighted multi-criteria score → SQL
 │   ├── visualFilterSql.ts       # VisualFilter → DuckDB WHERE clauses
 │   ├── visualisationResolver.ts # Workflow config → LayerVisualisation
-│   ├── featureIdentity.ts       # _alur_feature_id assignment
-│   ├── workflowEngine.ts        # Node graph → SQL compiler
-│   ├── mapStyleExport.ts        # Export map styles as JSON
-│   ├── basemaps.ts              # Basemap tile sources
+│   ├── scenarioComparison.ts    # Variant results → ComparisonSpec
+│   ├── storyDiff.ts             # Claim matching between two stories
+│   ├── fieldCalculator.ts       # Table-view expression parser
 │   └── toolDefinitions.ts       # LLM tool schemas
 ├── services/
 │   ├── duckdb.ts                # DuckDB-Wasm init + query interface
 │   ├── visualAnalyticsService.ts # Filtered rows, profiles, summaries, temporal range
-│   └── dotDensityService.ts     # ST_GeneratePoints / ST_Dump dot generation
+│   ├── comparisonService.ts     # Comparison alignment and denominators
+│   ├── layerMaterialization.ts  # Workflow result → layer or dataset
+│   ├── workflowRun.ts           # Registers a run's output across the store
+│   ├── projectService.ts        # Project manifest save / load / migrate
+│   └── storyService.ts          # Story export, parse and disclosure
 ├── components/
-│   ├── Visualisation/
-│   │   ├── VisualisationPanel.tsx # Unified style editor
-│   │   ├── FilterChips.tsx        # Active filter display
-│   │   ├── SelectionSummary.tsx   # DuckDB-backed metrics
-│   │   └── TemporalSlider.tsx     # Animated time slider
-│   ├── Map/
-│   │   ├── MapView.tsx            # MapLibre integration + layer sync
-│   │   └── LegendControl.tsx      # Map-corner legend overlay
-│   ├── Flow/
-│   │   └── VisualisationNode.tsx  # Workflow style recipe node
-│   ├── shell/
-│   │   ├── AppShell.tsx           # Map-first layout composition
-│   │   ├── Header.tsx             # Add data, New project, Settings
-│   │   ├── LeftRail.tsx           # Icon rail: Layers / Charts / Copilot
-│   │   ├── LeftPanel.tsx          # Collapsible panel for the active rail tab
-│   │   ├── BottomDrawer.tsx       # Resizable drawer: Workflow / Table / SQL
-│   │   ├── NodePalette.tsx        # Node cards + spatial function search
-│   │   ├── SettingsDialog.tsx     # BYOK OpenRouter settings
-│   │   └── MapEmptyState.tsx      # Blank-canvas first-run overlay
-│   ├── Chat.tsx                   # LLM agent with tool execution (BYOK)
-│   ├── DataTable.tsx              # Attribute table with profiling
-│   └── LayerManager.tsx           # Layer visibility, opacity, management
-└── App.tsx                        # DuckDB init + AppShell mount
+│   ├── Visualisation/           # Style editor, cohorts, filters, KPIs, selection
+│   ├── Compare/                 # Compare workspace + shared evidence views
+│   ├── Explain/                 # Report workspace, story viewer, diff, export
+│   ├── Variants/                # Scenario variants panel
+│   ├── Charts/ · Map/ · Flow/   # Chart panel, MapLibre view, workflow nodes
+│   ├── shell/                   # AppShell, rail, panel, drawer, command palette
+│   ├── Chat.tsx                 # LLM agent with tool execution (BYOK)
+│   └── DataTable.tsx            # Attribute table with profiling
+└── App.tsx                      # DuckDB init + AppShell mount
 ```
 
 ## Tests
 
-60 tests across 9 files:
+234 tests across 40 files, covering the visualisation pipeline, workflow SQL generation, store actions, comparison and story services, and a full workflow smoke test. Some of the more load-bearing ones:
 
 | Test file | Focus |
 |-----------|-------|
-| `visualisationIntegration.test.ts` | End-to-end pipeline: all 6 vis kinds, resolver, branching, interaction state, feature IDs, clustering, cleanup |
-| `mapStyleCompiler.test.ts` | Compiler output for point, line, polygon, choropleth, categorical |
-| `classification.test.ts` | Profiling, classification methods, legend building |
-| `visualFilterSql.test.ts` | Filter SQL compilation for category, range, temporal |
-| `visualAnalyticsService.test.ts` | Layer registration caching |
-| `workflowEngine.test.ts` | SQL generation and visualisation node propagation |
-| `mapStyleExport.test.ts` | Export payload structure |
-| `useStore.test.ts` | Store actions for layer management |
+| `visualisationIntegration.test.ts` | End-to-end pipeline: vis kinds, resolver, branching, interaction state, feature IDs, clustering, cleanup |
+| `workflowEngine.test.ts` | SQL generation, joins, visualisation propagation, terminal-node attribution |
+| `scoreModel.test.ts` | Weighted score compilation: weights, direction, normalisation, missing values |
+| `comparisonService.test.ts` | Comparison alignment, denominators and warnings |
+| `useStore.test.ts` | Layer state, layout preferences, scenario variants |
+| `storyDiff.test.ts` | Claim matching and divergence reasons between two stories |
 | `sampleWorkflowSmoke.test.tsx` | Full workflow sequence + UI mounting + chat tools |
 
 ```bash
 npm test            # Run once
 npm run test:watch  # Watch mode
+npm run test:e2e    # Playwright
 ```
 
-## Roadmap — Deferred for Future Iteration
+## Roadmap
+
+[docs/improvement-plan.md](docs/improvement-plan.md) is the current plan — composite scoring, a numeric `GROUP BY` node, filter provenance, reusable workflow fragments, and OPFS-backed persistence.
+
+Still deferred, and not in that plan:
 
 - Flow / origin-destination maps
-- Swipe and side-by-side map comparison
-- Bivariate choropleth
-- Difference / change maps
-- Static map / image export
+- Swipe map comparison (side-by-side and difference maps ship in the Compare workspace)
+- Static map / image export beyond report evidence capture
 - Cartographic output composer (title, scale bar, north arrow, layout)
 - Jenks natural breaks and standard deviation classification
-- Vector tile (MVT) rendering for large datasets

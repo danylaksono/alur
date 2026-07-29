@@ -304,3 +304,27 @@ describe('join node', () => {
     expect(() => buildWorkflowSQL(single.nodes, [single.edges[0]])).toThrow('requires 2 input connections');
   });
 });
+
+describe('terminal node attribution', () => {
+  it('names the node whose output the final CTE holds', () => {
+    const nodes = [
+      makeNode({ id: 'input-1', data: { label: 'In', type: 'input', config: { tableName: 'wards' } } as any }),
+      makeNode({ id: 'filter-1', type: 'filter', data: { label: 'Filter', type: 'filter', config: { condition: 'need > 10' } } as any }),
+    ];
+    const edges: Edge[] = [{ id: 'e1', source: 'input-1', target: 'filter-1' }];
+    expect(buildWorkflowSQL(nodes, edges).terminalNodeId).toBe('filter-1');
+  });
+
+  it('names the target node when running only part of the graph', () => {
+    const nodes = [
+      makeNode({ id: 'input-1', data: { label: 'In', type: 'input', config: { tableName: 'wards' } } as any }),
+      makeNode({ id: 'filter-1', type: 'filter', data: { label: 'Filter', type: 'filter', config: { condition: 'need > 10' } } as any }),
+      makeNode({ id: 'attribute-1', type: 'attribute', data: { label: 'Score', type: 'attribute', config: { expression: 'need * 2', resultField: 'score' } } as any }),
+    ];
+    const edges: Edge[] = [
+      { id: 'e1', source: 'input-1', target: 'filter-1' },
+      { id: 'e2', source: 'filter-1', target: 'attribute-1' },
+    ];
+    expect(buildUpToSQL(nodes, edges, 'filter-1').terminalNodeId).toBe('filter-1');
+  });
+});

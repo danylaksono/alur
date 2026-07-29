@@ -17,6 +17,7 @@ import type {
   LegendSpec,
 } from '../types/visualisation';
 import { CATEGORICAL_PALETTE, fitPaletteToClassCount, paletteMetadataForColors } from './palettes';
+import { numericExtent } from './extent';
 
 export type NumericProfile = {
   kind: 'numeric';
@@ -60,8 +61,7 @@ export const profileGeoJsonField = (
   const nullCount = rawValues.length - nonNull.length;
 
   if (numericValues.length > 0 && numericValues.length >= nonNull.length * 0.8) {
-    const min = Math.min(...numericValues);
-    const max = Math.max(...numericValues);
+    const { min, max } = numericExtent(numericValues);
     const width = max === min ? 1 : (max - min) / binCount;
     const bins = Array.from({ length: binCount }, (_, index) => {
       const low = min + width * index;

@@ -4,14 +4,14 @@ import { useStore } from '../../store/useStore';
 import { buildUpToSQL } from '../../utils/workflowEngine';
 import { duckdbService } from '../../services/duckdb';
 import { FlowNodeShell, inputClass, nodeHandleClass, selectClass } from './FlowNodeShell';
-import { materializeWorkflowMapLayer } from '../../services/layerMaterialization';
+import { materializeWorkflowOutput } from '../../services/layerMaterialization';
+import { registerWorkflowResult } from '../../services/workflowRun';
 
 type OutputMode = 'visualize' | 'export';
 type ExportFormat = 'geojson' | 'csv' | 'json' | 'parquet';
 
 export const OutputNode = ({ data, id, selected }: any) => {
   const setSelectedNodeId = useStore((s) => s.setSelectedNodeId);
-  const addMapLayer = useStore((s) => s.addMapLayer);
   const addChatMessage = useStore((s) => s.addChatMessage);
   const updateNode = useStore((s) => s.updateNode);
 
@@ -27,7 +27,7 @@ export const OutputNode = ({ data, id, selected }: any) => {
     const { nodes, edges } = useStore.getState();
     try {
       const workflow = buildUpToSQL(nodes, edges, id, { limit: maxFeatures });
-      const layer = await materializeWorkflowMapLayer({
+      const result = await materializeWorkflowOutput({
         workflow,
         layerId: `output-${id}`,
         name: `Output: ${data.label}`,
@@ -35,15 +35,15 @@ export const OutputNode = ({ data, id, selected }: any) => {
         sourceKind: 'output',
         visualisationConfig: workflow.visualisationConfig,
       });
-      if (!layer.featureCount) {
-        addChatMessage('system', '⚠️ Output node produced no features.');
+      if (!result.featureCount) {
+        addChatMessage('system', '⚠️ Output node produced no rows.');
         return;
       }
-      addMapLayer(layer);
-      const msg = layer.featureCount >= maxFeatures
-        ? `✅ Output rendered: ${layer.featureCount.toLocaleString()}+ features`
-        : `✅ Output rendered: ${layer.featureCount.toLocaleString()} features`;
-      addChatMessage('system', msg);
+      registerWorkflowResult(result, { nodeId: id });
+      const count = `${result.featureCount.toLocaleString()}${result.featureCount >= maxFeatures ? '+' : ''}`;
+      addChatMessage('system', result.kind === 'layer'
+        ? `✅ Output rendered: ${count} features`
+        : `✅ Output registered: ${count} rows (no geometry, so it is not on the map)`);
     } catch (err: any) {
       addChatMessage('system', `❌ Output error: ${err.message}`);
     }

@@ -1,3 +1,5 @@
+import { numericExtent } from './extent';
+
 export type ComputedField = {
   id: string;
   name: string;
@@ -450,8 +452,7 @@ export const profileComputedColumn = (column: string, rows: Record<string, unkno
   const values = rows.map((row) => row[column]).filter((value) => value !== null && value !== undefined);
   const numeric = values.map(numberOrNull).filter((value): value is number => value !== null);
   if (numeric.length && numeric.length >= values.length * 0.8) {
-    const min = Math.min(...numeric);
-    const max = Math.max(...numeric);
+    const { min, max } = numericExtent(numeric);
     const count = 10;
     const width = max === min ? 1 : (max - min) / count;
     const bins = Array.from({ length: count }, (_, index) => ({

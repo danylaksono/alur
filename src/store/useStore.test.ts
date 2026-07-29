@@ -574,3 +574,57 @@ describe('layout preferences', () => {
     expect(useStore.getState().project.name).toBe('');
   });
 });
+
+describe('scenario variants', () => {
+  const variant = (id: string, nodeIds: string[]) => ({
+    id,
+    name: id,
+    baselineDatasetId: 'base',
+    parameters: {},
+    assumptions: ['Fixed budget'],
+    operations: [],
+    createdAt: 1,
+    provenance: { workflowNodeIds: nodeIds },
+  });
+
+  beforeEach(() => {
+    useStore.getState().resetWorkspace();
+    useStore.setState({ toasts: [] });
+  });
+
+  it('points a variant at whichever dataset its run produced', () => {
+    useStore.getState().addVariant(variant('variant-a', ['score-node']));
+    useStore.getState().registerWorkflowNodeOutput('score-node', 'exec-score-node');
+
+    expect(useStore.getState().visualAnalytics.variants[0].workflowOutputDatasetId).toBe('exec-score-node');
+  });
+
+  it('leaves variants built on other nodes alone', () => {
+    useStore.getState().addVariant(variant('variant-a', ['score-node']));
+    useStore.getState().addVariant(variant('variant-b', ['other-node']));
+    useStore.getState().registerWorkflowNodeOutput('score-node', 'exec-score-node');
+
+    const outputs = useStore.getState().visualAnalytics.variants.map((item) => item.workflowOutputDatasetId);
+    expect(outputs).toEqual(['exec-score-node', undefined]);
+  });
+
+  it('does not record an undo step, because running is not an edit', () => {
+    useStore.getState().addVariant(variant('variant-a', ['score-node']));
+    const before = useStore.getState().analysisHistory.past.length;
+    useStore.getState().registerWorkflowNodeOutput('score-node', 'exec-score-node');
+
+    expect(useStore.getState().analysisHistory.past).toHaveLength(before);
+  });
+
+  it('keeps the parent workflow nodes when branching, so the branch can be run', () => {
+    useStore.getState().addVariant(variant('variant-a', ['score-node']));
+    useStore.getState().registerWorkflowNodeOutput('score-node', 'exec-score-node');
+    useStore.getState().branchVariant('variant-a', 'variant-branch');
+
+    const branch = useStore.getState().visualAnalytics.variants.find((item) => item.id === 'variant-branch')!;
+    expect(branch.provenance.workflowNodeIds).toEqual(['score-node']);
+    expect(branch.parentVariantId).toBe('variant-a');
+    // Cleared: the branch has not been run, so it has no result of its own yet.
+    expect(branch.workflowOutputDatasetId).toBeUndefined();
+  });
+});
