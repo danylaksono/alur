@@ -1,6 +1,6 @@
 # ALUR Improvement Plan — Analytical Depth
 
-**Date:** 2026-07-29 · **Status:** Workstreams 0 and 2 done, the rest proposed · **Supersedes nothing** (ROADMAP.md covers the prototype→product phases, all complete)
+**Date:** 2026-07-29 · **Status:** Workstreams 0, 1 and 2 done; 3–7 proposed · **Supersedes nothing** (ROADMAP.md covers the prototype→product phases, all complete)
 
 ## Framing
 
@@ -64,17 +64,17 @@ README claimed DuckDB "`spatial` + `h3` extensions" — the h3 install is a core
 
 ---
 
-## Workstream 1 — Composite score
+## Workstream 1 — Composite score · **done**
 
 **Generic pitch:** build a weighted index from several columns, see how it ranks your rows, and see how much that ranking depends on the weights you chose.
 
-This is the single highest-leverage addition. It is also the one place where ALUR currently claims a capability it does not have.
+The highest-leverage addition, and the one place where ALUR previously claimed a capability it did not have.
 
 ### 1.1 Score node
 
-A first-class `score` node type. Config is a criteria table: field, weight, direction (higher/lower is better), normalisation, plus a missing-value policy. Emits two columns, `<name>_score` and `<name>_rank`.
+**Done.** A `score` node type whose config is a criteria table — field, weight, direction, normalisation — plus a missing-value policy. It emits `<resultField>`, `<resultField>_rank`, and one contribution column per criterion.
 
-Normalisation options, all one SQL expression each:
+Normalisation, one SQL expression each:
 
 | Method | Expression |
 | --- | --- |
@@ -82,28 +82,27 @@ Normalisation options, all one SQL expression each:
 | z-score | `(x - AVG(x) OVER ()) / NULLIF(STDDEV_POP(x) OVER (), 0)` |
 | rank | `PERCENT_RANK() OVER (ORDER BY x)` |
 
-`direction = 'lower'` inverts: `1 - n` for bounded methods, `-n` for the unbounded z-score, and a reversed window ordering for rank.
+`direction = 'lower'` inverts: `1 - n` for min-max, a sign flip for the unbounded z-score, and a reversed window ordering for rank. Ranking happens in a second pass wrapping the scoring one, because a window function cannot reference an alias defined in its own `SELECT`. Ties share a rank rather than being separated on row order.
 
-The compiler for this landed with W0.3 — [scoreModel.ts](../src/utils/scoreModel.ts) already turns a `ScoreModelSpec` into an expression, and the Variants panel uses it. What 1.1 adds is the node: a dedicated type with a criteria editor, rather than the current single-expression Attribute node, and a `_rank` column alongside the score.
+**One bug worth recording.** The `mean` missing-value policy originally compiled to `COALESCE(x, AVG(x) OVER ())`, which every normalisation then nested inside its own window — and DuckDB rejects a window inside a window definition. Unit tests could not catch it because they only matched generated strings; it surfaced the first time the SQL was executed in a browser. The fix threads the relation being scored into the compiler so the mean comes from a scalar subquery, which composes anywhere. A regression test now asserts no `OVER (` appears nested inside another.
 
-### 1.2 Score panel (left rail)
+### 1.2 Score panel
 
-The interactive surface. Weight sliders that re-run the score and re-rank live, against the currently selected dataset. Reordering in the ranked list is the feedback — this is what makes weights "manipulable parameters whose effects are immediately visualised" rather than fixed inputs.
+**Done.** A rail panel that runs the same compiler against live data: weight sliders that re-rank on each change, a ranked list, and a hand-off button that turns the current model into a workflow node wired to its source.
+
+Two details that decide whether it is usable. Queries are debounced and guarded by a token, so a slow earlier query cannot land after a faster later one and show a ranking the weights no longer imply. And the label column is chosen by probing cardinality rather than by name: a column called `REGION` reads like a label but held one value for all 25,000 rows in testing, which rendered the same string down the entire list. Columns below 20 distinct values are treated as categories and lose to the row id.
 
 ### 1.3 Contribution breakdown
 
-Per row, a stacked bar showing what each criterion contributed to the total. `UNPIVOT` turns the wide per-criterion contribution columns into long form in one statement:
-
-```sql
-UNPIVOT scored ON c_heat, c_imd, c_no2, c_schools
-INTO NAME criterion VALUE contribution
-```
-
-This answers the "why is this ranked above that" question directly, and it is a generically useful view for any composite index.
+**Done.** Each row in the panel carries a stacked bar of its criterion contributions, expandable to exact figures, and the workflow node writes the same contributions as columns so they can be charted, mapped, sorted and pinned to the report. Because they are the weighted normalised terms themselves, they sum to the score exactly — verified to a maximum gap of 0 across 25,000 rows.
 
 ### 1.4 Sensitivity
 
-Perturb each weight by ±x% in turn, recompute, and report how much the ranking moved. Rank churn (how many rows enter/leave the top N) is the legible metric; Spearman correlation between the base and perturbed ranks is the compact one. Both are cheap in SQL — cross join a small weight grid, `PERCENT_RANK()`, `CORR()` on the rank columns. The `sensitivity?: number[]` field already exists in `ScoreModelSpec` and is read nowhere in the codebase.
+**Done.** Each weight is nudged in turn and the resulting ranking compared with the base: Spearman correlation, mean absolute rank shift, and how many of the base top-N drop out. All criteria are compared in a single query, so this is one round trip regardless of how many there are. The panel sorts by top-N churn, which is the legible form of the question — a criterion that moves nobody in the top 20 is not where the argument is.
+
+### Verification
+
+Executed against real DuckDB-Wasm in a browser: all three normalisations compiling together, contributions summing to the score with zero drift over 25,000 rows, ranks spanning 1..25,000, the three missing-value policies producing genuinely different results (`exclude` scoring 17,029 of 25,000 rows), sensitivity returning correlations below 1 for every criterion, and the panel re-ranking on a slider move before handing a connected node to the workflow.
 
 ---
 
@@ -266,7 +265,7 @@ Chapter 9's companion discussion flags that a natural-language interface does no
 | --- | --- | --- |
 | ~~1~~ | ~~W0 repairs~~ **done** | W0.1 blocked Workstreams 1 and 2; W0.3 left a score compiler that 1.1 builds on |
 | ~~2~~ | ~~W2 aggregate, allocate, top-N~~ **done** | Biggest product hole, no design risk; verified against real DuckDB in the browser |
-| 3 | W1 composite score | Highest analytical leverage; needs W0.1 to be comparable |
+| ~~3~~ | ~~W1 composite score~~ **done** | Highest analytical leverage; flips Prioritise's diagnostic |
 | 4 | W3 filter transparency | Independent, moderate cost |
 | 6 | W5.1 OPFS, W5.2 SUMMARIZE, W5.3 duckdb_functions | Engine work, parallelisable |
 | 7 | W0.4 temporal view, W5.7 ASOF | Together they make time comparison real |
@@ -291,7 +290,9 @@ Which generic capability discharges which obligation from the pattern. Read righ
 | Variant branching, analysis history, Explain provenance, lineage card | W0.1, W0.2, W6 | **Refine** — "can the user explain how this scenario came to be?" |
 | Assistant tools covering the whole surface, and reads as well as writes | W7 | Cuts across all five — an assistant that cannot observe consequences cannot help evaluate or revise |
 
-Standing at the time of assessment: Filter capable but failing its diagnostic; Prioritise failing; Intervene partial and resource-blind; **Evaluate already passing**; Refine with the machinery in place but a broken link. W0 fixed the broken link and the wrong score arithmetic; the diagnostics themselves are what Workstreams 1–4 address.
+Standing at the time of assessment: Filter capable but failing its diagnostic; Prioritise failing; Intervene partial and resource-blind; **Evaluate already passing**; Refine with the machinery in place but a broken link.
+
+Standing now, after W0, W1 and W2: **Prioritise passes** — weights are manipulable, their effect is immediate, and each candidate's rank is decomposable into what produced it. **Refine's broken link is repaired**, though the lineage view in W6 is still outstanding. Intervene has gained resource limits through Allocate but interventions are still SQL rather than named objects, which is W4. Filter is unchanged and still fails its diagnostic, which is W3 — now the largest remaining gap.
 
 ---
 

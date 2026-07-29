@@ -8,8 +8,8 @@ export const llmToolDefinitions = [
         id: { type: 'string', description: 'Unique identifier for the node (optional).' },
         type: {
           type: 'string',
-          enum: ['input', 'analysis', 'attribute', 'aggregate', 'allocate', 'filter', 'join', 'visualisation', 'output'],
-          description: 'The type of node to create. "join" joins two inputs (A=left keeps geometry, B=right attributes get an r_ prefix); connect A to input-0 and B to input-1. "aggregate" summarises numbers by group (mode="summary") or dissolves geometry (mode="spatial"). "allocate" works down rows in priority order spending a budget or capacity until a limit is reached.'
+          enum: ['input', 'analysis', 'attribute', 'aggregate', 'allocate', 'score', 'filter', 'join', 'visualisation', 'output'],
+          description: 'The type of node to create. "join" joins two inputs (A=left keeps geometry, B=right attributes get an r_ prefix); connect A to input-0 and B to input-1. "aggregate" summarises numbers by group (mode="summary") or dissolves geometry (mode="spatial"). "allocate" works down rows in priority order spending a budget or capacity until a limit is reached. "score" combines several columns into one weighted score and ranks by it.'
         },
         label: { type: 'string', description: 'Human-readable label for the node.' },
         position: {
@@ -45,6 +45,28 @@ export const llmToolDefinitions = [
               },
             },
             includeGeometry: { type: 'boolean', description: 'For aggregate nodes with mode="summary" and a group column: merge each group\'s geometry so the summary can still be mapped.' },
+            scoreModel: {
+              type: 'object',
+              description: 'For score nodes: the weighted criteria. Each column is normalised across the whole result before weighting, so columns on different scales combine safely.',
+              properties: {
+                criteria: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      field: { type: 'string', description: 'The numeric column.' },
+                      weight: { type: 'number', description: 'Relative importance. Weights are shares of their total, so they need not sum to 1.' },
+                      direction: { type: 'string', enum: ['higher', 'lower'], description: 'Whether a higher or lower value is better.' },
+                      normalisation: { type: 'string', enum: ['min-max', 'z-score', 'rank'], description: 'How the column is put on a common scale.' },
+                    },
+                    required: ['field', 'weight', 'direction', 'normalisation'],
+                  },
+                },
+                missingValueTreatment: { type: 'string', enum: ['zero', 'mean', 'exclude'], description: 'What a missing value contributes. "exclude" leaves the whole row unscored.' },
+              },
+              required: ['criteria', 'missingValueTreatment'],
+            },
+            includeContributions: { type: 'boolean', description: 'For score nodes: keep a column per criterion showing what it contributed. Defaults to true.' },
             orderBy: { type: 'string', description: 'For allocate nodes: the column deciding who is served first (usually a score).' },
             amountField: { type: 'string', description: 'For allocate nodes: the column being consumed, such as cost or capacity.' },
             limit: { type: 'number', description: 'For allocate nodes: how much there is to go round.' },

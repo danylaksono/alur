@@ -7,6 +7,7 @@ import {
   Layers,
   PanelLeftClose,
   PanelLeftOpen,
+  SlidersHorizontal,
   Sparkles,
   Terminal,
   Users,
@@ -47,6 +48,7 @@ const GROUPS: Group[] = [
     title: 'Analyse',
     items: [
       { id: 'compare', icon: GitCompareArrows, label: 'Compare', hint: 'Compare groups, places or time windows' },
+      { id: 'score', icon: SlidersHorizontal, label: 'Score', hint: 'Weight criteria and rank candidates' },
       { id: 'cohorts', icon: Users, label: 'Cohorts', hint: 'Saved subsets and analytical bookmarks' },
     ],
   },

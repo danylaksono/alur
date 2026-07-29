@@ -68,7 +68,7 @@ export type ProjectManifestV2 = Omit<ProjectManifestV1, 'version' | 'workspace'>
   /** Optional so v2 files written before naming existed still validate. */
   name?: string;
   workspace: Omit<ProjectManifestV1['workspace'], 'activeRailTab' | 'workspaceMode'> & {
-    activeRailTab: 'layers' | 'charts' | 'chat' | 'cohorts' | 'nodes';
+    activeRailTab: 'layers' | 'charts' | 'chat' | 'cohorts' | 'score' | 'nodes';
     workspaceMode: 'explore' | 'compare' | 'explain' | 'board';
     /** Optional so v2 files written before layouts existed still validate. */
     isRailExpanded?: boolean;

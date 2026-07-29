@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Calculator, Database, Eye, Filter, Gauge, GitMerge, Layers, Loader2, Palette, Plus, Search, Workflow, Zap } from 'lucide-react';
+import { Calculator, Database, Eye, Filter, Gauge, GitMerge, Layers, Loader2, Palette, Plus, Search, SlidersHorizontal, Workflow, Zap } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { buildWorkflowSQL } from '../../utils/workflowEngine';
 import { nextNodePosition } from '../../utils/nodePlacement';
@@ -19,13 +19,14 @@ const colorStyles: Record<string, { hoverBg: string; hoverBorder: string; iconBg
   cyan: { hoverBg: 'hover:bg-cyan-50', hoverBorder: 'hover:border-cyan-200', iconBg: 'bg-cyan-50', iconHoverBg: 'group-hover:bg-cyan-100' },
 };
 
-type NodeType = 'input' | 'analysis' | 'attribute' | 'filter' | 'aggregate' | 'allocate' | 'join' | 'visualisation' | 'output';
+type NodeType = 'input' | 'analysis' | 'attribute' | 'filter' | 'aggregate' | 'allocate' | 'score' | 'join' | 'visualisation' | 'output';
 
 const nodeCards: Array<{ type: NodeType; icon: typeof Database; title: string; desc: string; color: string; config?: Record<string, unknown> }> = [
   { type: 'input', icon: Database, title: 'Data Input', desc: 'Load Parquet or CSV', color: 'blue' },
   { type: 'analysis', icon: Zap, title: 'Spatial Analysis', desc: 'Buffer, intersect, transform…', color: 'purple' },
   { type: 'attribute', icon: Calculator, title: 'Attribute Calc', desc: 'Add computed columns', color: 'slate' },
-  { type: 'filter', icon: Filter, title: 'Filter', desc: 'SQL WHERE conditions', color: 'amber' },
+  { type: 'score', icon: SlidersHorizontal, title: 'Score', desc: 'Weighted score across columns', color: 'purple', config: { resultField: 'alur_score', scoreModel: { criteria: [], missingValueTreatment: 'zero' } } },
+  { type: 'filter', icon: Filter, title: 'Filter', desc: 'WHERE conditions or top N', color: 'amber' },
   { type: 'aggregate', icon: Layers, title: 'Summarise', desc: 'Group and total, or dissolve', color: 'orange', config: { mode: 'summary', measures: [{ id: 'measure-rows', fn: 'count' }] } },
   { type: 'allocate', icon: Gauge, title: 'Allocate', desc: 'Spend down a budget or capacity', color: 'amber', config: { mode: 'flag', direction: 'desc' } },
   { type: 'join', icon: GitMerge, title: 'Join', desc: 'Attribute or spatial join', color: 'cyan' },
@@ -40,6 +41,7 @@ const nodeLabels: Record<NodeType, string> = {
   filter: 'Filter',
   aggregate: 'Summarise',
   allocate: 'Allocate',
+  score: 'Score',
   join: 'Join',
   visualisation: 'Visualisation',
   output: 'Layer Output',

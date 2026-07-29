@@ -79,7 +79,7 @@ Coordinated visual-analytics shell: the main canvas provides geographic context 
 ## Features
 
 ### Workflow Engine
-- **9 node types**: Input, Analysis (spatial operations), Attribute (computed columns), Filter (SQL WHERE, map selection, or top-N by column), Summarise (numeric `GROUP BY`, or geometry dissolve), Allocate (spend a budget or capacity down a ranked list), Join (spatial predicate or attribute key), Visualisation (style recipe), Output (map preview or file export)
+- **10 node types**: Input, Analysis (spatial operations), Attribute (computed columns), Score (weighted multi-criteria ranking), Filter (SQL WHERE, map selection, or top-N by column), Summarise (numeric `GROUP BY`, or geometry dissolve), Allocate (spend a budget or capacity down a ranked list), Join (spatial predicate or attribute key), Visualisation (style recipe), Output (map preview or file export)
 - Unlimited branching — style the same data multiple ways
 - Step-through execution per node or full workflow run
 - Results without geometry register as datasets, so charts, comparison and the report can read them even when the map cannot
@@ -88,6 +88,8 @@ Coordinated visual-analytics shell: the main canvas provides geographic context 
 **Summarise** computes count, count distinct, sum, average, median, min and max over any number of group keys. Sum, average and median cast to a number; min and max do not, so they still work on dates and text. Merging each group's geometry is optional, and keeps the summary mappable.
 
 **Allocate** answers "who gets served before the money runs out". It accumulates a column in priority order and either flags each row within/over the limit, drops the rows past it, or gives the row straddling it a partial share. Partitioning gives each group its own limit rather than sharing one.
+
+**Score** combines several numeric columns into one weighted ranking. Each column is normalised across the whole result — min–max, z-score or percentile rank — before weighting, so columns on different scales combine safely, and weights are shares of their total so they need not sum to 1. Alongside the score and its rank it emits one column per criterion recording what that criterion contributed, and those contributions sum exactly to the score.
 
 ### Map visualisation
 - **Choropleth** — numeric classification with equal interval or quantile breaks, configurable class count and palette
@@ -102,6 +104,10 @@ Coordinated visual-analytics shell: the main canvas provides geographic context 
 - **Clustered points** — MapLibre cluster sources with drill-to-zoom
 
 All styles are compiled to native MapLibre expressions — no hand-written JSON.
+
+### Composite scoring
+
+The **Score** panel in the left rail is where weights become arguable rather than declared. Moving a weight re-ranks the list underneath it against live data, each row carries a stacked bar of its criterion contributions, and a sensitivity strip reports how far the ranking moves when each weight is nudged — so a criterion that barely disturbs the top of the list is visibly not worth arguing over. Any model built there can be handed to the workflow as a Score node, which is what makes the result reproducible and feeds the rest of the pipeline.
 
 ### Compare, cohorts and reporting
 - **Cohorts** — name and save a filtered subset, then compare it against another cohort or the remainder, with effect sizes and explicit denominator and missing-value notes
@@ -166,6 +172,7 @@ src/
 │   ├── mapStyleCompiler.ts      # Visualisation → MapLibre expressions
 │   ├── classification.ts        # Profiling, classification, vis builders
 │   ├── scoreModel.ts            # Weighted multi-criteria score → SQL
+│   ├── aggregationSql.ts        # Group-by measures, running-total allocation, top-N
 │   ├── visualFilterSql.ts       # VisualFilter → DuckDB WHERE clauses
 │   ├── visualisationResolver.ts # Workflow config → LayerVisualisation
 │   ├── scenarioComparison.ts    # Variant results → ComparisonSpec
@@ -176,6 +183,7 @@ src/
 │   ├── duckdb.ts                # DuckDB-Wasm init + query interface
 │   ├── visualAnalyticsService.ts # Filtered rows, profiles, summaries, temporal range
 │   ├── comparisonService.ts     # Comparison alignment and denominators
+│   ├── scoreService.ts          # Live scoring, ranking and weight sensitivity
 │   ├── layerMaterialization.ts  # Workflow result → layer or dataset
 │   ├── workflowRun.ts           # Registers a run's output across the store
 │   ├── projectService.ts        # Project manifest save / load / migrate

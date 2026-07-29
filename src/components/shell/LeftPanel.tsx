@@ -5,6 +5,7 @@ import { ErrorBoundary } from '../ErrorBoundary';
 import { LayersTab } from './LayersTab';
 import { NodePalette } from './NodePalette';
 import { CohortPanel } from '../Visualisation/CohortPanel';
+import { ScorePanel } from '../Score/ScorePanel';
 import { cn } from '../../utils/cn';
 
 const Chat = lazy(() => import('../Chat').then((module) => ({ default: module.Chat })));
@@ -68,6 +69,10 @@ export const LeftPanel = () => {
         ) : activeRailTab === 'nodes' ? (
           <ErrorBoundary name="Node Palette">
             <NodePalette />
+          </ErrorBoundary>
+        ) : activeRailTab === 'score' ? (
+          <ErrorBoundary name="Score Panel">
+            <ScorePanel />
           </ErrorBoundary>
         ) : activeRailTab === 'cohorts' ? (
           <ErrorBoundary name="Cohorts and bookmarks">

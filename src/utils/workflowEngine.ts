@@ -11,6 +11,8 @@ import {
   type AllocationConfig,
   type SummaryMeasure,
 } from './aggregationSql';
+import { buildContributionSelects, buildScoreExpression, scoreModelErrors } from './scoreModel';
+import type { ScoreModelSpec } from '../types/visualAnalytics';
 
 /**
  * Workflow Engine
@@ -379,6 +381,33 @@ export function buildWorkflowSQL(nodes: WorkflowNode[], edges: Edge[], options?:
         nodeMetadata.set(alias, { geom: 'geom_agg', crs: meta.crs });
         lastAlias = alias;
       }
+    } else if (type === 'score') {
+      const source = parentAliases[0] || lastAlias;
+      if (!source) throw new Error(`Score node "${node.id}" has no source.`);
+      const meta = nodeMetadata.get(source)!;
+      const spec: ScoreModelSpec = config?.scoreModel || { criteria: [], missingValueTreatment: 'zero' };
+      const errors = scoreModelErrors(spec);
+      if (errors.length) throw new Error(`Score node "${node.id}": ${errors[0]}`);
+
+      const resultField = config?.resultField || 'alur_score';
+      const rankField = `${resultField}_rank`;
+      // The mean-substitution policy averages over the upstream CTE, so the
+      // compiler needs to know which alias that is.
+      const scoreOptions = { relation: source };
+      const contributions = config?.includeContributions === false ? [] : buildContributionSelects(spec, resultField, scoreOptions);
+      const scored = [
+        `${buildScoreExpression(spec, scoreOptions)} AS ${qi(resultField)}`,
+        ...contributions.map((item) => `${item.expression} AS ${qi(item.alias)}`),
+      ];
+
+      // Ranking has to read the score, and a window function cannot reference
+      // an alias defined in its own SELECT, so scoring and ranking are two
+      // passes. Ties share a rank rather than being separated on row order.
+      ctes.push(
+        `${alias} AS (\n  SELECT *, RANK() OVER (ORDER BY ${qi(resultField)} DESC NULLS LAST) AS ${qi(rankField)}\n  FROM (\n    SELECT *, ${scored.join(', ')}\n    FROM ${source}\n  )\n)`
+      );
+      nodeMetadata.set(alias, meta);
+      lastAlias = alias;
     } else if (type === 'allocate') {
       const source = parentAliases[0] || lastAlias;
       if (!source) throw new Error(`Allocation node "${node.id}" has no source.`);

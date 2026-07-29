@@ -88,7 +88,7 @@ export type MapLayer = {
 export type WorkflowNode = Node & {
   data: {
     label: string;
-    type: 'input' | 'analysis' | 'attribute' | 'aggregate' | 'allocate' | 'filter' | 'join' | 'visualisation' | 'output';
+    type: 'input' | 'analysis' | 'attribute' | 'aggregate' | 'allocate' | 'score' | 'filter' | 'join' | 'visualisation' | 'output';
     config: any;
   }
 };
@@ -110,7 +110,7 @@ export type LoadingOperation = {
   startedAt: number;
 };
 
-export type RailTab = 'layers' | 'charts' | 'cohorts' | 'chat' | 'nodes';
+export type RailTab = 'layers' | 'charts' | 'cohorts' | 'score' | 'chat' | 'nodes';
 export type DrawerTab = 'workflow' | 'table' | 'sql';
 export type DrawerMode = 'collapsed' | 'open' | 'maximized';
 
@@ -170,7 +170,7 @@ export const LAYOUT_PRESETS: Record<Exclude<LayoutPresetId, 'custom'>, LayoutPre
  */
 export type NavDestination = RailTab | DrawerTab | 'compare' | 'explain';
 
-const PANEL_DESTINATIONS: RailTab[] = ['layers', 'charts', 'cohorts', 'chat', 'nodes'];
+const PANEL_DESTINATIONS: RailTab[] = ['layers', 'charts', 'cohorts', 'score', 'chat', 'nodes'];
 
 /** The workflow canvas keeps its node palette in the left panel. */
 const PANEL_FOR_DRAWER_TAB: Partial<Record<DrawerTab, RailTab>> = { workflow: 'nodes' };

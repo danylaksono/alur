@@ -454,3 +454,72 @@ describe('top-N filtering', () => {
     expect(() => buildWorkflowSQL(...Object.values(topNNodes({ field: 'score' })) as [any, any])).toThrow('how many rows');
   });
 });
+
+describe('composite score', () => {
+  const scoreNodes = (config: Record<string, unknown>) => ({
+    nodes: [
+      makeNode({ id: 'input-1', data: { label: 'In', type: 'input', config: { tableName: 'candidates' } } as any }),
+      makeNode({ id: 'score-1', type: 'score', data: { label: 'Score', type: 'score', config } as any }),
+    ],
+    edges: [{ id: 'e1', source: 'input-1', target: 'score-1' }] as Edge[],
+  });
+
+  const model = {
+    criteria: [
+      { field: 'heat', weight: 3, direction: 'higher', normalisation: 'min-max' },
+      { field: 'imd', weight: 1, direction: 'lower', normalisation: 'rank' },
+    ],
+    missingValueTreatment: 'zero',
+  };
+
+  it('emits a score, a rank and one contribution column per criterion', () => {
+    const { nodes, edges } = scoreNodes({ scoreModel: model, resultField: 'priority' });
+    const sql = buildWorkflowSQL(nodes, edges).sql;
+    expect(sql).toContain('AS "priority"');
+    expect(sql).toContain('AS "priority_rank"');
+    expect(sql).toContain('AS "priority_c_heat"');
+    expect(sql).toContain('AS "priority_c_imd"');
+  });
+
+  it('ranks in a second pass, because a window cannot read its own SELECT alias', () => {
+    const { nodes, edges } = scoreNodes({ scoreModel: model, resultField: 'priority' });
+    const sql = buildWorkflowSQL(nodes, edges).sql;
+    expect(sql).toContain('RANK() OVER (ORDER BY "priority" DESC NULLS LAST)');
+    // The ranking SELECT wraps the scoring one, so RANK appears before the
+    // score column it reads.
+    expect(sql.indexOf('RANK() OVER')).toBeLessThan(sql.indexOf('AS "priority"'));
+  });
+
+  it('honours weight, direction and normalisation from the model', () => {
+    const { nodes, edges } = scoreNodes({ scoreModel: model, resultField: 'priority' });
+    const sql = buildWorkflowSQL(nodes, edges).sql;
+    expect(sql).toContain('(0.75) *');
+    expect(sql).toContain('(0.25) *');
+    expect(sql).toContain('PERCENT_RANK() OVER (ORDER BY');
+  });
+
+  it('drops the contribution columns when they are turned off', () => {
+    const { nodes, edges } = scoreNodes({ scoreModel: model, resultField: 'priority', includeContributions: false });
+    const sql = buildWorkflowSQL(nodes, edges).sql;
+    expect(sql).toContain('AS "priority"');
+    expect(sql).not.toContain('priority_c_heat');
+  });
+
+  it('defaults its output column so a freshly dropped node still compiles', () => {
+    const { nodes, edges } = scoreNodes({ scoreModel: model });
+    expect(buildWorkflowSQL(nodes, edges).sql).toContain('AS "alur_score"');
+  });
+
+  it('keeps the upstream geometry, so a scored layer is still mappable', () => {
+    const { nodes, edges } = scoreNodes({ scoreModel: model });
+    expect(buildWorkflowSQL(nodes, edges).geomColumn).toBe('geometry');
+  });
+
+  it('refuses to compile an empty or unweighted model', () => {
+    expect(() => buildWorkflowSQL(...Object.values(scoreNodes({ scoreModel: { criteria: [], missingValueTreatment: 'zero' } })) as [any, any]))
+      .toThrow('at least one criterion');
+    expect(() => buildWorkflowSQL(...Object.values(scoreNodes({
+      scoreModel: { criteria: [{ field: 'heat', weight: 0, direction: 'higher', normalisation: 'min-max' }], missingValueTreatment: 'zero' },
+    })) as [any, any])).toThrow('above zero');
+  });
+});

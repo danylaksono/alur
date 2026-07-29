@@ -2,7 +2,7 @@ import { GitBranch, GitCompareArrows, Plus, SlidersHorizontal } from 'lucide-rea
 import { useMemo, useState } from 'react';
 import { useStore, type WorkflowNode } from '../../store/useStore';
 import type { AnalysisVariant, VariantOperation } from '../../types/visualAnalytics';
-import { buildScoreExpression, equalWeightedScoreModel } from '../../utils/scoreModel';
+import { equalWeightedScoreModel } from '../../utils/scoreModel';
 import { comparableVariants, comparisonFromVariants } from '../../utils/scenarioComparison';
 
 export const VariantPanel = () => {
@@ -42,7 +42,10 @@ export const VariantPanel = () => {
     // No output id yet: the run decides whether the result lands as a layer or
     // a table, and `registerWorkflowNodeOutput` fills it in afterwards.
     const variant: AnalysisVariant = { id, name: `${dataset.name} prioritisation`, baselineDatasetId: dataset.id, parameters: {}, assumptions: operation.assumptions || [], operations: [operation], createdAt: now, provenance: { workflowNodeIds: [nodeId], sourceVersion: dataset.sourceUpdatedAt } };
-    const node: WorkflowNode = { id: nodeId, type: 'attribute', position: { x: 360 + useStore.getState().nodes.length * 24, y: 160 + useStore.getState().nodes.length * 18 }, data: { label: 'Weighted priority score', type: 'attribute', config: { expression: buildScoreExpression(scoreModel), resultField: 'alur_priority_score', variantId: id, scoreModel } } };
+    // A score node rather than a hand-compiled attribute expression: the node
+    // owns the compilation, so the variant benefits from every score feature
+    // (rank column, contributions, mean substitution) without duplicating it.
+    const node: WorkflowNode = { id: nodeId, type: 'score', position: { x: 360 + useStore.getState().nodes.length * 24, y: 160 + useStore.getState().nodes.length * 18 }, data: { label: 'Weighted priority score', type: 'score', config: { scoreModel, resultField: 'alur_priority_score', includeContributions: true, variantId: id } } };
     addNode(node);
     const sourceNodeId = dataset.source.kind === 'workflow-node' ? dataset.source.nodeId : layers.find((layer) => layer.id === dataset.id)?.sourceNodeId;
     if (sourceNodeId) onConnect({ source: sourceNodeId, target: nodeId, sourceHandle: null, targetHandle: null });
