@@ -38,9 +38,16 @@ Playwright is not a project dep — install it in a scratch dir (`npm i playwrig
 
 ## Debug handles (dev builds only)
 
-`window.__alurMap` (the MapLibre instance) and `window.__alurStore` (the zustand store) are
-exposed in dev. Use them from `page.evaluate` to assert layer types, paint, pitch, and
-store state directly instead of scraping the DOM.
+`window.__alurMap` (the MapLibre instance), `window.__alurStore` (the zustand store) and
+`window.__alurDuckdb` (the DuckDB service) are exposed in dev. Use them from `page.evaluate`
+to assert layer types, paint, pitch, store state and query results directly instead of
+scraping the DOM.
+
+**Always reach the engine through `window.__alurDuckdb`, never `await import('/src/services/duckdb.ts')`.**
+After any edit to a module, Vite serves it under a cache-busting `?t=` query, so a raw-path
+import resolves to a *different module instance* — a second, uninitialised DuckDB service
+whose every query throws `DuckDB not initialized`. It works until you edit the file, then
+fails in a way that looks like a product bug. Importing other services by path is fine.
 
 ## Gotchas
 
@@ -52,8 +59,13 @@ store state directly instead of scraping the DOM.
   CSS `uppercase`, and `innerText` reflects the transformed text.
 - Field profiles on 100k+ row layers take 30s+; wait for the per-layer restyle spinner
   (`getByTitle('Rendering layer…')`) to detach rather than using fixed sleeps.
-- Do NOT `INSTALL h3 FROM community` in duckdb-wasm: a loaded community extension
-  breaks registerFileHandle/registerFileBuffer for the whole session.
+- `INSTALL h3 FROM community` is **safe again** on duckdb-wasm 1.32 — the 1.28 bug where a
+  loaded community extension broke registerFileHandle/registerFileBuffer for the session is
+  fixed, retested across repeated file loads. It is loaded lazily via
+  `duckdbService.ensureH3()`, never at startup, because it costs a ~2s network fetch. Expect
+  `isH3Loaded === false` on a fresh page.
+- Loading a second file logs `Input node "…" has no table loaded` from the node-preview
+  effect. Pre-existing and transient — filter it out rather than chasing it.
 
 - The smoke test uses `renderToString` — zustand SSR renders *initial* state, so `setState`
   before render has no effect there. Don't copy that pattern for runtime verification.

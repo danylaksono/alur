@@ -24,7 +24,7 @@ import { getPalette, getBivariatePalette, BIVARIATE_PALETTES, CATEGORICAL_PALETT
 import { cn } from '../../utils/cn';
 import { queryLayerFieldProfile, queryLayerTemporalRange, type TemporalRange } from '../../services/visualAnalyticsService';
 import { generateDotDensityGeoJSON } from '../../services/dotDensityService';
-import { generateHexbinGeoJSON } from '../../services/hexbinService';
+import { generateHexbins, type HexbinMethod } from '../../services/hexbinService';
 import { TemporalSlider } from './TemporalSlider';
 
 const excludedFields = new Set(['geojson', 'geometry', 'geom']);
@@ -161,6 +161,7 @@ export const VisualisationPanel = ({
   const [hexCellSize, setHexCellSize] = useState(500);
   const [hexAggregate, setHexAggregate] = useState<HexbinAggregate>('count');
   const [hexbinGenerating, setHexbinGenerating] = useState(false);
+  const [hexbinMethod, setHexbinMethod] = useState<{ method: HexbinMethod; resolution?: number; cellEdgeMetres?: number } | null>(null);
   const [glyphMode, setGlyphMode] = useState<'grid' | 'hex'>('grid');
   const [glyphType, setGlyphType] = useState<GlyphGridGlyph>('density');
   const [glyphCellSize, setGlyphCellSize] = useState(48);
@@ -424,8 +425,9 @@ export const VisualisationPanel = ({
       if (existingHexLayer) return;
 
       setHexbinGenerating(true);
-      generateHexbinGeoJSON(selectedLayer, { cellSize: visualisation.cellSize, aggregate: hexAggregate, field: visualisation.field })
-        .then((hexGeojson) => {
+      generateHexbins(selectedLayer, { cellSize: visualisation.cellSize, aggregate: hexAggregate, field: visualisation.field })
+        .then(({ featureCollection: hexGeojson, method, resolution, cellEdgeMetres }) => {
+          setHexbinMethod({ method, resolution, cellEdgeMetres });
           if (!hexGeojson.features.length) return;
           const valueProfile = profileGeoJsonField(hexGeojson.features, 'value');
           const hexVis = valueProfile.kind === 'numeric'
@@ -822,12 +824,13 @@ export const VisualisationPanel = ({
                   const existing = mapLayers.find((l) => l.id === hexLayerId);
                   if (existing) removeMapLayer(hexLayerId);
                   setHexbinGenerating(true);
-                  generateHexbinGeoJSON(selectedLayer, {
+                  generateHexbins(selectedLayer, {
                     cellSize: hexCellSize,
                     aggregate: hexAggregate,
                     field: hexAggregate === 'count' ? undefined : field,
                   })
-                    .then((hexGeojson) => {
+                    .then(({ featureCollection: hexGeojson, method, resolution, cellEdgeMetres }) => {
+                      setHexbinMethod({ method, resolution, cellEdgeMetres });
                       if (!hexGeojson.features.length) return;
                       const valueProfile = profileGeoJsonField(hexGeojson.features, 'value');
                       const hexVis = valueProfile.kind === 'numeric'
@@ -856,6 +859,22 @@ export const VisualisationPanel = ({
               >
                 {hexbinGenerating ? 'Generating…' : 'Regenerate hexbins'}
               </button>
+            )}
+
+            {/* Which grid produced the cells changes what the counts mean, so
+                it is stated rather than left to be inferred from the shapes. */}
+            {kind === 'hexbin' && hexbinMethod && (
+              <p className="text-[10px] leading-4 text-slate-500">
+                {hexbinMethod.method === 'h3'
+                  ? `Equal-area H3 cells at resolution ${hexbinMethod.resolution}${
+                    hexbinMethod.cellEdgeMetres
+                      ? ` (about ${hexbinMethod.cellEdgeMetres >= 1000
+                        ? `${(hexbinMethod.cellEdgeMetres / 1000).toFixed(1)} km`
+                        : `${Math.round(hexbinMethod.cellEdgeMetres)} m`} across)`
+                      : ''
+                  }. Counts are comparable across latitudes. H3 steps in fixed sizes, so nearby cell-size choices can give the same grid.`
+                  : 'Web Mercator cells. Equal on screen but not on the ground, so counts are only comparable within a narrow band of latitude.'}
+              </p>
             )}
 
             {kind !== 'simple' && kind === 'dot_density' && (

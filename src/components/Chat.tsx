@@ -227,8 +227,8 @@ export const Chat = () => {
               break;
             }
             try {
-              if (!duckdbService.isH3Loaded) {
-                addChatMessage('assistant', 'H3 extension unavailable. Try add_geojson_layer instead.');
+              if (!(await duckdbService.ensureH3())) {
+                addChatMessage('assistant', 'The H3 extension could not be fetched — it needs a network connection the first time it is used. Try add_geojson_layer instead, or style the layer as a hexbin, which falls back to Mercator cells.');
                 break;
               }
               const h3Sql = `

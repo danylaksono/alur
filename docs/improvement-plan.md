@@ -1,6 +1,6 @@
 # ALUR Improvement Plan — Analytical Depth
 
-**Date:** 2026-07-29 · **Status:** Workstreams 0, 1, 2 and 3 done; 4–7 proposed · **Supersedes nothing** (ROADMAP.md covers the prototype→product phases, all complete)
+**Date:** 2026-07-29 · **Status:** Workstreams 0–3 and W5.4 done; W5.2 measured and rejected; 4–7 otherwise proposed · **Supersedes nothing** (ROADMAP.md covers the prototype→product phases, all complete)
 
 ## Framing
 
@@ -204,21 +204,42 @@ duckdb-wasm 1.32 supports `opfs://` database paths and `DuckDBAccessMode.READ_WR
 
 Opening on OPFS makes projects genuinely resumable, makes recovery real rather than structural, and makes the "load project from URL" feature carry its data. This is the largest user-visible win in the plan relative to its cost.
 
-### 5.2 `SUMMARIZE`
+### 5.2 `SUMMARIZE` · **measured, not adopted**
 
-```sql
-SUMMARIZE tablename
-```
+The proposal was to replace the hand-rolled profiling in [visualAnalyticsService.ts:610-645](../src/services/visualAnalyticsService.ts#L610-L645) with one `SUMMARIZE` statement. Measured against the real engine, that would be a downgrade on all three axes:
 
-returns per-column type, min, max, approximate quantiles, average, standard deviation, distinct count and null percentage in one statement. It can replace a large part of the hand-rolled profiling in [visualAnalyticsService.ts:610-645](../src/services/visualAnalyticsService.ts#L610-L645) and instantly powers a proper dataset overview.
+| | `SUMMARIZE` | Existing profiler |
+| --- | --- | --- |
+| Numeric column stored as text | `min "1000"`, **`max "9900"`** — ordered lexically | `TRY_CAST` gives the true 1000–50000 |
+| Mean, stddev, median of that column | `null` — it will not cast | computed |
+| 40 columns over 25,000 rows | 730 ms | 405 ms |
 
-### 5.3 `duckdb_functions()` instead of a hardcoded catalogue
+The lexical maximum is the decisive one. CSV upload is a first-class path in ALUR and every column arrives as `VARCHAR`, so adopting `SUMMARIZE` would silently report a wrong maximum on the most common shape of input. The existing profiler is also semantically typed, so it does not compute numeric statistics on a text column that merely happens to be castable.
 
-[spatialFunctions.ts](../src/utils/spatialFunctions.ts) is 28KB and 158 hand-maintained function entries. `SELECT function_name, parameters, description FROM duckdb_functions() WHERE function_name ILIKE 'ST_%'` enumerates what the loaded build actually has. Keep the curated descriptions and categories as an overlay; stop maintaining the list of what exists. It will drift from the engine otherwise, and silently.
+Two things worth keeping from the exercise: `SUMMARIZE` returns `null_percentage` as a `DECIMAL` that arrives through Arrow as a scaled string (`"3188"` meaning 31.88%), which is a trap for anything that consumes it; and `std` is a genuine gap in our own profile, cheaply added as one more aggregate. **Recommendation: keep the hand-rolled profiler, add standard deviation to it.**
 
-### 5.4 Retest the community h3 extension
+### 5.3 `duckdb_functions()` instead of a hardcoded catalogue · **premise partly wrong**
 
-The comment at [duckdb.ts:164](../src/services/duckdb.ts#L164) documents a duckdb-wasm **1.28** bug where a loaded community extension broke `registerFileHandle` for the session. The project is now on **1.32**. If that is fixed upstream, `h3_latlng_to_cell`, `h3_cell_to_boundary_wkt`, `h3_grid_disk` and `h3_grid_distance` become available — real hexbinning instead of the Mercator approximation in [hexbinService.ts](../src/services/hexbinService.ts), and `h3_grid_disk` gives neighbourhood and dispersion operations directly. Worth an afternoon to check.
+The stated worry was silent drift. Measured: the engine exposes **157** distinct `ST_*` functions, the catalogue has **158** entries, nothing catalogued is missing from the engine, and only `st_expand` is missing from the catalogue. The names have not drifted, and `function_type` matches `category` for every single entry.
+
+What *is* wrong is the arity. `requiredInputCount` — which the workflow engine uses to decide how many geometry inputs a node needs — disagrees with the engine's own signatures for roughly two dozen functions. `ST_Point` and `ST_GeomFromText` are marked as taking a geometry input when they construct one from numbers or text; `ST_LocateAlong` is marked as taking two geometries when it takes one plus a measure.
+
+But deriving that number automatically is subtle too: counting geometry-typed parameters misclassifies the functions taking `GEOMETRY[]`, so a naive generated catalogue would swap known-wrong values for differently-wrong ones. **Recommendation: let the engine own existence, category, description and signatures; keep `requiredInputCount` as a small curated overlay, because it encodes a UI concept rather than a property of the signature — and add a check that fails when the two lists diverge.** Not yet done.
+
+### 5.4 The community h3 extension · **done**
+
+The comment at duckdb.ts documented a duckdb-wasm **1.28** bug where a loaded community extension broke `registerFileHandle` for the rest of the session, so no file could be opened afterwards. **Retested on 1.32: fixed.** `INSTALL h3 FROM community` succeeds, 74 h3 functions become available, and files register normally afterwards — verified across repeated loads in a browser.
+
+**Loaded lazily, never at startup.** It costs a measured 1.8–2.9s network round trip, and ALUR otherwise runs entirely offline once loaded; a session that never draws a hexbin should not pay for it. `ensureH3()` returns `false` rather than throwing when the fetch fails, because every caller has a working fallback and being offline is not an error.
+
+**Hexbinning now uses real H3 cells**, aggregated inside the engine, with the Mercator implementation kept as the fallback. Two things change:
+
+- **Cells are equal-area.** A Mercator hexagon at latitude 60 covers roughly a quarter of the ground that a hexagon of the same drawn size covers at the equator, so counts across a wide area were never comparable. The panel now states which grid produced the cells, because that changes what the numbers mean. The Mercator path also silently discarded everything above 85° latitude; H3 does not.
+- **The grouping happens in SQL.** What crosses into JS is one row per occupied cell rather than one row per point — 393 rows instead of 25,000 on the test data. This is a scaling change, not a speed one: at 25,000 rows the engine-side query is actually slower in wall-clock terms.
+
+Two traps found and handled. An H3 index is a 64-bit integer and many exceed 2^53, so reading a cell id as a JS number silently rounds it and distinct cells collide — ids cross as their canonical string form. And H3 resolutions step by a factor of about 2.6, so the panel's "2 km" and "1 km" options genuinely produce the same grid; rather than pretend otherwise, the panel reports the resolution and the cell size actually used.
+
+This also revives `create_h3_grid`, a copilot tool that had been permanently unreachable because `isH3Loaded` was always false.
 
 ### 5.5 Parameter binding for user-authored expressions
 
@@ -231,6 +252,11 @@ Attribute expressions, Filter conditions and the field calculator are string-con
 ### 5.7 `ASOF JOIN`
 
 Aligns records to the nearest preceding timestamp rather than requiring exact matches. This is the correct primitive for `ComparisonAlignment.mode === 'temporal'`, which currently has no real implementation behind it.
+
+### 5.9 Found while measuring, not fixed
+
+- **Node preview races file registration.** Loading a second file logs `Input node "…" has no table loaded` from the preview effect in [useAttributeTable.ts:175](../src/hooks/useAttributeTable.ts#L175) — the effect fires before the input node's table exists. Transient and self-correcting, so nothing is visibly broken, but it is noise in the console and a real ordering bug. Confirmed pre-existing and unrelated to the h3 work.
+- **E2E runs must reach the engine through `window.__alurDuckdb`**, now exposed in dev alongside `__alurStore` and `__alurMap`. Importing `/src/services/duckdb.ts` by path from `page.evaluate` used to work, but after any edit Vite serves that module under a cache-busting query string, so the import constructs a *second, uninitialised* service and every query fails with "DuckDB not initialized". This cost real time to diagnose and would silently invalidate any future verification run.
 
 ### 5.8 Recursive CTEs — noted, not scheduled
 
@@ -285,7 +311,8 @@ Chapter 9's companion discussion flags that a natural-language interface does no
 | ~~2~~ | ~~W2 aggregate, allocate, top-N~~ **done** | Biggest product hole, no design risk; verified against real DuckDB in the browser |
 | ~~3~~ | ~~W1 composite score~~ **done** | Highest analytical leverage; flips Prioritise's diagnostic |
 | ~~4~~ | ~~W3 filter transparency~~ **done** | Independent, moderate cost; flips Filter's diagnostic |
-| 6 | W5.1 OPFS, W5.2 SUMMARIZE, W5.3 duckdb_functions | Engine work, parallelisable |
+| ~~6a~~ | ~~W5.4 h3~~ **done** | Retested and fixed upstream; unblocks equal-area hexbins and revives a dead copilot tool |
+| 6b | W5.1 OPFS | The largest user-visible win left; W5.2 measured and rejected, W5.3 reduced to a drift check |
 | 7 | W0.4 temporal view, W5.7 ASOF | Together they make time comparison real |
 | 8 | W4 workflow macros | Largest design surface; benefits from everything above existing first |
 | 9 | W6 lineage | Small, do last |

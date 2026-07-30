@@ -12,7 +12,7 @@ Maps are one analytical view, not the product boundary: ALUR uses MapLibre when 
 
 | Layer | Technology |
 |-------|-----------|
-| Analytical engine | DuckDB-Wasm (in-browser SQL + `spatial` extension) |
+| Analytical engine | DuckDB-Wasm (in-browser SQL + `spatial`, plus `h3` fetched on first use) |
 | Linked views | TanStack Table + custom SVG charts + MapLibre GL JS |
 | Workflow editor | XYFlow (React Flow) |
 | State management | Zustand |
@@ -98,7 +98,7 @@ Coordinated visual-analytics shell: the main canvas provides geographic context 
 - **Heatmap** — dense point aggregation with weight field and intensity controls
 - **Labels** — text annotations with halo, font size, and zoom threshold
 - **Dot density** — DuckDB `ST_GeneratePoints` creates random dots within polygons, proportional to a numeric field
-- **Hexbin / glyph grid** — binned aggregation over dense points
+- **Hexbin / glyph grid** — binned aggregation over dense points, using equal-area H3 cells aggregated in the engine, falling back to Web Mercator cells when the extension cannot be fetched
 - **Bivariate** — two numeric fields on a 3×3 colour matrix
 - **Extrusion** — polygon height driven by a numeric field
 - **Clustered points** — MapLibre cluster sources with drill-to-zoom
@@ -212,7 +212,7 @@ src/
 
 ## Tests
 
-313 tests across 42 files, covering the visualisation pipeline, workflow SQL generation, store actions, comparison and story services, and a full workflow smoke test. Some of the more load-bearing ones:
+320 tests across 43 files, covering the visualisation pipeline, workflow SQL generation, store actions, comparison and story services, and a full workflow smoke test. Some of the more load-bearing ones:
 
 | Test file | Focus |
 |-----------|-------|
