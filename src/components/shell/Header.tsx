@@ -9,6 +9,7 @@ import {
   createProjectManifest,
   downloadProjectManifest,
   parseProjectManifest,
+  restoreSourcesFromCache,
   sourceMatchesFile,
 } from '../../services/projectService';
 import type { ProjectManifest, ProjectSourceDescriptor } from '../../types/project';
@@ -128,15 +129,19 @@ export const Header = () => {
     if (hasWork && !window.confirm('Replace the current workspace with this project? Loaded data and unsaved changes will be removed.')) return;
     try {
       const manifest = parseProjectManifest(await file.text());
-      const missing = applyProjectManifest(manifest);
+      const declared = applyProjectManifest(manifest);
       setImportedProject(manifest);
+      // Anything this browser cached on the way in comes back without asking.
+      const { restored, missing } = await restoreSourcesFromCache(declared, manifest);
       setMissingSources(missing);
       setRelinkOpen(missing.length > 0);
       addToast({
         type: missing.length ? 'warning' : 'success',
         message: missing.length
-          ? `Opened project. Relink ${missing.length} source ${missing.length === 1 ? 'file' : 'files'} to restore its data.`
-          : 'Opened project.',
+          ? `Opened project${restored.length ? `, restoring ${restored.length} of ${declared.length} sources from this browser` : ''}. Relink ${missing.length} source ${missing.length === 1 ? 'file' : 'files'} to restore the rest.`
+          : restored.length
+            ? `Opened project and restored ${restored.length} source ${restored.length === 1 ? 'file' : 'files'} from this browser.`
+            : 'Opened project.',
       });
     } catch (error: any) {
       addToast({ type: 'error', message: `Could not open project: ${error?.message || 'Unknown error'}` });

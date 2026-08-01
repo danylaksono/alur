@@ -117,6 +117,12 @@ The reasons are plain text, so they group in a Summarise node, colour a map thro
 
 Inside the node, a **constraint funnel** measures each condition against the real upstream rows and reports both what it removes on its own and what it removes that the earlier conditions had not already. The gap is the useful part: a condition that removes thousands alone but nothing in sequence does not bind, which no surviving row count would ever tell you.
 
+### Reopening a project
+
+Project files record the workflow, styling, cohorts and report — but not the data, which stays on your machine. ALUR keeps a copy of every file you load in the browser's private storage, so reopening a project or recovering a crashed session re-attaches its data without asking you to find each file again. Where a file is not held — a different machine, or storage the browser has reclaimed — the existing relink prompt asks for exactly that file and checks it matches before accepting it.
+
+Nothing leaves your device. Settings shows how much is cached and clears it, and the cache stays inside a fixed budget by dropping least-recently-used files.
+
 ### Compare, cohorts and reporting
 - **Cohorts** — name and save a filtered subset, then compare it against another cohort or the remainder, with effect sizes and explicit denominator and missing-value notes
 - **Compare workspace** — two to four groups drawn from datasets, snapshotted filters or cohorts; aligned by summary, by record key, by time or by location; overview, distribution, category, time, map and record views on shared scales
@@ -194,6 +200,7 @@ src/
 │   ├── comparisonService.ts     # Comparison alignment and denominators
 │   ├── scoreService.ts          # Live scoring, ranking and weight sensitivity
 │   ├── filterFunnelService.ts   # What each condition in a filter actually removes
+│   ├── sourceCache.ts           # Loaded files kept in OPFS so projects reopen with their data
 │   ├── layerMaterialization.ts  # Workflow result → layer or dataset
 │   ├── workflowRun.ts           # Registers a run's output across the store
 │   ├── projectService.ts        # Project manifest save / load / migrate
@@ -212,7 +219,7 @@ src/
 
 ## Tests
 
-320 tests across 43 files, covering the visualisation pipeline, workflow SQL generation, store actions, comparison and story services, and a full workflow smoke test. Some of the more load-bearing ones:
+330 tests across 44 files, covering the visualisation pipeline, workflow SQL generation, store actions, comparison and story services, and a full workflow smoke test. Some of the more load-bearing ones:
 
 | Test file | Focus |
 |-----------|-------|
@@ -233,7 +240,7 @@ npm run test:e2e    # Playwright
 
 ## Roadmap
 
-[docs/improvement-plan.md](docs/improvement-plan.md) is the current plan — composite scoring, a numeric `GROUP BY` node, filter provenance, reusable workflow fragments, and OPFS-backed persistence.
+[docs/improvement-plan.md](docs/improvement-plan.md) is the current plan. Composite scoring, the numeric `GROUP BY` and allocation nodes, filter provenance, equal-area hexbins and resumable projects have shipped; reusable workflow fragments, lineage in Explain and wider copilot coverage have not.
 
 Still deferred, and not in that plan:
 

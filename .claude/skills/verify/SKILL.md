@@ -66,6 +66,16 @@ fails in a way that looks like a product bug. Importing other services by path i
   `isH3Loaded === false` on a fresh page.
 - Loading a second file logs `Input node "…" has no table loaded` from the node-preview
   effect. Pre-existing and transient — filter it out rather than chasing it.
+- Loaded files are cached in OPFS (`alur-sources/`), which is **per origin and survives
+  across pages in the same browser context** — so a second `newPage()` still sees what the
+  first cached. Use `clearSourceCache()` between scenarios that need a cold start.
+- Overwriting an OPFS file DuckDB currently holds a handle to raises
+  `NotReadableError: … after a reference to a file was acquired`, often seconds later and
+  far from the cause. If a test deliberately corrupts cached files, assert on console
+  errors *before* that step, not after.
+- A recovery snapshot from an earlier run puts a blocking dialog at `z-[10000]` over
+  everything, including Settings. Dismiss it (`Discard recovery snapshot`) before driving
+  other dialogs, or clicks silently retry until they time out.
 
 - The smoke test uses `renderToString` — zustand SSR renders *initial* state, so `setState`
   before render has no effect there. Don't copy that pattern for runtime verification.

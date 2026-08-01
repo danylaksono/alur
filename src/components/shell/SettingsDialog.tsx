@@ -1,7 +1,15 @@
 import { useEffect, useState } from 'react';
 import { CheckCircle2, Eye, EyeOff, Loader2, X, XCircle } from 'lucide-react';
 import { useStore } from '../../store/useStore';
+import { clearSourceCache, sourceCacheUsage } from '../../services/sourceCache';
 import { testOpenRouterConnection } from '../../utils/openrouter';
+
+const formatBytes = (bytes: number) => {
+  if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(1)} GB`;
+  if (bytes >= 1e6) return `${Math.round(bytes / 1e6)} MB`;
+  if (bytes >= 1e3) return `${Math.round(bytes / 1e3)} KB`;
+  return `${bytes} B`;
+};
 
 export const SettingsDialog = () => {
   const isOpen = useStore((s) => s.ui.isSettingsOpen);
@@ -14,6 +22,8 @@ export const SettingsDialog = () => {
   const [authorName, setAuthorName] = useState(settings.authorName);
   const [showKey, setShowKey] = useState(false);
   const [testState, setTestState] = useState<'idle' | 'testing' | 'ok' | 'failed'>('idle');
+  const [cacheUsage, setCacheUsage] = useState<{ count: number; bytes: number } | null>(null);
+  const [isClearingCache, setClearingCache] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -22,6 +32,8 @@ export const SettingsDialog = () => {
       setAuthorName(settings.authorName);
       setTestState('idle');
       setShowKey(false);
+      setCacheUsage(null);
+      void sourceCacheUsage().then(setCacheUsage).catch(() => setCacheUsage({ count: 0, bytes: 0 }));
     }
   }, [isOpen, settings.openRouterApiKey, settings.openRouterModelId, settings.authorName]);
 
@@ -31,6 +43,16 @@ export const SettingsDialog = () => {
     setTestState('testing');
     const ok = await testOpenRouterConnection(apiKey.trim());
     setTestState(ok ? 'ok' : 'failed');
+  };
+
+  const handleClearCache = async () => {
+    setClearingCache(true);
+    try {
+      await clearSourceCache();
+      setCacheUsage({ count: 0, bytes: 0 });
+    } finally {
+      setClearingCache(false);
+    }
   };
 
   const handleSave = () => {
@@ -123,6 +145,34 @@ export const SettingsDialog = () => {
                 Any OpenRouter model ID, e.g. <code>anthropic/claude-haiku-4.5</code> or <code>openai/gpt-4o-mini</code>.
               </span>
             </label>
+          </div>
+
+          {/* Cached data is written to the user's disk without being asked for,
+              so it has to be visible and removable from somewhere obvious. */}
+          <div className="border-t border-slate-100 pt-4">
+            <h3 className="mb-1 text-xs font-semibold text-slate-700">Cached data files</h3>
+            <p className="mb-3 text-[11px] leading-relaxed text-slate-500">
+              A copy of each file you load is kept in this browser so reopening a project does not mean
+              finding every file again. Nothing leaves your device, and clearing this only means you will
+              be asked to pick those files the next time you open a project that uses them.
+            </p>
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+              <span className="text-[11px] font-semibold text-slate-600">
+                {cacheUsage === null
+                  ? 'Checking…'
+                  : cacheUsage.count === 0
+                    ? 'Nothing cached'
+                    : `${cacheUsage.count} file${cacheUsage.count === 1 ? '' : 's'} · ${formatBytes(cacheUsage.bytes)}`}
+              </span>
+              <button
+                type="button"
+                disabled={!cacheUsage?.count || isClearingCache}
+                onClick={handleClearCache}
+                className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isClearingCache ? 'Clearing…' : 'Clear'}
+              </button>
+            </div>
           </div>
         </div>
 

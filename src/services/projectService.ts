@@ -8,6 +8,8 @@ import {
   type ProjectManifestV1,
   type ProjectSourceDescriptor,
 } from '../types/project';
+import { ingestFile } from './dataIngestion';
+import { cachedSource } from './sourceCache';
 import { BASEMAPS } from '../utils/basemaps';
 import { downloadText, filenameTimestamp, safeFilename } from '../utils/download';
 import { migrateVisualAnalyticsSources } from '../utils/datasetSource';
@@ -383,4 +385,55 @@ export const sourceMatchesFile = (source: ProjectSourceDescriptor, file: File) =
   if (source.size !== undefined && file.size !== source.size) return false;
   if ((source.sourceKind === undefined || source.sourceKind === 'file') && source.lastModified !== undefined && file.lastModified !== source.lastModified) return false;
   return true;
+};
+
+export type SourceRestoreResult = {
+  restored: ProjectSourceDescriptor[];
+  /** Still need the user to pick them by hand. */
+  missing: ProjectSourceDescriptor[];
+};
+
+/**
+ * Re-attaches whatever this browser still has cached from an earlier session,
+ * leaving only genuinely absent files for the relink prompt.
+ *
+ * Restoring runs through `ingestFile` — the same path a manual relink uses —
+ * so a project rebuilt from cache is the same project rebuilt by hand.
+ * Anything else would create a second way for a dataset to come into
+ * existence, and only one of them would be tested.
+ */
+export const restoreSourcesFromCache = async (
+  sources: ProjectSourceDescriptor[],
+  manifest: ProjectManifest | ProjectManifestV1,
+): Promise<SourceRestoreResult> => {
+  const restored: ProjectSourceDescriptor[] = [];
+  const missing: ProjectSourceDescriptor[] = [];
+
+  for (const source of sources) {
+    let file: File | null = null;
+    try {
+      file = await cachedSource(source);
+    } catch {
+      file = null;
+    }
+    // A cached file that no longer matches the manifest counts as absent
+    // rather than being trusted: exactly the check a hand-picked file faces.
+    if (!file || !sourceMatchesFile(source, file)) {
+      missing.push(source);
+      continue;
+    }
+    try {
+      const result = await ingestFile(file, { nodeId: source.nodeId });
+      if (!result) {
+        missing.push(source);
+        continue;
+      }
+      if (result.layerId) applyRelinkedLayerPresentation(source.nodeId, result.layerId, manifest);
+      restored.push(source);
+    } catch {
+      missing.push(source);
+    }
+  }
+
+  return { restored, missing };
 };

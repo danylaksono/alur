@@ -1,6 +1,6 @@
 # ALUR Improvement Plan — Analytical Depth
 
-**Date:** 2026-07-29 · **Status:** Workstreams 0–3 and W5.4 done; W5.2 measured and rejected; 4–7 otherwise proposed · **Supersedes nothing** (ROADMAP.md covers the prototype→product phases, all complete)
+**Date:** 2026-07-29 · **Status:** Workstreams 0–3, W5.1 and W5.4 done; W5.2 measured and rejected; 4–7 otherwise proposed · **Supersedes nothing** (ROADMAP.md covers the prototype→product phases, all complete)
 
 ## Framing
 
@@ -198,11 +198,31 @@ Secondary benefit: it makes workflows readable at a glance instead of as 15 anon
 
 ## Workstream 5 — Engine and persistence
 
-### 5.1 OPFS-backed persistence
+### 5.1 Resumable projects · **done, but not by moving the database**
 
-duckdb-wasm 1.32 supports `opfs://` database paths and `DuckDBAccessMode.READ_WRITE` (see `DuckDBConfig.opfs` in the bundled typings). ALUR currently calls `db.instantiate()` then `db.connect()` with no path ([duckdb.ts:150-153](../src/services/duckdb.ts#L150-L153)) — the database is purely in-memory, and [recoveryStorage.ts](../src/services/recoveryStorage.ts) persists only project *manifests* to IndexedDB, never the data. Reopening a project means re-uploading every file.
+The proposal was to open DuckDB on an `opfs://` path so the database itself persists. Investigating first showed why that would not work, and what does.
 
-Opening on OPFS makes projects genuinely resumable, makes recovery real rather than structural, and makes the "load project from URL" feature carry its data. This is the largest user-visible win in the plan relative to its cost.
+**Parquet and CSV uploads never enter the database.** Ingestion registers the file and creates a *view* over it — confirmed by reading the catalogue of a loaded project:
+
+```text
+need_london            VIEW         CREATE VIEW need_london AS
+                                    SELECT * FROM read_parquet('1785593226135_need_london.parquet');
+__alur_mvt_need_london BASE TABLE
+```
+
+Only the derived tile table is real. So persisting the database would save a catalogue of views pointing at file registrations that died with the page: the project would appear to reopen and then fail on the first query — worse than plainly asking for the file. Moving the database also brings multi-tab lock contention and a persistent-corruption failure mode, for a benefit it does not actually deliver.
+
+**Persisting the source files does deliver it.** [sourceCache.ts](../src/services/sourceCache.ts) keeps a copy of every ingested file in OPFS, keyed by the same `name + size + lastModified` triple `sourceMatchesFile` uses to accept a manual relink — so the cache can never admit a file the relink check would have rejected. On open, [restoreSourcesFromCache](../src/services/projectService.ts) re-attaches what is held and leaves the rest to the existing relink prompt, which was already built and until now always had to be used.
+
+Restoring runs through `ingestFile`, the same path a manual relink uses. That matters: a separate restore path would be a second way for a dataset to come into existence, and only one of them would be tested.
+
+Measurements that shaped it: writing 51 MB to OPFS takes ~540 ms and `getFile()` 1 ms, so caching is cheap enough to do on every ingest (unawaited — the user is waiting on the map, not on a cache); Chromium offered a 6.4 GB quota, of which the cache claims 1.5 GB with least-recently-used eviction; and `navigator.storage.persist()` was **refused** in testing, so this is a cache the browser may evict, never storage. Every caller treats a miss as normal.
+
+Settings gains a "Cached data files" row with its size and a Clear button, because writing hundreds of megabytes to someone's disk unasked has to be visible and reversible from somewhere obvious.
+
+**One real bug, found only end to end.** Restoring re-ingests the cached file, and ingestion caches what it ingests — so the restore rewrote the very OPFS file DuckDB was reading, and `createWritable()` truncates on open. The result was `NotReadableError: … after a reference to a file was acquired`, several seconds into a load that looked fine. `cacheSource` now returns early when an entry with the same key exists; since size and timestamp are part of the key, a match means the bytes are already the right ones. Unit tests could not have caught this — nothing is wrong with any single function.
+
+Still open: **"load project from URL" does not carry its data**, since a shared link reaches a browser whose cache has never seen those files.
 
 ### 5.2 `SUMMARIZE` · **measured, not adopted**
 
@@ -312,7 +332,7 @@ Chapter 9's companion discussion flags that a natural-language interface does no
 | ~~3~~ | ~~W1 composite score~~ **done** | Highest analytical leverage; flips Prioritise's diagnostic |
 | ~~4~~ | ~~W3 filter transparency~~ **done** | Independent, moderate cost; flips Filter's diagnostic |
 | ~~6a~~ | ~~W5.4 h3~~ **done** | Retested and fixed upstream; unblocks equal-area hexbins and revives a dead copilot tool |
-| 6b | W5.1 OPFS | The largest user-visible win left; W5.2 measured and rejected, W5.3 reduced to a drift check |
+| ~~6b~~ | ~~W5.1 resumable projects~~ **done** | Delivered by caching source files in OPFS, not by moving the database; W5.2 measured and rejected, W5.3 reduced to a drift check |
 | 7 | W0.4 temporal view, W5.7 ASOF | Together they make time comparison real |
 | 8 | W4 workflow macros | Largest design surface; benefits from everything above existing first |
 | 9 | W6 lineage | Small, do last |
