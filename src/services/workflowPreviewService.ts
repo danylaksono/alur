@@ -2,6 +2,7 @@ import type { Edge } from '@xyflow/react';
 import { duckdbService } from './duckdb';
 import { buildWorkflowSQL, cteAlias } from '../utils/workflowEngine';
 import type { WorkflowNode } from '../store/useStore';
+import type { WorkflowFragment } from '../utils/workflowFragments';
 import type { ColumnProfile } from '../components/DataTable';
 import type { VisualFilter } from '../types/visualAnalytics';
 import { compileVisualFiltersWhereClause } from '../utils/visualFilterSql';
@@ -45,8 +46,8 @@ const combinedWhereClause = (schema: any[] | undefined, search: string, filters:
   return predicates.length ? ` WHERE (${predicates.join(') AND (')})` : '';
 };
 
-export const buildNodeSelectSql = (nodes: WorkflowNode[], edges: Edge[], nodeId: string) => {
-  const { withClause } = buildWorkflowSQL(nodes, edges);
+export const buildNodeSelectSql = (nodes: WorkflowNode[], edges: Edge[], nodeId: string, fragments: WorkflowFragment[] = []) => {
+  const { withClause } = buildWorkflowSQL(nodes, edges, { fragments });
   return `${withClause} SELECT * FROM ${cteAlias(nodeId)}`;
 };
 
@@ -60,9 +61,11 @@ export const buildNodeTableExportSql = ({
   sortBy,
   sortDirection,
   computedFields,
+  fragments = [],
 }: {
   nodes: WorkflowNode[];
   edges: Edge[];
+  fragments?: WorkflowFragment[];
   nodeId: string;
   schema: any[] | undefined;
   filters: VisualFilter[];
@@ -71,7 +74,7 @@ export const buildNodeTableExportSql = ({
   sortDirection: 'asc' | 'desc';
   computedFields: ComputedField[];
 }) => {
-  const { withClause } = buildWorkflowSQL(nodes, edges);
+  const { withClause } = buildWorkflowSQL(nodes, edges, { fragments });
   const relation = buildComputedRelation(cteAlias(nodeId), computedFields);
   const whereClause = combinedWhereClause(schema, search, filters, computedFields);
   const sortClause = sortBy ? ` ORDER BY ${qi(sortBy)} ${sortDirection.toUpperCase()} NULLS LAST` : '';
@@ -90,9 +93,11 @@ export const queryNodePreviewRows = async ({
   pageSize,
   filters = [],
   computedFields = [],
+  fragments = [],
 }: {
   nodes: WorkflowNode[];
   edges: Edge[];
+  fragments?: WorkflowFragment[];
   nodeId: string;
   schema: any[] | undefined;
   search: string;
@@ -103,7 +108,7 @@ export const queryNodePreviewRows = async ({
   filters?: VisualFilter[];
   computedFields?: ComputedField[];
 }) => {
-  const { withClause } = buildWorkflowSQL(nodes, edges);
+  const { withClause } = buildWorkflowSQL(nodes, edges, { fragments });
   const targetAlias = cteAlias(nodeId);
   const relation = buildComputedRelation(targetAlias, computedFields);
   const whereClause = combinedWhereClause(schema, search, filters, computedFields);
@@ -134,9 +139,11 @@ export const queryNodeColumnProfile = async ({
   column,
   filters = [],
   computedFields = [],
+  fragments = [],
 }: {
   nodes: WorkflowNode[];
   edges: Edge[];
+  fragments?: WorkflowFragment[];
   nodeId: string;
   schema: any[] | undefined;
   search: string;
@@ -144,7 +151,7 @@ export const queryNodeColumnProfile = async ({
   filters?: VisualFilter[];
   computedFields?: ComputedField[];
 }): Promise<ColumnProfile> => {
-  const { withClause } = buildWorkflowSQL(nodes, edges);
+  const { withClause } = buildWorkflowSQL(nodes, edges, { fragments });
   const targetAlias = cteAlias(nodeId);
   const type = columnType(schema, column);
   const relation = buildComputedRelation(targetAlias, computedFields);

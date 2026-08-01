@@ -79,7 +79,7 @@ Coordinated visual-analytics shell: the main canvas provides geographic context 
 ## Features
 
 ### Workflow Engine
-- **10 node types**: Input, Analysis (spatial operations), Attribute (computed columns), Score (weighted multi-criteria ranking), Filter (SQL WHERE, map selection, top-N by column, or named conditions that record what they excluded), Summarise (numeric `GROUP BY`, or geometry dissolve), Allocate (spend a budget or capacity down a ranked list), Join (spatial predicate or attribute key), Visualisation (style recipe), Output (map preview or file export)
+- **11 node types**: Input, Analysis (spatial operations), Attribute (computed columns), Score (weighted multi-criteria ranking), Filter (SQL WHERE, map selection, top-N by column, or named conditions that record what they excluded), Summarise (numeric `GROUP BY`, or geometry dissolve), Allocate (spend a budget or capacity down a ranked list), Join (spatial predicate or attribute key), Operation (a named, reusable group of steps you saved), Visualisation (style recipe), Output (map preview or file export)
 - Unlimited branching — style the same data multiple ways
 - Step-through execution per node or full workflow run
 - Results without geometry register as datasets, so charts, comparison and the report can read them even when the map cannot
@@ -116,6 +116,14 @@ A `WHERE` clause answers what survived; it cannot answer why a particular row di
 The reasons are plain text, so they group in a Summarise node, colour a map through the category renderer and export to CSV without anything downstream needing to know they are special.
 
 Inside the node, a **constraint funnel** measures each condition against the real upstream rows and reports both what it removes on its own and what it removes that the earlier conditions had not already. The gap is the useful part: a condition that removes thousands alone but nothing in sequence does not bind, which no surviving row count would ever tell you.
+
+### Naming your own operations
+
+A workflow that reads as fifteen anonymous Attribute nodes is one nobody can follow a month later. Select a run of steps and **save them as an operation** with a name and fill-in-the-blank values: it joins the node palette and reads as one step on the canvas.
+
+Blanks are found rather than declared — write `{{amount}}` or `{{column}}` anywhere in a step's configuration and the save dialog offers them to be labelled and typed. Values are a **number**, a **column**, or **one of a list**, and each is validated before any SQL is built; free text is deliberately not offered, because a value is interpolated into the query.
+
+ALUR ships no domain vocabulary of its own. `Retrofit(−20% on Gcons2023)` is something you author out of generic nodes, and it travels in your project file for whoever you share it with.
 
 ### Reopening a project
 
@@ -188,6 +196,7 @@ src/
 │   ├── scoreModel.ts            # Weighted multi-criteria score → SQL
 │   ├── aggregationSql.ts        # Group-by measures, running-total allocation, top-N
 │   ├── filterPredicates.ts      # Named conditions → exclusion columns and funnel SQL
+│   ├── workflowFragments.ts     # Saved operations: parameters, validation, expansion
 │   ├── visualFilterSql.ts       # VisualFilter → DuckDB WHERE clauses
 │   ├── visualisationResolver.ts # Workflow config → LayerVisualisation
 │   ├── scenarioComparison.ts    # Variant results → ComparisonSpec
@@ -219,7 +228,7 @@ src/
 
 ## Tests
 
-330 tests across 44 files, covering the visualisation pipeline, workflow SQL generation, store actions, comparison and story services, and a full workflow smoke test. Some of the more load-bearing ones:
+360 tests across 45 files, covering the visualisation pipeline, workflow SQL generation, store actions, comparison and story services, and a full workflow smoke test. Some of the more load-bearing ones:
 
 | Test file | Focus |
 |-----------|-------|
@@ -227,6 +236,7 @@ src/
 | `workflowEngine.test.ts` | SQL generation, joins, visualisation propagation, terminal-node attribution |
 | `scoreModel.test.ts` | Weighted score compilation: weights, direction, normalisation, missing values |
 | `filterPredicates.test.ts` | Named conditions: NULL handling, hard vs soft, exclusion columns, funnel counts |
+| `workflowFragments.test.ts` | Saved operations: parameter validation, expansion, rewiring, graph immutability |
 | `comparisonService.test.ts` | Comparison alignment, denominators and warnings |
 | `useStore.test.ts` | Layer state, layout preferences, scenario variants |
 | `storyDiff.test.ts` | Claim matching and divergence reasons between two stories |
@@ -240,7 +250,7 @@ npm run test:e2e    # Playwright
 
 ## Roadmap
 
-[docs/improvement-plan.md](docs/improvement-plan.md) is the current plan. Composite scoring, the numeric `GROUP BY` and allocation nodes, filter provenance, equal-area hexbins and resumable projects have shipped; reusable workflow fragments, lineage in Explain and wider copilot coverage have not.
+[docs/improvement-plan.md](docs/improvement-plan.md) is the current plan. Composite scoring, the numeric `GROUP BY` and allocation nodes, filter provenance, named reusable operations, equal-area hexbins and resumable projects have shipped; lineage in Explain and wider copilot coverage have not.
 
 Still deferred, and not in that plan:
 

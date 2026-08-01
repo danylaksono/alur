@@ -19,7 +19,14 @@ import {
   type FilterOutcome,
   type FilterPredicate,
 } from './filterPredicates';
+import { expandFragments, type WorkflowFragment } from './workflowFragments';
 import type { ScoreModelSpec } from '../types/visualAnalytics';
+
+export type WorkflowBuildOptions = {
+  limit?: number;
+  /** Saved operations the workflow may place. Omit only for graphs known to have none. */
+  fragments?: WorkflowFragment[];
+};
 
 /**
  * Workflow Engine
@@ -164,12 +171,15 @@ function isBooleanPredicate(operation: string): boolean {
 
 // ─── main builder ─────────────────────────────────────────────────────
 
-export function buildWorkflowSQL(nodes: WorkflowNode[], edges: Edge[], options?: { limit?: number }): WorkflowResult {
+export function buildWorkflowSQL(nodes: WorkflowNode[], edges: Edge[], options?: WorkflowBuildOptions): WorkflowResult {
   if (!nodes.length) {
     throw new Error('No nodes in the workflow.');
   }
 
   const resultLimit = options?.limit ?? 5000;
+  // Saved operations become ordinary nodes before anything else looks at the
+  // graph, so every node type works inside one without being taught to.
+  ({ nodes, edges } = expandFragments(nodes, edges, options?.fragments || []));
 
   const sorted = topoSort(nodes, edges);
 
@@ -534,11 +544,18 @@ export function buildWorkflowSQL(nodes: WorkflowNode[], edges: Edge[], options?:
  * Build SQL that executes the workflow up to (and including) a specific target node.
  * Useful for step-through / per-node execution.
  */
-export function buildUpToSQL(nodes: WorkflowNode[], edges: Edge[], targetNodeId: string, options?: { limit?: number }): WorkflowResult {
+export function buildUpToSQL(nodes: WorkflowNode[], edges: Edge[], targetNodeId: string, options?: WorkflowBuildOptions): WorkflowResult {
   if (!nodes.length) throw new Error('No nodes in the workflow.');
   if (!nodes.some((node) => node.id === targetNodeId)) {
     throw new Error(`Target node "${targetNodeId}" does not exist.`);
   }
+
+  // Expanding first means "run up to here" can target a saved operation, whose
+  // own node disappears — so the target moves to whatever replaced it.
+  const expansion = expandFragments(nodes, edges, options?.fragments || []);
+  nodes = expansion.nodes;
+  edges = expansion.edges;
+  targetNodeId = expansion.outputByPlacement.get(targetNodeId) || targetNodeId;
 
   // Find all nodes that are ancestors of the target (including the target itself)
   const parentMap = new Map<string, string[]>();

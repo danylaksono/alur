@@ -5,6 +5,7 @@ import { buildWorkflowSQL } from '../utils/workflowEngine';
 export function useWorkflowSync() {
   const nodes = useStore((s) => s.nodes);
   const edges = useStore((s) => s.edges);
+  const fragments = useStore((s) => s.fragments);
   const isManualSQL = useStore((s) => s.isManualSQL);
   const setManualSQL = useStore((s) => s.setManualSQL);
 
@@ -13,7 +14,7 @@ export function useWorkflowSync() {
       return '-- SQL preview will appear here once you add input and analysis nodes.';
     }
     try {
-      const { sql } = buildWorkflowSQL(nodes, edges);
+      const { sql } = buildWorkflowSQL(nodes, edges, { fragments });
       return sql;
     } catch (err: any) {
       return `-- Preview unavailable: ${err.message}`;

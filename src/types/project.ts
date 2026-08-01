@@ -4,6 +4,7 @@ import type { BasemapId } from '../utils/basemaps';
 import type { LayerVisualisation, LegendSpec } from './visualisation';
 import type { VisualAnalyticsState } from './visualAnalytics';
 import type { DatasetDescriptor } from './datasets';
+import type { WorkflowFragment } from '../utils/workflowFragments';
 
 export const PROJECT_MANIFEST_VERSION = 2 as const;
 
@@ -41,6 +42,8 @@ export type ProjectManifestV1 = {
   workflow: {
     nodes: WorkflowNode[];
     edges: Edge[];
+    /** Optional so projects written before saved operations existed still validate. */
+    fragments?: WorkflowFragment[];
   };
   sources: ProjectSourceDescriptor[];
   datasets: DatasetDescriptor[];

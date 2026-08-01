@@ -6,6 +6,7 @@ import { duckdbService } from '../services/duckdb';
 export function useSchemaFetcher() {
   const nodes = useStore((s) => s.nodes);
   const edges = useStore((s) => s.edges);
+  const fragments = useStore((s) => s.fragments);
   const duckdbReady = useStore((s) => s.duckdbReady);
   const setNodeSchema = useStore((s) => s.setNodeSchema);
 
@@ -14,7 +15,7 @@ export function useSchemaFetcher() {
       if (!duckdbReady || nodes.length === 0) return;
 
       try {
-        const { withClause } = buildWorkflowSQL(nodes, edges);
+        const { withClause } = buildWorkflowSQL(nodes, edges, { fragments });
 
         for (const node of nodes) {
           try {
@@ -37,5 +38,5 @@ export function useSchemaFetcher() {
     };
 
     fetchSchemas();
-  }, [nodes, edges, duckdbReady, setNodeSchema]);
+  }, [nodes, edges, fragments, duckdbReady, setNodeSchema]);
 }

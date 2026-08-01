@@ -24,9 +24,9 @@ export const OutputNode = ({ data, id, selected }: any) => {
 
   const handlePreview = async () => {
     setSelectedNodeId(id);
-    const { nodes, edges } = useStore.getState();
+    const { nodes, edges, fragments } = useStore.getState();
     try {
-      const workflow = buildUpToSQL(nodes, edges, id, { limit: maxFeatures });
+      const workflow = buildUpToSQL(nodes, edges, id, { limit: maxFeatures, fragments });
       const result = await materializeWorkflowOutput({
         workflow,
         layerId: `output-${id}`,
@@ -59,9 +59,9 @@ export const OutputNode = ({ data, id, selected }: any) => {
   };
 
   const handleExport = async () => {
-    const { nodes, edges } = useStore.getState();
+    const { nodes, edges, fragments } = useStore.getState();
     try {
-      const workflow = buildUpToSQL(nodes, edges, id, { limit: maxFeatures });
+      const workflow = buildUpToSQL(nodes, edges, id, { limit: maxFeatures, fragments });
 
       if (exportFormat === 'geojson') {
         const tableName = `alur_export_${id.replace(/[^a-zA-Z0-9_]/g, '_')}_${Date.now()}`;

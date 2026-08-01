@@ -23,10 +23,10 @@ export const ConstraintFunnelStrip = ({ nodeId, predicates }: { nodeId: string; 
     setBusy(true);
     setError(null);
     try {
-      const { nodes, edges } = useStore.getState();
+      const { nodes, edges, fragments } = useStore.getState();
       const source = edges.find((edge) => edge.target === nodeId)?.source;
       if (!source) throw new Error('Connect this filter to a source first.');
-      const { withClause } = buildWorkflowSQL(nodes, edges);
+      const { withClause } = buildWorkflowSQL(nodes, edges, { fragments });
       setFunnel(await queryConstraintFunnel({ relation: cteAlias(source), withClause, predicates }));
     } catch (err: any) {
       setFunnel(null);

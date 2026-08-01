@@ -89,3 +89,7 @@ fails in a way that looks like a product bug. Importing other services by path i
 - `data_sample/need_london.parquet` is EPC/energy data: `REGION`, `PROP_TYPE`,
   `COUNCIL_TAX_BAND`, `IMD_BAND_ENG`, `EPC`, `Gcons2005..2023`, `Econs2005..2023`,
   `Latitude`, `Longitude` — 95 columns, 25,000 rows. There is no `need` or `borough` column.
+- Saved operations (`fragment` nodes) expand into ordinary nodes at compile time, so their
+  ids are namespaced: a step `s1` inside a placement `op-a` compiles as `op-a__s1`. Assert
+  against `cteAlias('op-a__s1')`, and pass `{ fragments }` to `buildWorkflowSQL`/`buildUpToSQL`
+  or a fragment node throws "refers to an operation this project no longer defines".

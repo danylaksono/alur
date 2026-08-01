@@ -46,6 +46,7 @@ export function useAttributeTable() {
   const selectedNodeId = useStore((s) => s.selectedNodeId);
   const selectedLayerId = useStore((s) => s.selectedLayerId);
   const nodeSchemas = useStore((s) => s.nodeSchemas);
+  const fragments = useStore((s) => s.fragments);
   const visualAnalytics = useStore((s) => s.visualAnalytics);
   const datasetRegistry = useStore((s) => s.datasetRegistry);
   const isManualSQL = useStore((s) => s.isManualSQL);
@@ -213,6 +214,7 @@ export function useAttributeTable() {
         const result = await queryNodePreviewRows({
           nodes,
           edges,
+          fragments,
           nodeId: selectedNodeId,
           schema: nodeSchemas[selectedNodeId],
           search: debouncedSearch,

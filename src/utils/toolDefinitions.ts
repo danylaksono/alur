@@ -8,8 +8,8 @@ export const llmToolDefinitions = [
         id: { type: 'string', description: 'Unique identifier for the node (optional).' },
         type: {
           type: 'string',
-          enum: ['input', 'analysis', 'attribute', 'aggregate', 'allocate', 'score', 'filter', 'join', 'visualisation', 'output'],
-          description: 'The type of node to create. "join" joins two inputs (A=left keeps geometry, B=right attributes get an r_ prefix); connect A to input-0 and B to input-1. "aggregate" summarises numbers by group (mode="summary") or dissolves geometry (mode="spatial"). "allocate" works down rows in priority order spending a budget or capacity until a limit is reached. "score" combines several columns into one weighted score and ranks by it.'
+          enum: ['input', 'analysis', 'attribute', 'aggregate', 'allocate', 'score', 'filter', 'join', 'visualisation', 'output', 'fragment'],
+          description: 'The type of node to create. "join" joins two inputs (A=left keeps geometry, B=right attributes get an r_ prefix); connect A to input-0 and B to input-1. "aggregate" summarises numbers by group (mode="summary") or dissolves geometry (mode="spatial"). "allocate" works down rows in priority order spending a budget or capacity until a limit is reached. "score" combines several columns into one weighted score and ranks by it. "fragment" places one of the named operations this project has saved.'
         },
         label: { type: 'string', description: 'Human-readable label for the node.' },
         position: {
@@ -90,6 +90,8 @@ export const llmToolDefinitions = [
             },
             outcome: { type: 'string', enum: ['drop', 'tag'], description: 'For filter nodes with mode="criteria": "drop" removes rows failing a hard condition, "tag" keeps every row and only records the failures. Defaults to drop.' },
             exclusionField: { type: 'string', description: 'For filter nodes with mode="criteria": base name for the recorded columns. Defaults to alur_excluded.' },
+            fragmentId: { type: 'string', description: 'For fragment nodes: the id of the saved operation to place. Only ids listed in the conversation context exist.' },
+            arguments: { type: 'object', description: 'For fragment nodes: a value per parameter the operation asks for, keyed by parameter id.' },
             mode: {
               type: 'string',
               enum: ['spatial', 'attribute', 'summary', 'condition', 'top-n', 'criteria', 'flag', 'cut', 'scale'],

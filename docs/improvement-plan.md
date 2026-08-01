@@ -1,6 +1,6 @@
 # ALUR Improvement Plan — Analytical Depth
 
-**Date:** 2026-07-29 · **Status:** Workstreams 0–3, W5.1 and W5.4 done; W5.2 measured and rejected; 4–7 otherwise proposed · **Supersedes nothing** (ROADMAP.md covers the prototype→product phases, all complete)
+**Date:** 2026-07-29 · **Status:** Workstreams 0–4, W5.1 and W5.4 done; W5.2 measured and rejected; W6–W7 proposed · **Supersedes nothing** (ROADMAP.md covers the prototype→product phases, all complete)
 
 ## Framing
 
@@ -10,7 +10,7 @@ That distinction is the point. The claim being tested is that a well-designed ge
 
 Three things are deliberately **not** in this plan:
 
-- **A domain intervention palette** (pocket parks, heat pumps, cycle lanes). That is where ALUR would become a SIL platform. Workstream 4 gets the same outcome generically.
+- **A domain intervention palette** (pocket parks, heat pumps, cycle lanes). That is where ALUR would become a SIL platform. Workstream 4 got the same outcome generically, and is now done: the palette exists, and every word in it is the user's.
 - **Mutable scenario state** (`UPDATE`-style semantics). The derived-dataset model is better and already works. What is missing is *iteration*, not mutation.
 - **A SIL vocabulary in the UI.** No stage names, no "Filter → Prioritise → Intervene" chrome.
 
@@ -179,20 +179,41 @@ The gap between them is the point. A condition that removes 7,971 rows on its ow
 
 ---
 
-## Workstream 4 — Parameterised workflow fragments
+## Workstream 4 — Parameterised workflow fragments · **done**
 
-**Generic pitch:** save a piece of your workflow as a named operation with fill-in-the-blank parameters, and reuse it.
+**Generic pitch:** save a piece of your workflow as a named operation with fill-in-the-blank values, and reuse it.
 
-Select a subgraph, name it, expose chosen config values as parameters. It appears in the node palette as a single node. Implementation rests on DuckDB table macros:
+This is the answer to "how do users get an intervention palette without ALUR shipping one". A domain user authors `Retrofit(−N% on a chosen column)` out of generic nodes, names it, and it travels in the project file. ALUR ships zero domain vocabulary; the user's project carries all of it. Secondary benefit, and not a small one: a workflow reads as three named operations instead of fifteen anonymous Attribute nodes.
 
-```sql
-CREATE OR REPLACE MACRO uplift(tbl, target_field, amount) AS TABLE
-  SELECT * REPLACE (COALESCE(target_field, 0) + amount AS target_field) FROM tbl;
+### 4.1 Not DuckDB table macros
+
+The plan proposed implementing this on `CREATE MACRO … AS TABLE`. Tested against the engine, that cannot do the central job. The plan's own example fails:
+
+```text
+CREATE MACRO bump(tbl, target_field, amount) AS TABLE
+  SELECT * REPLACE (COALESCE(target_field, 0) + amount AS target_field) FROM query_table(tbl);
+→ Binder Error: Column "target_field" in REPLACE list not found in FROM clause
 ```
 
-This is the answer to "how do users get an intervention palette without ALUR shipping one". A domain user authors `Retrofit(+N EPC on selected)` or `StreetTrees(N metres, M years)` out of generic nodes, names it, and shares it in the project file. ALUR ships zero domain vocabulary; the user's project carries all of it.
+Macro parameters substitute **expressions, not identifiers in binding positions**, so the column being modified can never be a parameter — and "change a column the user picks" is the whole point. Macros also do not survive a reload (`Catalog Error: Table Function with name uplift does not exist`), making them session state to rebuild on every project open, which the W5.1 work makes a first-class path.
 
-Secondary benefit: it makes workflows readable at a glance instead of as 15 anonymous Attribute nodes, which is a plain usability win.
+### 4.2 Expansion instead
+
+**Done.** A fragment stores its nodes, its edges, and its parameters; a `fragment` node expands into ordinary nodes *before* compilation. The compiler never learns fragments exist, so every node type works inside one for free, the SQL preview shows the real expansion, and nothing extra has to be kept alive in the database. Node ids are namespaced by the placement, so the same operation can appear twice — or be chained into itself — without its copies colliding.
+
+Blanks are written as `{{name}}` in any step's configuration and **discovered** rather than declared: the save dialog scans the selection and offers whatever placeholders it finds. The flow is "edit the steps until they read the way you want, then say what the blanks mean", instead of designing a signature against nothing. The operation's ends are derived too — the output is the step nothing else reads from, the inputs are those whose upstream lies outside the selection.
+
+### 4.3 Parameters are typed because they are interpolated into SQL
+
+Three types: **number**, **column**, and **one of a list**. Free text is deliberately absent. A fragment body is interpolated into SQL, so an unconstrained string parameter would be a way to smuggle anything into every query built from the fragment. Numbers must parse as finite numbers, columns must match a plain identifier, and choices must come from the author's list — checked before any SQL is built, and reported on the node rather than at run time. Verified: `Gcons2023; DROP TABLE need_london` is refused as a column, `1); DROP TABLE x; --` is refused as a number, and the target table is untouched.
+
+An input node cannot be part of an operation, since baking one in would make it a copy of one dataset rather than an operation over any.
+
+### Verification
+
+20 checks against real DuckDB in the browser: an operation authored from two generic Attribute steps, placed, and run over 25,000 rows; arguments reaching the generated SQL; the result changing correctly when the percentage doubles and when the column is retargeted; two placements chained into one another keeping separate arguments; "run up to this operation" resolving to its last expanded step; the operation surviving a project save/reopen with its parameters; an unknown operation reported rather than compiled around; and both injection attempts refused.
+
+**One real bug, caught only end to end.** `expandFragments` copied the edge *array* but not the edge *objects*, then rewired `source`/`target` on them — so every compile silently rewrote the user's canvas, and the second compile of the same graph produced a broken workflow. It surfaced as `Attribute node "op-a__step-1" has no source` on an unrelated check. There are now tests that the input graph is unchanged and that compiling twice gives the same answer.
 
 ---
 
@@ -334,7 +355,7 @@ Chapter 9's companion discussion flags that a natural-language interface does no
 | ~~6a~~ | ~~W5.4 h3~~ **done** | Retested and fixed upstream; unblocks equal-area hexbins and revives a dead copilot tool |
 | ~~6b~~ | ~~W5.1 resumable projects~~ **done** | Delivered by caching source files in OPFS, not by moving the database; W5.2 measured and rejected, W5.3 reduced to a drift check |
 | 7 | W0.4 temporal view, W5.7 ASOF | Together they make time comparison real |
-| 8 | W4 workflow macros | Largest design surface; benefits from everything above existing first |
+| ~~8~~ | ~~W4 named operations~~ **done** | Built by expanding saved subgraphs, not by DuckDB macros; flips Intervene's diagnostic |
 | 9 | W6 lineage | Small, do last |
 | — | W7 copilot coverage | Per workstream: add the tools for a surface as that surface stabilises, rather than as one pass at the end |
 
@@ -350,16 +371,18 @@ Which generic capability discharges which obligation from the pattern. Read righ
 | --- | --- | --- |
 | Filter provenance, constraint funnel, hard/soft predicates | W3 | **Filter** — "can the user explain why a location is excluded?" |
 | Composite score with live weights, contribution breakdown, sensitivity | W1 | **Prioritise** — "can the user see why one candidate is ranked above another?" |
-| Attribute nodes + named parameterised fragments + running-total allocation | W2.2, W4 | **Intervene** — "can the user construct a scenario?"; resource limits made visible |
+| Attribute nodes + named parameterised operations + running-total allocation | W2.2, W4 | **Intervene** — "can the user construct a scenario?"; resource limits made visible |
 | Compare workspace (exists) + numeric aggregate + temporal view | W0.4, W2.1, W5.7 | **Evaluate** — "can the user judge whether the scenario is good, fair, feasible?" |
 | Variant branching, analysis history, Explain provenance, lineage card | W0.1, W0.2, W6 | **Refine** — "can the user explain how this scenario came to be?" |
 | Assistant tools covering the whole surface, and reads as well as writes | W7 | Cuts across all five — an assistant that cannot observe consequences cannot help evaluate or revise |
 
 Standing at the time of assessment: Filter capable but failing its diagnostic; Prioritise failing; Intervene partial and resource-blind; **Evaluate already passing**; Refine with the machinery in place but a broken link.
 
-Standing now, after W0 to W3: **Filter passes** — an excluded row states which named conditions removed it, and the funnel says how much each one is actually doing. **Prioritise passes** — weights are manipulable, their effect is immediate, and each candidate's rank is decomposable into what produced it. **Evaluate still passes.** **Refine's broken link is repaired**, though the lineage view in W6 is still outstanding.
+Standing now, after W0 to W4: **all five stages pass their diagnostic.**
 
-**Intervene is now the only stage short of its diagnostic.** A user can construct a scenario, and Allocate makes its resource limits visible, but the construction is still a chain of anonymous SQL nodes rather than named, reusable operations — which is W4, and which is also where the "does a generic platform need a domain palette" question gets answered.
+**Filter** — an excluded row states which named conditions removed it, and the funnel says how much each one is actually doing. **Prioritise** — weights are manipulable, their effect is immediate, and each candidate's rank decomposes into what produced it. **Intervene** — an intervention is a named operation with typed, checked values, authored by the user and carried in their project rather than shipped by the platform. **Evaluate** — already passing before this work began. **Refine** — the broken link is repaired, though the lineage *view* in W6 is still outstanding, so this is the one stage passing on machinery rather than on presentation.
+
+The claim under test was that a well-designed generic platform can support the pattern without being built for it. Nothing added here is stated in planning language, and nothing in the UI names a stage. The one honest qualification is the taxonomy in B.1: attribute assignment is reached comfortably, **feature creation is not reached at all** — no workflow node can bring a new spatial object into existence. That is a finding about the pattern's demands rather than a gap to paper over.
 
 ---
 

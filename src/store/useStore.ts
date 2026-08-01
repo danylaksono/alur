@@ -40,6 +40,7 @@ import type { LayerSource } from '../types/layers';
 import type { LayerBounds } from '../types/layers';
 import { DATASET_SOURCE_VERSION, type DatasetDescriptor } from '../types/datasets';
 import { migrateLocalStorageKey } from '../utils/storageMigration';
+import type { WorkflowFragment } from '../utils/workflowFragments';
 import type { AlurStory } from '../types/story';
 import {
   captureAnalysisSnapshot,
@@ -88,7 +89,7 @@ export type MapLayer = {
 export type WorkflowNode = Node & {
   data: {
     label: string;
-    type: 'input' | 'analysis' | 'attribute' | 'aggregate' | 'allocate' | 'score' | 'filter' | 'join' | 'visualisation' | 'output';
+    type: 'input' | 'analysis' | 'attribute' | 'aggregate' | 'allocate' | 'score' | 'filter' | 'join' | 'visualisation' | 'output' | 'fragment';
     config: any;
   }
 };
@@ -236,6 +237,8 @@ export interface AppState {
   storyComparison: { left: AlurStory; right: AlurStory } | null;
   nodes: WorkflowNode[];
   edges: Edge[];
+  /** Named, reusable operations this project defines. Travels in the project file. */
+  fragments: WorkflowFragment[];
   duckdbReady: boolean;
   selectedBasemapId: BasemapId;
   mapLayers: MapLayer[];
@@ -311,6 +314,8 @@ export interface AppState {
   updateNode: (id: string, config: any) => void;
   removeNode: (id: string) => void;
   duplicateNode: (id: string, newId?: string, position?: { x: number; y: number }) => void;
+  saveFragment: (fragment: WorkflowFragment) => void;
+  removeFragment: (id: string) => void;
   addMapLayer: (layer: NewMapLayer) => void;
   registerDataset: (dataset: DatasetDescriptor) => void;
   rebindDataset: (fromDatasetId: string, dataset: DatasetDescriptor) => void;
@@ -635,6 +640,7 @@ export const useStore = create<AppState>()(persist((set, get) => ({
   storyComparison: null,
   nodes: [],
   edges: [],
+  fragments: [],
   duckdbReady: false,
   selectedBasemapId: DEFAULT_BASEMAP_ID,
   mapLayers: [],
@@ -875,6 +881,7 @@ export const useStore = create<AppState>()(persist((set, get) => ({
     project: { name: '' },
     nodes: [],
     edges: [],
+    fragments: [],
     selectedBasemapId: DEFAULT_BASEMAP_ID,
     mapLayers: [],
     datasetRegistry: {},
@@ -980,6 +987,17 @@ export const useStore = create<AppState>()(persist((set, get) => ({
   },
 
   addNode: (node) => set((state) => ({ nodes: [...state.nodes, node] })),
+
+  saveFragment: (fragment) => set((state) => ({
+    fragments: state.fragments.some((item) => item.id === fragment.id)
+      ? state.fragments.map((item) => (item.id === fragment.id ? fragment : item))
+      : [...state.fragments, fragment],
+  })),
+
+  // Placed nodes referring to a deleted operation are left alone rather than
+  // silently removed: the workflow fails loudly on the next run, which is a
+  // better outcome than steps vanishing from someone's canvas.
+  removeFragment: (id) => set((state) => ({ fragments: state.fragments.filter((item) => item.id !== id) })),
 
   updateNode: (id, config) => set((state) => ({
     nodes: state.nodes.map((node) =>

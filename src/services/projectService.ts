@@ -10,6 +10,7 @@ import {
 } from '../types/project';
 import { ingestFile } from './dataIngestion';
 import { cachedSource } from './sourceCache';
+import type { WorkflowFragment } from '../utils/workflowFragments';
 import { BASEMAPS } from '../utils/basemaps';
 import { downloadText, filenameTimestamp, safeFilename } from '../utils/download';
 import { migrateVisualAnalyticsSources } from '../utils/datasetSource';
@@ -150,6 +151,9 @@ export const createProjectManifest = (state = useStore.getState(), exportedAt = 
   workflow: {
     nodes: state.nodes.map(sanitiseNode),
     edges: sanitiseValue(state.edges) as typeof state.edges,
+    // Saved operations are the project's own vocabulary, so they travel with
+    // it — that is what lets one analyst share a named operation with another.
+    fragments: sanitiseValue(state.fragments) as WorkflowFragment[],
   },
   sources: state.nodes.map(sourceDescriptorForNode).filter((source): source is ProjectSourceDescriptor => Boolean(source)),
   datasets: sanitiseValue(Object.values(state.datasetRegistry)) as ProjectManifest['datasets'],
@@ -279,6 +283,7 @@ export const migrateProjectManifest = (value: unknown): unknown => {
     workflow: {
       nodes: Array.isArray(legacyWorkflow.nodes) ? legacyWorkflow.nodes : Array.isArray(value.nodes) ? value.nodes : [],
       edges: Array.isArray(legacyWorkflow.edges) ? legacyWorkflow.edges : Array.isArray(value.edges) ? value.edges : [],
+      fragments: Array.isArray(legacyWorkflow.fragments) ? legacyWorkflow.fragments : [],
     },
     sources: Array.isArray(value.sources) ? value.sources : [],
     datasets: Array.isArray(value.datasets) ? value.datasets : [],
@@ -327,6 +332,7 @@ export const applyProjectManifest = (manifest: ProjectManifest | ProjectManifest
     project: { name: valid.name || '' },
     nodes: valid.workflow.nodes.map(sanitiseNode),
     edges: valid.workflow.edges,
+    fragments: valid.workflow.fragments || [],
     mapLayers: [],
     datasetRegistry: Object.fromEntries(valid.datasets.map((dataset) => [dataset.id, dataset])),
     selectedBasemapId: valid.workspace.selectedBasemapId,

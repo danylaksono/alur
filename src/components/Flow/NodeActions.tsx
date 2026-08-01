@@ -28,10 +28,10 @@ export const NodeActions = ({ id, selected = false, helperContent }: NodeActions
   const execState = nodeExecutionStates[id];
 
   const handleExecute = async () => {
-    const { nodes, edges } = useStore.getState();
+    const { nodes, edges, fragments } = useStore.getState();
     setNodeExecutionState(id, { status: 'running' });
     try {
-      const workflow = buildUpToSQL(nodes, edges, id);
+      const workflow = buildUpToSQL(nodes, edges, id, { fragments });
       const result = await materializeWorkflowOutput({
         workflow,
         layerId: `exec-${id}`,
@@ -57,10 +57,10 @@ export const NodeActions = ({ id, selected = false, helperContent }: NodeActions
   };
 
   const handleExport = async (format: 'geojson' | 'csv' = 'geojson') => {
-    const { nodes, edges } = useStore.getState();
+    const { nodes, edges, fragments } = useStore.getState();
     setExporting(true);
     try {
-      const workflow = buildUpToSQL(nodes, edges, id);
+      const workflow = buildUpToSQL(nodes, edges, id, { fragments });
       if (format === 'geojson') {
         const tableName = `alur_export_${id.replace(/[^a-zA-Z0-9_]/g, '_')}_${Date.now()}`;
         await duckdbService.materializeQueryAsTable(workflow.resultSql, tableName);
