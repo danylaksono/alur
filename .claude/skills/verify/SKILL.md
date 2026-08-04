@@ -93,3 +93,6 @@ fails in a way that looks like a product bug. Importing other services by path i
   ids are namespaced: a step `s1` inside a placement `op-a` compiles as `op-a__s1`. Assert
   against `cteAlias('op-a__s1')`, and pass `{ fragments }` to `buildWorkflowSQL`/`buildUpToSQL`
   or a fragment node throws "refers to an operation this project no longer defines".
+- Opening a full workspace needs the rail button, not just `navigate(...)`: `navigate('report')`
+  leaves `ui.workspaceMode` on `'explore'` and the Explain surface never mounts. Click
+  `getByRole('button', { name: /^Report$/ })` and wait for `ui.workspaceMode === 'explain'`.

@@ -41,6 +41,7 @@ import type { LayerBounds } from '../types/layers';
 import { DATASET_SOURCE_VERSION, type DatasetDescriptor } from '../types/datasets';
 import { migrateLocalStorageKey } from '../utils/storageMigration';
 import type { WorkflowFragment } from '../utils/workflowFragments';
+import { assumptionsBehindDatasets } from '../utils/variantLineage';
 import type { AlurStory } from '../types/story';
 import {
   captureAnalysisSnapshot,
@@ -1707,10 +1708,20 @@ export const useStore = create<AppState>()(persist((set, get) => ({
     analysisHistory: recordCurrentAnalysis(state, { label: 'Remove explanation section' }),
   })),
 
-  addExplainCard: (card) => set((state) => ({
-    visualAnalytics: { ...state.visualAnalytics, explain: { ...state.visualAnalytics.explain, cards: [...state.visualAnalytics.explain.cards.filter((item) => item.id !== card.id), card] } },
-    analysisHistory: recordCurrentAnalysis(state, { label: 'Pin evidence' }),
-  })),
+  addExplainCard: (card) => set((state) => {
+    // Captured here rather than at each of the five places evidence is pinned:
+    // it cannot be forgotten by a new one, and freezing it means an exported
+    // story still states the assumptions behind a number long after the
+    // scenario that produced it is gone.
+    const assumptions = assumptionsBehindDatasets(state.visualAnalytics.variants, card.provenance?.datasetIds || []);
+    const stamped = assumptions.length && card.provenance
+      ? { ...card, provenance: { ...card.provenance, assumptions } }
+      : card;
+    return {
+      visualAnalytics: { ...state.visualAnalytics, explain: { ...state.visualAnalytics.explain, cards: [...state.visualAnalytics.explain.cards.filter((item) => item.id !== stamped.id), stamped] } },
+      analysisHistory: recordCurrentAnalysis(state, { label: 'Pin evidence' }),
+    };
+  }),
 
   updateExplainCard: (cardId, patch) => set((state) => ({
     visualAnalytics: { ...state.visualAnalytics, explain: { ...state.visualAnalytics.explain, cards: state.visualAnalytics.explain.cards.map((card) => card.id === cardId ? { ...card, ...patch } : card) } },

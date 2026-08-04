@@ -6,6 +6,8 @@ import type { AlurStory } from '../../types/story';
 import type { ComparisonResult, ExplainCard } from '../../types/visualAnalytics';
 import { ComparisonMapEvidence, ComparisonRecordsEvidence } from '../Compare/ComparisonEvidenceViews';
 import { MapEvidence } from './MapEvidence';
+import { VariantLineageCard } from './VariantLineageCard';
+import { isVariantLineageSnapshot } from '../../utils/variantLineage';
 import { cn } from '../../utils/cn';
 
 const widthClass: Record<ExplainCard['width'], string> = {
@@ -69,6 +71,13 @@ const StoryCardContent = ({ card }: { card: ExplainCard }) => {
         </div>
       </div>
     );
+  }
+
+  if (card.kind === 'lineage') {
+    // Only the frozen snapshot: a story is read where the scenarios it
+    // describes do not exist, so there is nothing live to fall back to.
+    if (!isVariantLineageSnapshot(card.frozenValues)) return <EmptyCapture title={card.title || 'Scenario lineage'} />;
+    return <VariantLineageCard snapshot={card.frozenValues} presenting />;
   }
 
   if (card.kind === 'kpi') {
@@ -202,6 +211,12 @@ export const StoryViewer = ({ story }: { story: AlurStory }) => {
                       <div className="min-h-0 flex-1"><StoryCardContent card={card} /></div>
                       {card.takeaway && <p className="mt-3 border-t border-slate-100 pt-2 text-[11px] leading-5 text-slate-700">{card.takeaway}</p>}
                       {card.caption && <p className="mt-1 text-[10px] text-slate-500">{card.caption}</p>}
+                      {card.provenance?.assumptions?.length ? (
+                        <div className="mt-2 border-t border-slate-100 pt-2">
+                          <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Assumed</p>
+                          <ul className="mt-1 space-y-0.5">{card.provenance.assumptions.map((assumption) => <li key={assumption} className="text-[9px] leading-4 text-slate-600">· {assumption}</li>)}</ul>
+                        </div>
+                      ) : null}
                       {card.provenance?.caveats.length ? (
                         <p className="mt-2 text-[9px] leading-4 text-amber-800">{card.provenance.caveats.join(' · ')}</p>
                       ) : null}

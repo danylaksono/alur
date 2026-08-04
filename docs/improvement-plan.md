@@ -1,6 +1,6 @@
 # ALUR Improvement Plan — Analytical Depth
 
-**Date:** 2026-07-29 · **Status:** Workstreams 0–4, W5.1 and W5.4 done; W5.2 measured and rejected; W6–W7 proposed · **Supersedes nothing** (ROADMAP.md covers the prototype→product phases, all complete)
+**Date:** 2026-07-29 · **Status:** Workstreams 0–4, W5.1, W5.4 and W6 done; W5.2 measured and rejected; W7 proposed · **Supersedes nothing** (ROADMAP.md covers the prototype→product phases, all complete)
 
 ## Framing
 
@@ -305,12 +305,32 @@ Aligns records to the nearest preceding timestamp rather than requiring exact ma
 
 ---
 
-## Workstream 6 — Lineage in Explain
+## Workstream 6 — Lineage in Explain · **done**
 
-The Explain/story machinery is the strongest part of the codebase and needs little. Two small additions:
+Both additions were view-only, as predicted: every variant has recorded its assumptions, its parent and its parameters from the start, and none of it was ever shown.
 
-- **Surface variant assumptions.** `AnalysisVariant.assumptions` is captured and never displayed anywhere. Render it on Explain cards derived from a variant. Cheapest possible improvement to "explain how this came to be".
-- **A scenario lineage card.** Renders the variant tree — what branched from what, which parameters differ at each branch. The data is already in the store; only the view is missing.
+### 6.1 Assumptions travel with the evidence
+
+**Done.** `AnalysisVariant.assumptions` now appears under any card built on a dataset that a variant produced. The link already existed and was unused — a card records `provenance.datasetIds`, a variant records `workflowOutputDatasetId`.
+
+Captured at pin time rather than looked up on render, and written in the store's `addExplainCard` rather than at each of the **five** places evidence is pinned. Two reasons: a sixth pin site cannot forget it, and a shared story keeps stating the assumptions behind a number long after the scenario that produced it is gone. A card with no scenario behind it gets nothing, rather than an empty heading.
+
+### 6.2 The scenario lineage card
+
+**Done.** A `lineage` card kind renders the variant forest — what branched from what, each branch's differences from its parent, and each scenario's assumptions and whether it has been run.
+
+Differences are a generic deep diff of the variant's parameters with two decisions that make it readable:
+
+- **Array elements are keyed by identity, not index.** `criteria.0.weight` says nothing and changes meaning when a criterion is inserted above it; `criteria.IMD_BAND_ENG.weight 1 → 3` says what moved. Generic — score criteria, summary measures and filter predicates all carry a `field`, `label`, `name` or `id`.
+- **Operations are keyed by type, not by id.** Branching mints fresh operation ids, so keying by id would report every parameter as replaced rather than one weight as edited — the opposite of useful. Verified: an edited branch reports exactly its two real changes.
+
+An unedited branch says so explicitly, because silence there reads as "nothing was recorded" rather than "nothing was changed", and an orphaned variant is shown as a root rather than dropped — losing a scenario from the account because its ancestor was deleted is worse than showing it without its origin.
+
+**The card is frozen when shared.** A story is read in a browser holding none of this state, so the lineage travels inside the card; the renderer takes an optional snapshot and touches no store when given one. Verified end to end: exported, then read back with the variants deleted entirely, and the lineage and its `1 → 3` still render.
+
+### Verification
+
+20 checks in the browser, the load-bearing ones being the export/read-back cycle above, and that a fresh operation id after branching is not mistaken for a change.
 
 ---
 
@@ -356,7 +376,7 @@ Chapter 9's companion discussion flags that a natural-language interface does no
 | ~~6b~~ | ~~W5.1 resumable projects~~ **done** | Delivered by caching source files in OPFS, not by moving the database; W5.2 measured and rejected, W5.3 reduced to a drift check |
 | 7 | W0.4 temporal view, W5.7 ASOF | Together they make time comparison real |
 | ~~8~~ | ~~W4 named operations~~ **done** | Built by expanding saved subgraphs, not by DuckDB macros; flips Intervene's diagnostic |
-| 9 | W6 lineage | Small, do last |
+| ~~9~~ | ~~W6 lineage~~ **done** | Small, view-only; the data was already recorded |
 | — | W7 copilot coverage | Per workstream: add the tools for a surface as that surface stabilises, rather than as one pass at the end |
 
 Deliberately unscheduled: **feature creation** (drawing or placing a new geometry as a dataset row). Nothing in the workflow can create a feature — it only transforms existing rows. See the case-study note below for why this may not need solving.
@@ -380,7 +400,7 @@ Standing at the time of assessment: Filter capable but failing its diagnostic; P
 
 Standing now, after W0 to W4: **all five stages pass their diagnostic.**
 
-**Filter** — an excluded row states which named conditions removed it, and the funnel says how much each one is actually doing. **Prioritise** — weights are manipulable, their effect is immediate, and each candidate's rank decomposes into what produced it. **Intervene** — an intervention is a named operation with typed, checked values, authored by the user and carried in their project rather than shipped by the platform. **Evaluate** — already passing before this work began. **Refine** — the broken link is repaired, though the lineage *view* in W6 is still outstanding, so this is the one stage passing on machinery rather than on presentation.
+**Filter** — an excluded row states which named conditions removed it, and the funnel says how much each one is actually doing. **Prioritise** — weights are manipulable, their effect is immediate, and each candidate's rank decomposes into what produced it. **Intervene** — an intervention is a named operation with typed, checked values, authored by the user and carried in their project rather than shipped by the platform. **Evaluate** — already passing before this work began. **Refine** — the broken link is repaired and the lineage is now visible: a scenario states what it assumed, what it branched from, and what changed at that branch, in the account as well as in the store.
 
 The claim under test was that a well-designed generic platform can support the pattern without being built for it. Nothing added here is stated in planning language, and nothing in the UI names a stage. The one honest qualification is the taxonomy in B.1: attribute assignment is reached comfortably, **feature creation is not reached at all** — no workflow node can bring a new spatial object into existence. That is a finding about the pattern's demands rather than a gap to paper over.
 

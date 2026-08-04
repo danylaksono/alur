@@ -117,9 +117,15 @@ export type EvidenceProvenance = {
   query?: string;
   comparisonSpec?: ComparisonSpec;
   caveats: string[];
+  /**
+   * Modelling choices behind this evidence, copied from the variants that
+   * produced its datasets. Frozen at pin time so a shared story still carries
+   * them when the scenario itself is long gone.
+   */
+  assumptions?: string[];
 };
 
-export type ExplainCardKind = 'chart' | 'kpi' | 'table' | 'comparison' | 'map' | 'finding' | 'note' | 'section-intro';
+export type ExplainCardKind = 'chart' | 'kpi' | 'table' | 'comparison' | 'map' | 'finding' | 'note' | 'lineage' | 'section-intro';
 export type ExplainEvidenceRole = 'supports' | 'contradicts' | 'context';
 export type ExplainEvidenceLink = { cardId: string; role: ExplainEvidenceRole; note?: string };
 export type ExplainCard = {

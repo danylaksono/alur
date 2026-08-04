@@ -138,6 +138,8 @@ Nothing leaves your device. Settings shows how much is cached and clears it, and
 - **Scenario variants** — branch a workflow specification, run each branch, and compare the results as groups
 - **Report workspace** — pin charts, KPIs, tables, maps and comparisons as evidence cards, each carrying its own provenance and staleness state; write findings that link to the evidence supporting or contradicting them
 - **Stories** — export a finished, read-only account that renders without the source data, and diff two stories to see where their claims actually disagree
+- **Scenario lineage** — a card showing what branched from what, exactly which parameters differ at each branch, and what each scenario assumed; frozen when shared, so a recipient sees the derivation without the scenarios
+- **Assumptions on the evidence** — a chart or table built on a scenario's result carries that scenario's assumptions, captured when it was pinned
 - **Analysis history** — labelled undo/redo across filters, cohorts, charts and layout, plus bookmarks that restore a whole analytical state
 
 ### Interactive Analytics
@@ -197,6 +199,7 @@ src/
 │   ├── aggregationSql.ts        # Group-by measures, running-total allocation, top-N
 │   ├── filterPredicates.ts      # Named conditions → exclusion columns and funnel SQL
 │   ├── workflowFragments.ts     # Saved operations: parameters, validation, expansion
+│   ├── variantLineage.ts        # Scenario tree, per-branch parameter diffs, assumptions
 │   ├── visualFilterSql.ts       # VisualFilter → DuckDB WHERE clauses
 │   ├── visualisationResolver.ts # Workflow config → LayerVisualisation
 │   ├── scenarioComparison.ts    # Variant results → ComparisonSpec
@@ -228,7 +231,7 @@ src/
 
 ## Tests
 
-360 tests across 45 files, covering the visualisation pipeline, workflow SQL generation, store actions, comparison and story services, and a full workflow smoke test. Some of the more load-bearing ones:
+379 tests across 46 files, covering the visualisation pipeline, workflow SQL generation, store actions, comparison and story services, and a full workflow smoke test. Some of the more load-bearing ones:
 
 | Test file | Focus |
 |-----------|-------|
@@ -237,6 +240,7 @@ src/
 | `scoreModel.test.ts` | Weighted score compilation: weights, direction, normalisation, missing values |
 | `filterPredicates.test.ts` | Named conditions: NULL handling, hard vs soft, exclusion columns, funnel counts |
 | `workflowFragments.test.ts` | Saved operations: parameter validation, expansion, rewiring, graph immutability |
+| `variantLineage.test.ts` | Scenario tree, per-branch diffs, orphans and cycles, assumption capture |
 | `comparisonService.test.ts` | Comparison alignment, denominators and warnings |
 | `useStore.test.ts` | Layer state, layout preferences, scenario variants |
 | `storyDiff.test.ts` | Claim matching and divergence reasons between two stories |
@@ -250,7 +254,7 @@ npm run test:e2e    # Playwright
 
 ## Roadmap
 
-[docs/improvement-plan.md](docs/improvement-plan.md) is the current plan. Composite scoring, the numeric `GROUP BY` and allocation nodes, filter provenance, named reusable operations, equal-area hexbins and resumable projects have shipped; lineage in Explain and wider copilot coverage have not.
+[docs/improvement-plan.md](docs/improvement-plan.md) is the current plan. Composite scoring, the numeric `GROUP BY` and allocation nodes, filter provenance, named reusable operations, equal-area hexbins, resumable projects and scenario lineage have shipped; wider copilot coverage has not.
 
 Still deferred, and not in that plan:
 
