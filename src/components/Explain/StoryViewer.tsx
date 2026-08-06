@@ -7,7 +7,9 @@ import type { ComparisonResult, ExplainCard } from '../../types/visualAnalytics'
 import { ComparisonMapEvidence, ComparisonRecordsEvidence } from '../Compare/ComparisonEvidenceViews';
 import { MapEvidence } from './MapEvidence';
 import { VariantLineageCard } from './VariantLineageCard';
+import { SessionAccount } from './SessionAccount';
 import { isVariantLineageSnapshot } from '../../utils/variantLineage';
+import { isProvenanceAccount } from '../../utils/provenance';
 import { cn } from '../../utils/cn';
 
 const widthClass: Record<ExplainCard['width'], string> = {
@@ -78,6 +80,13 @@ const StoryCardContent = ({ card }: { card: ExplainCard }) => {
     // describes do not exist, so there is nothing live to fall back to.
     if (!isVariantLineageSnapshot(card.frozenValues)) return <EmptyCapture title={card.title || 'Scenario lineage'} />;
     return <VariantLineageCard snapshot={card.frozenValues} presenting />;
+  }
+
+  if (card.kind === 'account') {
+    // Same reasoning as lineage: the account travelled with the story, and the
+    // reader's own log describes a different analysis entirely.
+    if (!isProvenanceAccount(card.frozenValues)) return <EmptyCapture title={card.title || 'How this came about'} />;
+    return <SessionAccount events={card.frozenValues} presenting />;
   }
 
   if (card.kind === 'kpi') {

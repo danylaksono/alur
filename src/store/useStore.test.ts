@@ -628,3 +628,131 @@ describe('scenario variants', () => {
     expect(branch.workflowOutputDatasetId).toBeUndefined();
   });
 });
+
+describe('lines of enquiry', () => {
+  const variant = (id: string) => ({
+    id,
+    name: id,
+    baselineDatasetId: 'base',
+    parameters: {},
+    assumptions: [],
+    operations: [],
+    createdAt: 1,
+    provenance: { workflowNodeIds: [] },
+  });
+
+  beforeEach(() => {
+    useStore.getState().resetWorkspace();
+    useStore.setState({ toasts: [] });
+  });
+
+  it('stamps a new variant with whichever enquiry is open', () => {
+    useStore.getState().createSession({ id: 's1', name: 'Retrofit', question: 'Which LSOAs first?', baselineDatasetId: 'base' });
+    useStore.getState().addVariant(variant('v1'));
+
+    expect(useStore.getState().visualAnalytics.variants[0].sessionId).toBe('s1');
+    expect(useStore.getState().visualAnalytics.activeSessionId).toBe('s1');
+  });
+
+  it('keeps a branch in its parent enquiry even when another is open', () => {
+    useStore.getState().createSession({ id: 's1', name: 'First', question: '', baselineDatasetId: 'base' });
+    useStore.getState().addVariant(variant('v1'));
+    useStore.getState().createSession({ id: 's2', name: 'Second', question: '', baselineDatasetId: 'base' });
+    useStore.getState().branchVariant('v1', 'v1-branch');
+
+    const branch = useStore.getState().visualAnalytics.variants.find((item) => item.id === 'v1-branch')!;
+    expect(branch.sessionId).toBe('s1');
+    const event = useStore.getState().provenanceEvents.find((item) => item.activity === 'variant.branched')!;
+    expect(event.sessionId).toBe('s1');
+  });
+
+  it('files every event under the open enquiry without each call site saying so', () => {
+    useStore.getState().createSession({ id: 's1', name: 'Retrofit', question: '', baselineDatasetId: 'base' });
+    useStore.getState().addVariant(variant('v1'));
+    useStore.getState().undoAnalysis();
+
+    expect(useStore.getState().provenanceEvents.every((event) => event.sessionId === 's1')).toBe(true);
+  });
+
+  it('removes an enquiry with its variants but keeps the record of it', () => {
+    useStore.getState().createSession({ id: 's1', name: 'Retrofit', question: '', baselineDatasetId: 'base' });
+    useStore.getState().addVariant(variant('v1'));
+    useStore.getState().removeSession('s1');
+
+    expect(useStore.getState().visualAnalytics.variants).toHaveLength(0);
+    expect(useStore.getState().visualAnalytics.activeSessionId).toBeUndefined();
+    expect(useStore.getState().provenanceEvents.some((event) => event.activity === 'session.created')).toBe(true);
+  });
+
+  it('logs a rename but not a question edit', () => {
+    useStore.getState().createSession({ id: 's1', name: 'Retrofit', question: '', baselineDatasetId: 'base' });
+    useStore.getState().updateSession('s1', { question: 'Which LSOAs first?' });
+    expect(useStore.getState().provenanceEvents.some((event) => event.activity === 'session.renamed')).toBe(false);
+
+    useStore.getState().updateSession('s1', { name: 'Retrofit phase 1' });
+    const renamed = useStore.getState().provenanceEvents.find((event) => event.activity === 'session.renamed')!;
+    expect(renamed.summary).toBe('Renamed the line of enquiry from “Retrofit” to “Retrofit phase 1”');
+  });
+});
+
+describe('provenance account', () => {
+  const variant = (id: string) => ({
+    id,
+    name: id,
+    baselineDatasetId: 'base',
+    parameters: {},
+    assumptions: [],
+    operations: [],
+    createdAt: 1,
+    provenance: { workflowNodeIds: [] },
+  });
+
+  beforeEach(() => {
+    useStore.getState().resetWorkspace();
+    useStore.setState({ toasts: [] });
+  });
+
+  it('records a branch with both ends of the lineage, so the tree survives the variants', () => {
+    useStore.getState().addVariant(variant('variant-a'));
+    useStore.getState().branchVariant('variant-a', 'variant-b');
+
+    const branched = useStore.getState().provenanceEvents.find((event) => event.activity === 'variant.branched')!;
+    expect(branched.used).toEqual(['variant-a']);
+    expect(branched.generated).toEqual(['variant-b']);
+    expect(branched.summary).toBe('Branched “variant-a branch” from “variant-a”');
+  });
+
+  it('keeps the record of a deleted variant', () => {
+    useStore.getState().addVariant(variant('variant-a'));
+    useStore.getState().removeVariant('variant-a');
+
+    expect(useStore.getState().visualAnalytics.variants).toHaveLength(0);
+    expect(useStore.getState().provenanceEvents.map((event) => event.activity)).toEqual([
+      'variant.created',
+      'variant.deleted',
+    ]);
+  });
+
+  it('grows the account on undo rather than rewinding it', () => {
+    useStore.getState().addVariant(variant('variant-a'));
+    const before = useStore.getState().provenanceEvents.length;
+    useStore.getState().undoAnalysis();
+
+    const events = useStore.getState().provenanceEvents;
+    expect(events.length).toBe(before + 1);
+    expect(events[events.length - 1].activity).toBe('history.undone');
+    // The undone action is still described: reversing something is part of how
+    // the analyst arrived where they did.
+    expect(events[0].activity).toBe('variant.created');
+  });
+
+  it('logs a rename but not an unrelated variant edit', () => {
+    useStore.getState().addVariant(variant('variant-a'));
+    useStore.getState().updateVariant('variant-a', { assumptions: ['Budget doubled'] });
+    expect(useStore.getState().provenanceEvents.some((event) => event.activity === 'variant.renamed')).toBe(false);
+
+    useStore.getState().updateVariant('variant-a', { name: 'High ambition' });
+    const renamed = useStore.getState().provenanceEvents.find((event) => event.activity === 'variant.renamed')!;
+    expect(renamed.summary).toBe('Renamed variant from “variant-a” to “High ambition”');
+  });
+});

@@ -15,6 +15,7 @@ import { DEFAULT_BASEMAP_ID, type BasemapId } from '../utils/basemaps';
 import type { LayerVisualisation, LegendSpec } from '../types/visualisation';
 import { ensureFeatureIds } from '../utils/featureIdentity';
 import type {
+  AnalysisSession,
   AnalysisVariant,
   AnalyticalBookmark,
   CohortComparisonSelection,
@@ -25,6 +26,7 @@ import type {
   ExplainDocument,
   ExplainSection,
   KpiSpec,
+  ScoreModelSpec,
   VisualAnalyticsState,
   VisualChartSpec,
   VisualFilter,
@@ -33,6 +35,7 @@ import type {
 type HydratedVisualAnalyticsState = VisualAnalyticsState & {
   comparisons: ComparisonSpec[];
   explain: ExplainDocument;
+  sessions: AnalysisSession[];
   variants: AnalysisVariant[];
 };
 import type { MvtTileSource } from '../services/duckdb';
@@ -53,7 +56,11 @@ import {
   type AnalysisHistoryState,
   type HistoryAction,
 } from './analysisHistory';
+import type { ProvenanceEvent } from '../types/provenance';
+import { appendProvenanceEvent, createProvenanceEvent, createProvenanceId, type ProvenanceEventInput } from '../utils/provenance';
 import { chartDatasetId, chartDatasetSource, kpiDatasetSource } from '../utils/datasetSource';
+import { visualFilterLabel } from '../utils/visualFilters';
+import { normalisedWeights } from '../utils/scoreModel';
 
 export type NodeExecutionState = {
   status: 'idle' | 'running' | 'done' | 'error';
@@ -266,6 +273,12 @@ export interface AppState {
   /** Layers whose map source/tiles are currently re-rendering after a style or filter change. */
   restylingLayerIds: Record<string, true>;
   analysisHistory: AnalysisHistoryState;
+  /**
+   * Append-only account of what was done. Distinct from `analysisHistory`,
+   * which is an undo stack of *states* and forgets whatever redo passes over.
+   * Nothing here is ever rewound: an undo appends an event of its own.
+   */
+  provenanceEvents: ProvenanceEvent[];
 
   setProjectName: (name: string) => void;
   openStory: (story: AlurStory) => void;
@@ -384,6 +397,12 @@ export interface AppState {
   undoAnalysis: () => void;
   redoAnalysis: () => void;
   clearAnalysisHistory: () => void;
+  recordProvenance: (input: ProvenanceEventInput) => void;
+  clearProvenance: () => void;
+  createSession: (session: Omit<AnalysisSession, 'createdAt' | 'provenanceId'> & Partial<Pick<AnalysisSession, 'createdAt' | 'provenanceId'>>) => void;
+  updateSession: (sessionId: string, patch: Partial<Pick<AnalysisSession, 'name' | 'question'>>) => void;
+  removeSession: (sessionId: string) => void;
+  setActiveSession: (sessionId: string | undefined) => void;
 }
 
 export type NewMapLayer = Omit<MapLayer, 'visible' | 'opacity' | 'createdAt' | 'featureCount' | 'styleVersion' | 'source'> &
@@ -586,6 +605,7 @@ const emptyVisualAnalytics = (): HydratedVisualAnalyticsState => ({
   bookmarks: [],
   comparisons: [],
   explain: defaultExplainDocument(),
+  sessions: [],
   variants: [],
 });
 
@@ -616,6 +636,29 @@ const datasetDescriptorForLayer = (layer: MapLayer): DatasetDescriptor => ({
 
 const recordCurrentAnalysis = (state: AppState, action: HistoryAction) =>
   recordAnalysisHistory(state.analysisHistory, captureAnalysisSnapshot(state), action);
+
+/**
+ * Appends to the account. Returns the next log rather than setting it, so an
+ * action records what it did in the same `set` that performs it — an event that
+ * describes a state change the store rejected would be a lie in the record.
+ */
+const recordProvenanceEvent = (state: AppState, input: ProvenanceEventInput) =>
+  appendProvenanceEvent(
+    state.provenanceEvents,
+    // Stamped here rather than at every call site, so no emission point can
+    // forget which line of enquiry it belonged to.
+    createProvenanceEvent({ ...input, sessionId: input.sessionId ?? state.visualAnalytics.activeSessionId ?? null }),
+  );
+
+/**
+ * Weights as shares rather than raw numbers. Three criteria at weight 1 are an
+ * equal split, and the account should say 33% three times rather than 100%.
+ */
+const weightsFromScoreConfig = (config: unknown): Record<string, number> | null => {
+  const spec = (config as { scoreModel?: ScoreModelSpec } | null | undefined)?.scoreModel;
+  if (!spec || !Array.isArray(spec.criteria) || !spec.criteria.length) return null;
+  return Object.fromEntries(normalisedWeights(spec));
+};
 
 const PRESENTATION_PATCH_KEYS = new Set([
   'visible',
@@ -662,6 +705,7 @@ export const useStore = create<AppState>()(persist((set, get) => ({
   settings: initialSettings,
   restylingLayerIds: {},
   analysisHistory: emptyAnalysisHistory(),
+  provenanceEvents: [],
 
   setLayerRestyling: (layerId, restyling) => set((state) => {
     const isRestyling = Boolean(state.restylingLayerIds[layerId]);
@@ -900,6 +944,9 @@ export const useStore = create<AppState>()(persist((set, get) => ({
     loadingOperations: {},
     ui: { ...get().ui, datasetOverviewLayerId: null, isCommandPaletteOpen: false, workspaceMode: 'explore', isPresentationMode: false },
     analysisHistory: emptyAnalysisHistory(),
+    // A new workspace is a new account. Loading a project resets first and then
+    // installs the account that came with the file.
+    provenanceEvents: [],
   }),
 
   undoAnalysis: () => set((state) => {
@@ -908,6 +955,9 @@ export const useStore = create<AppState>()(persist((set, get) => ({
     return {
       ...restoreAnalysisSnapshot(state.mapLayers, state.visualAnalytics, transition.snapshot, Object.keys(state.datasetRegistry)),
       analysisHistory: transition.history,
+      // An undo removes a state from the stack but not from the account: the
+      // analyst having tried and reversed something is part of how they got here.
+      provenanceEvents: recordProvenanceEvent(state, { activity: 'history.undone', payload: { label: transition.label } }),
     };
   }),
 
@@ -917,10 +967,84 @@ export const useStore = create<AppState>()(persist((set, get) => ({
     return {
       ...restoreAnalysisSnapshot(state.mapLayers, state.visualAnalytics, transition.snapshot, Object.keys(state.datasetRegistry)),
       analysisHistory: transition.history,
+      provenanceEvents: recordProvenanceEvent(state, { activity: 'history.redone', payload: { label: transition.label } }),
     };
   }),
 
   clearAnalysisHistory: () => set({ analysisHistory: emptyAnalysisHistory() }),
+
+  recordProvenance: (input) => set((state) => ({ provenanceEvents: recordProvenanceEvent(state, input) })),
+
+  /** Only for starting a new project. The log is otherwise never truncated. */
+  clearProvenance: () => set({ provenanceEvents: [] }),
+
+  createSession: (session) => set((state) => {
+    const created: AnalysisSession = {
+      createdAt: Date.now(),
+      provenanceId: createProvenanceId('session-prov'),
+      ...session,
+    };
+    return {
+      visualAnalytics: {
+        ...state.visualAnalytics,
+        sessions: [...state.visualAnalytics.sessions, created],
+        // A newly opened line of enquiry is the one being worked on.
+        activeSessionId: created.id,
+      },
+      provenanceEvents: recordProvenanceEvent(state, {
+        activity: 'session.created',
+        sessionId: created.id,
+        entityId: created.id,
+        used: [created.baselineDatasetId],
+        generated: [created.id],
+        payload: { name: created.name, question: created.question },
+      }),
+    };
+  }),
+
+  updateSession: (sessionId, patch) => set((state) => {
+    const previous = state.visualAnalytics.sessions.find((session) => session.id === sessionId);
+    if (!previous) return state;
+    const renamed = typeof patch.name === 'string' && patch.name !== previous.name;
+    return {
+      visualAnalytics: {
+        ...state.visualAnalytics,
+        sessions: state.visualAnalytics.sessions.map((session) => session.id === sessionId ? { ...session, ...patch } : session),
+      },
+      ...(renamed
+        ? {
+            provenanceEvents: recordProvenanceEvent(state, {
+              activity: 'session.renamed',
+              sessionId,
+              payload: { from: previous.name, to: patch.name },
+            }),
+          }
+        : {}),
+    };
+  }),
+
+  /**
+   * Removes the line of enquiry and everything tried inside it. The account is
+   * untouched: the record of a session is what survives deleting the session.
+   */
+  removeSession: (sessionId) => set((state) => {
+    const removed = state.visualAnalytics.sessions.find((session) => session.id === sessionId);
+    if (!removed) return state;
+    const sessions = state.visualAnalytics.sessions.filter((session) => session.id !== sessionId);
+    return {
+      visualAnalytics: {
+        ...state.visualAnalytics,
+        sessions,
+        variants: state.visualAnalytics.variants.filter((variant) => variant.sessionId !== sessionId),
+        activeSessionId: state.visualAnalytics.activeSessionId === sessionId ? sessions[0]?.id : state.visualAnalytics.activeSessionId,
+      },
+      analysisHistory: recordCurrentAnalysis(state, { label: 'Remove line of enquiry' }),
+    };
+  }),
+
+  setActiveSession: (sessionId) => set((state) => ({
+    visualAnalytics: { ...state.visualAnalytics, activeSessionId: sessionId },
+  })),
 
   onNodesChange: (changes) => {
     const removedNodeIds = new Set(
@@ -987,24 +1111,81 @@ export const useStore = create<AppState>()(persist((set, get) => ({
     });
   },
 
-  addNode: (node) => set((state) => ({ nodes: [...state.nodes, node] })),
+  addNode: (node) => set((state) => {
+    // Placing a saved operation is an analytical act; placing a plain node is
+    // workflow editing, and logging every one would bury the account in noise.
+    const fragmentId = node.data.type === 'fragment' ? (node.data.config?.fragmentId as string | undefined) : undefined;
+    const fragment = fragmentId ? state.fragments.find((item) => item.id === fragmentId) : undefined;
+    return {
+      nodes: [...state.nodes, node],
+      ...(fragment
+        ? {
+            provenanceEvents: recordProvenanceEvent(state, {
+              activity: 'operation.applied',
+              entityId: fragment.id,
+              generated: [node.id],
+              payload: { name: fragment.name, nodeCount: fragment.nodes.length },
+            }),
+          }
+        : {}),
+    };
+  }),
 
-  saveFragment: (fragment) => set((state) => ({
-    fragments: state.fragments.some((item) => item.id === fragment.id)
-      ? state.fragments.map((item) => (item.id === fragment.id ? fragment : item))
-      : [...state.fragments, fragment],
-  })),
+  saveFragment: (fragment) => set((state) => {
+    const existing = state.fragments.some((item) => item.id === fragment.id);
+    return {
+      fragments: existing
+        ? state.fragments.map((item) => (item.id === fragment.id ? fragment : item))
+        : [...state.fragments, fragment],
+      provenanceEvents: recordProvenanceEvent(state, {
+        activity: existing ? 'operation.updated' : 'operation.created',
+        entityId: fragment.id,
+        payload: { name: fragment.name, nodeCount: fragment.nodes.length },
+      }),
+    };
+  }),
 
   // Placed nodes referring to a deleted operation are left alone rather than
   // silently removed: the workflow fails loudly on the next run, which is a
   // better outcome than steps vanishing from someone's canvas.
-  removeFragment: (id) => set((state) => ({ fragments: state.fragments.filter((item) => item.id !== id) })),
+  removeFragment: (id) => set((state) => {
+    const removed = state.fragments.find((item) => item.id === id);
+    if (!removed) return state;
+    return {
+      fragments: state.fragments.filter((item) => item.id !== id),
+      provenanceEvents: recordProvenanceEvent(state, {
+        activity: 'operation.removed',
+        entityId: id,
+        payload: { name: removed.name },
+      }),
+    };
+  }),
 
-  updateNode: (id, config) => set((state) => ({
-    nodes: state.nodes.map((node) =>
-      node.id === id ? { ...node, data: { ...node.data, config } } : node
-    )
-  })),
+  updateNode: (id, config) => set((state) => {
+    const node = state.nodes.find((item) => item.id === id);
+    // Weights are the Prioritise stage's whole argument, so a change to them is
+    // recorded even though ordinary node edits are not — the account has to be
+    // able to say which weighting produced a given ranking.
+    const weights = weightsFromScoreConfig(config);
+    const changed = node && weights && !sameJson(weights, weightsFromScoreConfig(node.data.config));
+    return {
+      nodes: state.nodes.map((item) =>
+        item.id === id ? { ...item, data: { ...item.data, config } } : item
+      ),
+      ...(changed
+        ? {
+            provenanceEvents: recordProvenanceEvent(state, {
+              activity: 'weights.changed',
+              entityType: 'workflow',
+              entityId: id,
+              variantId: typeof config?.variantId === 'string' ? config.variantId : null,
+              coalesceKey: `node:${id}:weights`,
+              payload: { weights },
+            }),
+          }
+        : {}),
+    };
+  }),
 
   removeNode: (id) => set((state) => {
     const node = state.nodes.find((n) => n.id === id);
@@ -1353,6 +1534,17 @@ export const useStore = create<AppState>()(persist((set, get) => ({
         label: 'Change filters',
         coalesceKey: `layer:${layerId}:filters`,
       }),
+      // Filter is the one SIL stage whose diagnostic is about exclusion, so the
+      // account records the conditions themselves, not just that they changed.
+      provenanceEvents: recordProvenanceEvent(state, {
+        activity: filters.length ? 'filter.applied' : 'filter.cleared',
+        entityId: layerId,
+        used: [layerId],
+        coalesceKey: `layer:${layerId}:filters`,
+        payload: filters.length
+          ? { description: filters.map(visualFilterLabel).join('; '), field: filters[0].field, count: filters.length }
+          : { count: current.filters.length },
+      }),
     };
   }),
 
@@ -1372,6 +1564,12 @@ export const useStore = create<AppState>()(persist((set, get) => ({
       },
       analysisHistory: recordCurrentAnalysis(state, {
         label: 'Clear filters',
+      }),
+      provenanceEvents: recordProvenanceEvent(state, {
+        activity: 'filter.cleared',
+        entityId: layerId,
+        used: [layerId],
+        payload: { count: current.filters.length },
       }),
     };
   }),
@@ -1745,10 +1943,23 @@ export const useStore = create<AppState>()(persist((set, get) => ({
     analysisHistory: recordCurrentAnalysis(state, { label: 'Remove evidence' }),
   })),
 
-  addVariant: (variant) => set((state) => ({
-    visualAnalytics: { ...state.visualAnalytics, variants: [...state.visualAnalytics.variants.filter((item) => item.id !== variant.id), variant] },
-    analysisHistory: recordCurrentAnalysis(state, { label: 'Create analysis variant' }),
-  })),
+  addVariant: (variant) => set((state) => {
+    // Stamped rather than required of the caller: a variant always belongs to
+    // whichever line of enquiry is open, and no caller should have to say so.
+    const placed = { ...variant, sessionId: variant.sessionId ?? state.visualAnalytics.activeSessionId };
+    return {
+      visualAnalytics: { ...state.visualAnalytics, variants: [...state.visualAnalytics.variants.filter((item) => item.id !== placed.id), placed] },
+      analysisHistory: recordCurrentAnalysis(state, { label: 'Create analysis variant' }),
+      provenanceEvents: recordProvenanceEvent(state, {
+        activity: 'variant.created',
+        sessionId: placed.sessionId ?? null,
+        variantId: placed.id,
+        used: [placed.baselineDatasetId],
+        generated: [placed.id],
+        payload: { name: placed.name, assumptions: placed.assumptions },
+      }),
+    };
+  }),
 
   branchVariant: (variantId, newId = `variant-${Date.now()}`) => set((state) => {
     const parent = state.visualAnalytics.variants.find((item) => item.id === variantId);
@@ -1757,7 +1968,22 @@ export const useStore = create<AppState>()(persist((set, get) => ({
     // nothing to run, and re-running is the only way it ever gets a result.
     // The output id is cleared because the branch has not been run yet.
     const branch: AnalysisVariant = structuredClone({ ...parent, id: newId, name: `${parent.name} branch`, parentVariantId: parent.id, workflowOutputDatasetId: undefined, createdAt: Date.now() });
-    return { visualAnalytics: { ...state.visualAnalytics, variants: [...state.visualAnalytics.variants, branch] }, analysisHistory: recordCurrentAnalysis(state, { label: 'Branch analysis variant' }) };
+    return {
+      visualAnalytics: { ...state.visualAnalytics, variants: [...state.visualAnalytics.variants, branch] },
+      analysisHistory: recordCurrentAnalysis(state, { label: 'Branch analysis variant' }),
+      // `used`/`generated` carry the lineage in PROV terms, so a reader can
+      // reconstruct the branch tree from the log alone if the variants are gone.
+      provenanceEvents: recordProvenanceEvent(state, {
+        activity: 'variant.branched',
+        // The branch stays in its parent's line of enquiry, not whichever one
+        // happens to be open — branching is a move within a question.
+        sessionId: branch.sessionId ?? null,
+        variantId: branch.id,
+        used: [parent.id],
+        generated: [branch.id],
+        payload: { name: branch.name, parentName: parent.name, parentVariantId: parent.id },
+      }),
+    };
   }),
 
   /**
@@ -1779,15 +2005,39 @@ export const useStore = create<AppState>()(persist((set, get) => ({
     };
   }),
 
-  updateVariant: (variantId, patch) => set((state) => ({
-    visualAnalytics: { ...state.visualAnalytics, variants: state.visualAnalytics.variants.map((variant) => variant.id === variantId ? { ...variant, ...patch } : variant) },
-    analysisHistory: recordCurrentAnalysis(state, { label: 'Edit analysis variant', coalesceKey: `variant:${variantId}` }),
-  })),
+  updateVariant: (variantId, patch) => set((state) => {
+    const previous = state.visualAnalytics.variants.find((variant) => variant.id === variantId);
+    // Only a rename is logged here. Weight and filter changes reach the store
+    // through their own actions, which record the detail this patch cannot see.
+    const renamed = previous && typeof patch.name === 'string' && patch.name !== previous.name;
+    return {
+      visualAnalytics: { ...state.visualAnalytics, variants: state.visualAnalytics.variants.map((variant) => variant.id === variantId ? { ...variant, ...patch } : variant) },
+      analysisHistory: recordCurrentAnalysis(state, { label: 'Edit analysis variant', coalesceKey: `variant:${variantId}` }),
+      ...(renamed
+        ? {
+            provenanceEvents: recordProvenanceEvent(state, {
+              activity: 'variant.renamed',
+              variantId,
+              payload: { from: previous!.name, to: patch.name },
+            }),
+          }
+        : {}),
+    };
+  }),
 
-  removeVariant: (variantId) => set((state) => ({
-    visualAnalytics: { ...state.visualAnalytics, variants: state.visualAnalytics.variants.filter((variant) => variant.id !== variantId) },
-    analysisHistory: recordCurrentAnalysis(state, { label: 'Remove analysis variant' }),
-  })),
+  removeVariant: (variantId) => set((state) => {
+    const removed = state.visualAnalytics.variants.find((variant) => variant.id === variantId);
+    if (!removed) return state;
+    return {
+      visualAnalytics: { ...state.visualAnalytics, variants: state.visualAnalytics.variants.filter((variant) => variant.id !== variantId) },
+      analysisHistory: recordCurrentAnalysis(state, { label: 'Remove analysis variant' }),
+      provenanceEvents: recordProvenanceEvent(state, {
+        activity: 'variant.deleted',
+        variantId,
+        payload: { name: removed.name },
+      }),
+    };
+  }),
 
   addChatMessage: (role, content, data) => set((state) => ({
     chatMessages: [...state.chatMessages, { role, content, kind: data?.kind as any, data }]

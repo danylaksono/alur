@@ -18,7 +18,8 @@ describe('project manifest v1 to v2 migration', () => {
       },
     };
     const migrated = parseProjectManifest(JSON.stringify(legacy));
-    expect(migrated.version).toBe(2);
+    // Migrations chain: a v1 file lands at the current version, not at v2.
+    expect(migrated.version).toBe(3);
     expect(migrated.workspace).toMatchObject({ workspaceMode: 'explain', activeRailTab: 'layers' });
     expect(migrated.visualAnalytics.comparisons).toHaveLength(1);
     expect(migrated.visualAnalytics.explain?.cards.map((card) => card.kind)).toEqual(['note', 'map']);

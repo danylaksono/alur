@@ -8,6 +8,7 @@ import {
   type ProjectManifestV1,
   type ProjectSourceDescriptor,
 } from '../types/project';
+import { PROVENANCE_SCHEMA_VERSION, type ProvenanceEvent } from '../types/provenance';
 import { ingestFile } from './dataIngestion';
 import { cachedSource } from './sourceCache';
 import type { WorkflowFragment } from '../utils/workflowFragments';
@@ -100,6 +101,8 @@ const persistedAnalytics = (analytics: VisualAnalyticsState): VisualAnalyticsSta
   comparisons: sanitiseValue(analytics.comparisons || []) as NonNullable<VisualAnalyticsState['comparisons']>,
   activeComparisonId: analytics.activeComparisonId,
   explain: sanitiseValue(analytics.explain || defaultExplain()) as ExplainDocument,
+  sessions: sanitiseValue(analytics.sessions || []) as NonNullable<VisualAnalyticsState['sessions']>,
+  activeSessionId: analytics.activeSessionId,
   variants: sanitiseValue(analytics.variants || []) as NonNullable<VisualAnalyticsState['variants']>,
 });
 
@@ -128,6 +131,8 @@ const normaliseAnalytics = (analytics: ProjectManifestV1['visualAnalytics'] | Re
     comparisons: value.comparisons || [],
     activeComparisonId: value.activeComparisonId,
     explain: value.explain || defaultExplain(),
+    sessions: value.sessions || [],
+    activeSessionId: value.activeSessionId,
     variants: value.variants || [],
   });
 };
@@ -159,6 +164,7 @@ export const createProjectManifest = (state = useStore.getState(), exportedAt = 
   datasets: sanitiseValue(Object.values(state.datasetRegistry)) as ProjectManifest['datasets'],
   layers: state.mapLayers.map(layerPresentation),
   visualAnalytics: persistedAnalytics(state.visualAnalytics),
+  provenanceEvents: sanitiseValue(state.provenanceEvents) as ProvenanceEvent[],
   workspace: {
     selectedBasemapId: state.selectedBasemapId,
     selectedNodeId: state.selectedNodeId,
@@ -202,6 +208,11 @@ const validateManifest = (value: unknown): ProjectManifest => {
     },
     savedTableViews: manifest.savedTableViews || {},
     datasets: Array.isArray(manifest.datasets) ? manifest.datasets : [],
+    // Events from a future log schema are dropped rather than rejected: an
+    // unreadable account is a reason to lose the account, not the project.
+    provenanceEvents: Array.isArray(manifest.provenanceEvents)
+      ? manifest.provenanceEvents.filter((event) => isRecord(event) && event.schemaVersion === PROVENANCE_SCHEMA_VERSION)
+      : [],
   };
 };
 
@@ -267,10 +278,48 @@ const migrateV1ToV2 = (value: Record<string, unknown>) => {
   };
 };
 
+/**
+ * Gives a v2 project's variants a line of enquiry to belong to.
+ *
+ * One session, named after the project, holding everything. That is honest
+ * about what the file actually recorded: the analyst had one question open,
+ * they just had no way to say so. Inventing several from the variant names
+ * would be reading intent that was never written down.
+ */
+const migrateV2ToV3 = (value: Record<string, unknown>) => {
+  const analytics = isRecord(value.visualAnalytics) ? value.visualAnalytics : {};
+  const variants = Array.isArray(analytics.variants) ? analytics.variants.filter(isRecord) : [];
+  if (!variants.length) return { ...value, version: 3 };
+
+  const createdAt = typeof value.exportedAt === 'string' ? Date.parse(value.exportedAt) || Date.now() : Date.now();
+  const session = {
+    id: 'session-migrated',
+    name: typeof value.name === 'string' && value.name.trim() ? value.name.trim() : 'Original analysis',
+    question: '',
+    // Variants written before sessions all shared one baseline in practice;
+    // the first is the only one this file can attest to.
+    baselineDatasetId: typeof variants[0].baselineDatasetId === 'string' ? variants[0].baselineDatasetId : '',
+    createdAt,
+    provenanceId: 'session-prov-migrated',
+  };
+
+  return {
+    ...value,
+    version: 3,
+    visualAnalytics: {
+      ...analytics,
+      sessions: Array.isArray(analytics.sessions) && analytics.sessions.length ? analytics.sessions : [session],
+      activeSessionId: typeof analytics.activeSessionId === 'string' ? analytics.activeSessionId : session.id,
+      variants: variants.map((variant) => ({ ...variant, sessionId: variant.sessionId || session.id })),
+    },
+  };
+};
+
 /** Sequential migration entry point. Version 0 was the short-lived pre-manifest prototype. */
 export const migrateProjectManifest = (value: unknown): unknown => {
   if (!isRecord(value) || typeof value.version !== 'number') return value;
-  if (value.version === 1) return migrateV1ToV2(value);
+  if (value.version === 2) return migrateV2ToV3(value);
+  if (value.version === 1) return migrateV2ToV3(migrateV1ToV2(value) as Record<string, unknown>);
   if (value.version !== 0) return value;
   const legacyWorkspace = isRecord(value.workspace) ? value.workspace : {};
   const legacyWorkflow = isRecord(value.workflow) ? value.workflow : {};
@@ -305,7 +354,10 @@ export const migrateProjectManifest = (value: unknown): unknown => {
     },
     savedTableViews: isRecord(value.savedTableViews) ? value.savedTableViews : {},
   };
-  return migratedV1;
+  // Chained rather than returned: a v0 file was previously left at version 1
+  // and never saw the v1→v2 migration, so its legacy dashboard was silently
+  // dropped instead of becoming an Explain document.
+  return migrateV2ToV3(migrateV1ToV2(migratedV1) as Record<string, unknown>);
 };
 
 export const parseProjectManifest = (text: string) => {
@@ -323,6 +375,9 @@ export const serialiseProjectManifest = (manifest: ProjectManifest) => JSON.stri
 export const downloadProjectManifest = (manifest = createProjectManifest(), projectName = manifest.name || 'alur-project') => {
   const fileName = `${safeFilename(projectName, 'alur-project')}-${filenameTimestamp(new Date(manifest.exportedAt))}.alur.json`;
   downloadText(serialiseProjectManifest(manifest), fileName, 'application/json;charset=utf-8');
+  // After the download, so the exported file does not contain the record of
+  // its own export — the account describes the analysis, not the file writing.
+  useStore.getState().recordProvenance({ activity: 'project.exported', payload: { name: projectName } });
 };
 
 export const applyProjectManifest = (manifest: ProjectManifest | ProjectManifestV1) => {
@@ -341,6 +396,9 @@ export const applyProjectManifest = (manifest: ProjectManifest | ProjectManifest
     manualSQL: valid.workspace.manualSQL,
     isManualSQL: valid.workspace.isManualSQL,
     visualAnalytics: normaliseAnalytics(valid.visualAnalytics) as AppState['visualAnalytics'],
+    // The account survives the round trip; `clearAnalysisHistory` below resets
+    // the undo stack, which is state and cannot outlive the session that made it.
+    provenanceEvents: valid.provenanceEvents || [],
     nodeSchemas: {},
     nodeExecutionStates: {},
     loadingOperations: {},
@@ -358,6 +416,12 @@ export const applyProjectManifest = (manifest: ProjectManifest | ProjectManifest
     },
   }));
   useStore.getState().clearAnalysisHistory();
+  // Recorded after the state is in place, so the event is the last entry in the
+  // account the project arrived with rather than the first of a new one.
+  useStore.getState().recordProvenance({
+    activity: 'project.loaded',
+    payload: { name: valid.name || 'Untitled project', exportedAt: valid.exportedAt },
+  });
   if (typeof window !== 'undefined') {
     window.localStorage.setItem(TABLE_VIEWS_STORAGE_KEY, JSON.stringify(valid.savedTableViews || {}));
     window.dispatchEvent(new Event('alur-table-views-imported'));

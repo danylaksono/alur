@@ -17,7 +17,7 @@ export const registerWorkflowResult = (
   result: WorkflowMaterialisation,
   { nodeId, layerName }: { nodeId?: string; layerName?: string } = {},
 ) => {
-  const { addMapLayer, registerDataset, registerWorkflowNodeOutput } = useStore.getState();
+  const { addMapLayer, registerDataset, registerWorkflowNodeOutput, recordProvenance } = useStore.getState();
 
   const datasetId = result.kind === 'layer' ? result.layer.id : result.dataset.id;
   if (result.kind === 'layer') {
@@ -26,5 +26,14 @@ export const registerWorkflowResult = (
     registerDataset(result.dataset);
   }
   if (nodeId) registerWorkflowNodeOutput(nodeId, datasetId);
+  // Recorded here for the same reason the rest of this function lives here:
+  // every run path passes through, so the account cannot miss one.
+  recordProvenance({
+    activity: 'workflow.ran',
+    entityId: nodeId ?? datasetId,
+    used: nodeId ? [nodeId] : [],
+    generated: [datasetId],
+    payload: { nodeId, datasetId, rowCount: result.featureCount },
+  });
   return datasetId;
 };

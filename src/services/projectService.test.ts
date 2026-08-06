@@ -37,6 +37,29 @@ describe('projectService', () => {
     expect(restored.exportedAt).toBe('2026-07-24T12:00:00.000Z');
   });
 
+  it('carries the provenance account through a save and reload', () => {
+    useStore.getState().recordProvenance({ activity: 'variant.created', variantId: 'v1', payload: { name: 'Baseline' } });
+
+    const restored = parseProjectManifest(serialiseProjectManifest(createProjectManifest(useStore.getState())));
+
+    expect(restored.provenanceEvents).toHaveLength(1);
+    expect(restored.provenanceEvents![0].summary).toBe('Created variant “Baseline”');
+  });
+
+  it('loads a project written before the account existed with an empty one', () => {
+    const manifest = createProjectManifest(useStore.getState());
+    const withoutAccount = { ...manifest, provenanceEvents: undefined };
+
+    expect(parseProjectManifest(JSON.stringify(withoutAccount)).provenanceEvents).toEqual([]);
+  });
+
+  it('drops events from an unreadable log schema rather than refusing the project', () => {
+    const manifest = createProjectManifest(useStore.getState());
+    const fromTheFuture = { ...manifest, provenanceEvents: [{ schemaVersion: 99, id: 'x', activity: 'unknown.thing' }] };
+
+    expect(parseProjectManifest(JSON.stringify(fromTheFuture)).provenanceEvents).toEqual([]);
+  });
+
   it('rejects projects from a newer manifest version with an actionable message', () => {
     const manifest = createProjectManifest();
     expect(() => parseProjectManifest(JSON.stringify({ ...manifest, version: 99 }))).toThrow(/Update ALUR/);
@@ -50,9 +73,47 @@ describe('projectService', () => {
       edges: [],
       visualAnalytics: { layers: {}, charts: [], kpis: [] },
     }));
-    expect(restored.version).toBe(1);
+    // Previously this stopped at 1: the v0 branch returned its result instead
+    // of chaining, so a v0 file never saw the later migrations at all.
+    expect(restored.version).toBe(3);
     expect(restored.workspace.mapCamera.zoom).toBe(1.5);
     expect(restored.visualAnalytics.datasets).toEqual({});
+  });
+
+  it('gives a v2 project one line of enquiry holding the variants it already had', () => {
+    const current = createProjectManifest();
+    const legacy = {
+      ...current,
+      version: 2,
+      name: 'Retrofit study',
+      visualAnalytics: {
+        ...current.visualAnalytics,
+        sessions: undefined,
+        activeSessionId: undefined,
+        variants: [
+          { id: 'v1', name: 'Baseline', baselineDatasetId: 'areas', parameters: {}, assumptions: [], operations: [], createdAt: 1, provenance: { workflowNodeIds: [] } },
+          { id: 'v2', name: 'High', baselineDatasetId: 'areas', parentVariantId: 'v1', parameters: {}, assumptions: [], operations: [], createdAt: 2, provenance: { workflowNodeIds: [] } },
+        ],
+      },
+    };
+
+    const migrated = parseProjectManifest(JSON.stringify(legacy));
+    const sessions = migrated.visualAnalytics.sessions!;
+
+    expect(migrated.version).toBe(3);
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0].name).toBe('Retrofit study');
+    expect(sessions[0].baselineDatasetId).toBe('areas');
+    expect(migrated.visualAnalytics.activeSessionId).toBe(sessions[0].id);
+    expect(migrated.visualAnalytics.variants!.map((variant) => variant.sessionId)).toEqual([sessions[0].id, sessions[0].id]);
+    // Branching lineage is untouched: the session groups, it does not re-parent.
+    expect(migrated.visualAnalytics.variants![1].parentVariantId).toBe('v1');
+  });
+
+  it('does not invent a line of enquiry for a project that never had variants', () => {
+    const legacy = { ...createProjectManifest(), version: 2, visualAnalytics: { ...createProjectManifest().visualAnalytics, sessions: undefined, variants: [] } };
+
+    expect(parseProjectManifest(JSON.stringify(legacy)).visualAnalytics.sessions).toEqual([]);
   });
 
   it('includes cohorts and analytical bookmarks in the portable manifest', () => {
