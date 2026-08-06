@@ -3,6 +3,7 @@ import { useStore } from '../store/useStore';
 import { nextNodePosition } from '../utils/nodePlacement';
 import type { IngestionFormat, IngestionSource, IngestionSourceKind, ParsedJsonDataset, SourceFingerprint } from '../types/ingestion';
 import { ensureWorkflowDataset } from './datasetService';
+import { cacheSource } from './sourceCache';
 import { tableDatasetId } from '../utils/datasetSource';
 
 const MAX_JSON_BYTES = 25 * 1024 * 1024;
@@ -159,6 +160,11 @@ export const ingestFile = async (
         : `read_parquet('${escapeSqlString(registered.path)}')`);
       await duckdbService.query(`CREATE OR REPLACE VIEW ${quotedTableName} AS SELECT * FROM ${scanSql};`);
     }
+
+    // Keep a copy so reopening this project does not mean re-picking the file.
+    // Deliberately not awaited: the user is waiting on the map, not on a cache,
+    // and a failure here costs a convenience rather than the dataset.
+    void cacheSource(file, { format: detectedFormat });
 
     updateStage('Inspecting geometry and coordinate system…', 45);
     const source = await duckdbService.prepareLayerSource(tableName, { kind: 'duckdb-table' });

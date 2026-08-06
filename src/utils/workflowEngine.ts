@@ -2,6 +2,38 @@ import type { Edge } from '@xyflow/react';
 import type { WorkflowNode } from '../store/useStore';
 import type { LayerVisualisation } from '../types/visualisation';
 import { spatialFunctions } from './spatialFunctions';
+import {
+  allocationErrors,
+  buildAllocationSelects,
+  buildMeasureSelect,
+  buildTopNQualify,
+  summaryMeasureErrors,
+  type AllocationConfig,
+  type SummaryMeasure,
+} from './aggregationSql';
+import { buildContributionSelects, buildScoreExpression, scoreModelErrors } from './scoreModel';
+import {
+  buildExclusionSelects,
+  buildKeepExpression,
+  filterPredicateErrors,
+  type FilterOutcome,
+  type FilterPredicate,
+} from './filterPredicates';
+import { expandFragments, type WorkflowFragment } from './workflowFragments';
+import { resolveNodeParameters } from './workflowParameters';
+import type { ScoreModelSpec } from '../types/visualAnalytics';
+
+export type WorkflowBuildOptions = {
+  limit?: number;
+  /** Saved operations the workflow may place. Omit only for graphs known to have none. */
+  fragments?: WorkflowFragment[];
+  /**
+   * Values for `{ $param: … }` references in node configs. Omitting them is
+   * fine for a graph with no references, and for one whose references all
+   * carry defaults.
+   */
+  parameters?: Record<string, unknown>;
+};
 
 /**
  * Workflow Engine
@@ -21,6 +53,8 @@ export interface WorkflowResult {
   resultSql: string;
   withClause: string;
   lastAlias: string;
+  /** The node whose output the final CTE holds, so callers can attribute the result back to the graph. */
+  terminalNodeId: string;
   geomColumn: string;
   geomCrs: string;
   outputLayerName: string;
@@ -144,12 +178,18 @@ function isBooleanPredicate(operation: string): boolean {
 
 // ─── main builder ─────────────────────────────────────────────────────
 
-export function buildWorkflowSQL(nodes: WorkflowNode[], edges: Edge[], options?: { limit?: number }): WorkflowResult {
+export function buildWorkflowSQL(nodes: WorkflowNode[], edges: Edge[], options?: WorkflowBuildOptions): WorkflowResult {
   if (!nodes.length) {
     throw new Error('No nodes in the workflow.');
   }
 
   const resultLimit = options?.limit ?? 5000;
+  // Saved operations become ordinary nodes before anything else looks at the
+  // graph, so every node type works inside one without being taught to.
+  ({ nodes, edges } = expandFragments(nodes, edges, options?.fragments || []));
+  // Then parameters, for the same reason and in this order: an operation's own
+  // steps can name a parameter, and they do not exist until it is expanded.
+  nodes = resolveNodeParameters(nodes, options?.parameters);
 
   const sorted = topoSort(nodes, edges);
 
@@ -165,19 +205,25 @@ export function buildWorkflowSQL(nodes: WorkflowNode[], edges: Edge[], options?:
   // Track geometry column and CRS per CTE
   const nodeMetadata = new Map<string, { geom: string; crs: string }>();
   const visualisationMetadata = new Map<string, WorkflowVisualisationConfig>();
+  const nodeIdByAlias = new Map<string, string>();
 
   for (const node of sorted) {
     const alias = cteAlias(node.id);
+    nodeIdByAlias.set(alias, node.id);
     const { type, config } = node.data;
     const parentEdges = [...(parentsMap.get(node.id) || [])].sort((a, b) =>
       String(a.targetHandle || '').localeCompare(String(b.targetHandle || ''))
     );
     const parentAliases = parentEdges.map(edge => cteAlias(edge.source));
 
-    if (type === 'input') {
+    if (type === 'input' || type === 'geometry') {
       const tableName = config?.tableName;
       if (!tableName) {
-        throw new Error(`Input node "${node.id}" has no table loaded.`);
+        // A drawn layer exists only in the node until it is committed, so the
+        // message points at the step that would make it queryable.
+        throw new Error(type === 'geometry'
+          ? `Drawn layer "${node.id}" has not been created yet. Use "Create dataset" on the node to make it queryable.`
+          : `Input node "${node.id}" has no table loaded.`);
       }
       ctes.push(`${alias} AS (\n  SELECT * FROM ${qi(tableName)}\n)`);
       lastAlias = alias;
@@ -326,19 +372,90 @@ export function buildWorkflowSQL(nodes: WorkflowNode[], edges: Edge[], options?:
       const source = parentAliases[0] || lastAlias;
       if (!source) throw new Error(`Aggregate node "${node.id}" has no source.`);
       const meta = nodeMetadata.get(source)!;
-      const operation = config?.operation || 'ST_Union_Agg';
-      const groupBy = config?.groupBy || '';
-      
-      const selectClause = groupBy 
-        ? `${qi(groupBy)}, ${operation}(${qi(meta.geom)}) AS geom_agg`
-        : `${operation}(${qi(meta.geom)}) AS geom_agg`;
-      
-      const groupByClause = groupBy ? ` GROUP BY ${qi(groupBy)}` : '';
-      
+      const mode = config?.mode === 'summary' ? 'summary' : 'spatial';
+
+      if (mode === 'summary') {
+        const groupFields: string[] = (Array.isArray(config?.groupBy) ? config.groupBy : [config?.groupBy])
+          .filter((field: unknown): field is string => typeof field === 'string' && field.length > 0);
+        const measures: SummaryMeasure[] = Array.isArray(config?.measures) ? config.measures : [];
+        const errors = summaryMeasureErrors(measures);
+        if (errors.length) throw new Error(`Aggregate node "${node.id}": ${errors[0]}`);
+
+        const measureSelects = measures.map(buildMeasureSelect).filter((select): select is string => Boolean(select));
+        // Unioning the group geometry keeps the summary mappable. Without it
+        // the result is a plain table, which is a legitimate outcome — it just
+        // cannot be drawn.
+        const keepsGeometry = Boolean(config?.includeGeometry && meta.geom && groupFields.length);
+        const selects = [
+          ...groupFields.map((field) => qi(field)),
+          ...measureSelects,
+          ...(keepsGeometry ? [`ST_Union_Agg(${qi(meta.geom)}) AS geom_agg`] : []),
+        ];
+        const groupByClause = groupFields.length ? `\n  GROUP BY ${groupFields.map(qi).join(', ')}` : '';
+
+        ctes.push(`${alias} AS (\n  SELECT ${selects.join(', ')}\n  FROM ${source}${groupByClause}\n)`);
+        nodeMetadata.set(alias, { geom: keepsGeometry ? 'geom_agg' : '', crs: meta.crs });
+        lastAlias = alias;
+      } else {
+        const operation = config?.operation || 'ST_Union_Agg';
+        const groupBy = typeof config?.groupBy === 'string' ? config.groupBy : '';
+
+        const selectClause = groupBy
+          ? `${qi(groupBy)}, ${operation}(${qi(meta.geom)}) AS geom_agg`
+          : `${operation}(${qi(meta.geom)}) AS geom_agg`;
+
+        const groupByClause = groupBy ? ` GROUP BY ${qi(groupBy)}` : '';
+
+        ctes.push(
+          `${alias} AS (\n  SELECT ${selectClause}\n  FROM ${source}${groupByClause}\n)`
+        );
+        nodeMetadata.set(alias, { geom: 'geom_agg', crs: meta.crs });
+        lastAlias = alias;
+      }
+    } else if (type === 'score') {
+      const source = parentAliases[0] || lastAlias;
+      if (!source) throw new Error(`Score node "${node.id}" has no source.`);
+      const meta = nodeMetadata.get(source)!;
+      const spec: ScoreModelSpec = config?.scoreModel || { criteria: [], missingValueTreatment: 'zero' };
+      const errors = scoreModelErrors(spec);
+      if (errors.length) throw new Error(`Score node "${node.id}": ${errors[0]}`);
+
+      const resultField = config?.resultField || 'alur_score';
+      const rankField = `${resultField}_rank`;
+      // The mean-substitution policy averages over the upstream CTE, so the
+      // compiler needs to know which alias that is.
+      const scoreOptions = { relation: source };
+      const contributions = config?.includeContributions === false ? [] : buildContributionSelects(spec, resultField, scoreOptions);
+      const scored = [
+        `${buildScoreExpression(spec, scoreOptions)} AS ${qi(resultField)}`,
+        ...contributions.map((item) => `${item.expression} AS ${qi(item.alias)}`),
+      ];
+
+      // Ranking has to read the score, and a window function cannot reference
+      // an alias defined in its own SELECT, so scoring and ranking are two
+      // passes. Ties share a rank rather than being separated on row order.
       ctes.push(
-        `${alias} AS (\n  SELECT ${selectClause}\n  FROM ${source}${groupByClause}\n)`
+        `${alias} AS (\n  SELECT *, RANK() OVER (ORDER BY ${qi(resultField)} DESC NULLS LAST) AS ${qi(rankField)}\n  FROM (\n    SELECT *, ${scored.join(', ')}\n    FROM ${source}\n  )\n)`
       );
-      nodeMetadata.set(alias, { geom: 'geom_agg', crs: meta.crs });
+      nodeMetadata.set(alias, meta);
+      lastAlias = alias;
+    } else if (type === 'allocate') {
+      const source = parentAliases[0] || lastAlias;
+      if (!source) throw new Error(`Allocation node "${node.id}" has no source.`);
+      const meta = nodeMetadata.get(source)!;
+      const errors = allocationErrors(config || {});
+      if (errors.length) throw new Error(`Allocation node "${node.id}": ${errors[0]}`);
+
+      const allocation = config as AllocationConfig;
+      const { columns, selects } = buildAllocationSelects(allocation);
+      const inner = `SELECT *, ${selects.join(', ')}\n    FROM ${source}`;
+
+      // A cut-off has to filter on the window result, which cannot be
+      // referenced from the same SELECT, so it wraps rather than qualifying.
+      ctes.push(allocation.mode === 'cut'
+        ? `${alias} AS (\n  SELECT *\n  FROM (\n    ${inner}\n  )\n  WHERE ${qi(columns.status)} = 'within'\n)`
+        : `${alias} AS (\n  ${inner}\n)`);
+      nodeMetadata.set(alias, meta);
       lastAlias = alias;
     } else if (type === 'filter') {
       const source = parentAliases[0] || lastAlias;
@@ -348,7 +465,30 @@ export function buildWorkflowSQL(nodes: WorkflowNode[], edges: Edge[], options?:
       const selectionIds = Array.isArray(config?.selectionIds)
         ? config.selectionIds.map(String).filter(Boolean)
         : [];
-      if (selectionIds.length) {
+      if (config?.mode === 'top-n') {
+        if (!config?.field) throw new Error(`Filter node "${node.id}" needs a column to rank by.`);
+        const count = Number(config?.count);
+        if (!Number.isFinite(count) || count < 1) throw new Error(`Filter node "${node.id}" needs how many rows to keep.`);
+        ctes.push(
+          `${alias} AS (\n  SELECT * FROM ${source}\n  QUALIFY ${buildTopNQualify(config.field, count, config?.direction === 'asc' ? 'asc' : 'desc')}\n)`
+        );
+      } else if (config?.mode === 'criteria') {
+        const predicates: FilterPredicate[] = Array.isArray(config?.predicates) ? config.predicates : [];
+        const errors = filterPredicateErrors(predicates);
+        if (errors.length) throw new Error(`Filter node "${node.id}": ${errors[0]}`);
+
+        const outcome: FilterOutcome = config?.outcome === 'tag' ? 'tag' : 'drop';
+        const keep = buildKeepExpression(predicates);
+        const exclusion = buildExclusionSelects(predicates, config?.exclusionField || undefined)!;
+        // Dropping and recording are independent: a soft condition annotates a
+        // row that survives, so the reason columns are written either way and
+        // only the WHERE clause depends on the outcome.
+        const where = outcome === 'drop' && keep ? `\n    WHERE ${keep}` : '';
+
+        ctes.push(
+          `${alias} AS (\n  SELECT * EXCLUDE (${qi(exclusion.intermediate)}), ${exclusion.outer.join(', ')}\n  FROM (\n    SELECT *, ${exclusion.inner.join(', ')}\n    FROM ${source}${where}\n  )\n)`
+        );
+      } else if (selectionIds.length) {
         const selectedValues = selectionIds.map((id: string) => `'${id.replace(/'/g, "''")}'`).join(', ');
         const geometryPredicate = meta.geom ? ` WHERE ${qi(meta.geom)} IS NOT NULL` : '';
         ctes.push(
@@ -406,6 +546,7 @@ export function buildWorkflowSQL(nodes: WorkflowNode[], edges: Edge[], options?:
     resultSql,
     withClause,
     lastAlias,
+    terminalNodeId: nodeIdByAlias.get(lastAlias) || '',
     geomColumn: finalMeta.geom,
     geomCrs: finalMeta.crs,
     outputLayerName: `workflow_${lastAlias}`,
@@ -417,11 +558,18 @@ export function buildWorkflowSQL(nodes: WorkflowNode[], edges: Edge[], options?:
  * Build SQL that executes the workflow up to (and including) a specific target node.
  * Useful for step-through / per-node execution.
  */
-export function buildUpToSQL(nodes: WorkflowNode[], edges: Edge[], targetNodeId: string, options?: { limit?: number }): WorkflowResult {
+export function buildUpToSQL(nodes: WorkflowNode[], edges: Edge[], targetNodeId: string, options?: WorkflowBuildOptions): WorkflowResult {
   if (!nodes.length) throw new Error('No nodes in the workflow.');
   if (!nodes.some((node) => node.id === targetNodeId)) {
     throw new Error(`Target node "${targetNodeId}" does not exist.`);
   }
+
+  // Expanding first means "run up to here" can target a saved operation, whose
+  // own node disappears — so the target moves to whatever replaced it.
+  const expansion = expandFragments(nodes, edges, options?.fragments || []);
+  nodes = expansion.nodes;
+  edges = expansion.edges;
+  targetNodeId = expansion.outputByPlacement.get(targetNodeId) || targetNodeId;
 
   // Find all nodes that are ancestors of the target (including the target itself)
   const parentMap = new Map<string, string[]>();

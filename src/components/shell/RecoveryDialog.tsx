@@ -4,6 +4,7 @@ import { useProjectRecovery } from '../../hooks/useProjectRecovery';
 import {
   applyProjectManifest,
   applyRelinkedLayerPresentation,
+  restoreSourcesFromCache,
   sourceMatchesFile,
 } from '../../services/projectService';
 import { ingestFile } from '../../services/dataIngestion';
@@ -14,17 +15,28 @@ export const RecoveryDialog = () => {
   const { candidate, setCandidate, discard } = useProjectRecovery();
   const addToast = useStore((state) => state.addToast);
   const [sources, setSources] = useState<ProjectSourceDescriptor[] | null>(null);
+  const [isRestoring, setRestoring] = useState(false);
   const targetRef = useRef<ProjectSourceDescriptor | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   if (!candidate) return null;
 
-  const restore = () => {
-    const missing = applyProjectManifest(candidate.manifest);
+  const restore = async () => {
+    const declared = applyProjectManifest(candidate.manifest);
+    setRestoring(true);
+    // A crash recovery is the case where re-picking files is most annoying, so
+    // it is the case that benefits most from the cache.
+    const { restored, missing } = await restoreSourcesFromCache(declared, candidate.manifest)
+      .finally(() => setRestoring(false));
     setSources(missing);
     if (!missing.length) {
       setCandidate(null);
-      addToast({ type: 'success', message: 'Recovered your last workspace.' });
+      addToast({
+        type: 'success',
+        message: restored.length
+          ? `Recovered your last workspace with ${restored.length} data ${restored.length === 1 ? 'file' : 'files'}.`
+          : 'Recovered your last workspace.',
+      });
     }
   };
 
@@ -65,10 +77,12 @@ export const RecoveryDialog = () => {
         </div>
         {sources === null ? (
           <div className="space-y-4 p-5">
-            <p className="text-xs leading-5 text-slate-600">Restore the workflow, filters, charts, metrics, styles, and workspace layout. Source records were not saved and may need to be relinked.</p>
+            <p className="text-xs leading-5 text-slate-600">Restore the workflow, filters, charts, metrics, styles, and workspace layout. Data files come back from this browser's cache where they are still held, and are asked for where they are not.</p>
             <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => { void discard(); }} className="rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50">Discard</button>
-              <button type="button" onClick={restore} className="rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white hover:bg-slate-700">Restore workspace</button>
+              <button type="button" disabled={isRestoring} onClick={() => { void discard(); }} className="rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50">Discard</button>
+              <button type="button" disabled={isRestoring} onClick={() => { void restore(); }} className="rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white hover:bg-slate-700 disabled:opacity-50">
+                {isRestoring ? 'Restoring…' : 'Restore workspace'}
+              </button>
             </div>
           </div>
         ) : (

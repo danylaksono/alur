@@ -37,6 +37,7 @@ export const Chat = () => {
     mapLayers,
     selectedLayerId,
     nodeSchemas,
+    fragments,
     visualAnalytics,
   } = useStore();
   const settings = useStore((s) => s.settings);
@@ -70,6 +71,16 @@ export const Chat = () => {
           content: `Current workspace metadata: ${JSON.stringify({
             nodeSchemas,
             selectedLayerId,
+            // Without this the model cannot place a saved operation, since it
+            // has no way to learn that any exist.
+            savedOperations: fragments.map((fragment) => ({
+              id: fragment.id,
+              name: fragment.name,
+              description: fragment.description,
+              parameters: fragment.parameters.map((parameter) => ({
+                id: parameter.id, label: parameter.label, type: parameter.type, options: parameter.options,
+              })),
+            })),
             layers: mapLayers.map((layer) => ({
               id: layer.id,
               name: layer.name,
@@ -227,8 +238,8 @@ export const Chat = () => {
               break;
             }
             try {
-              if (!duckdbService.isH3Loaded) {
-                addChatMessage('assistant', 'H3 extension unavailable. Try add_geojson_layer instead.');
+              if (!(await duckdbService.ensureH3())) {
+                addChatMessage('assistant', 'The H3 extension could not be fetched — it needs a network connection the first time it is used. Try add_geojson_layer instead, or style the layer as a hexbin, which falls back to Mercator cells.');
                 break;
               }
               const h3Sql = `

@@ -16,6 +16,8 @@ export type VisualAnalyticsState = {
   comparisons?: ComparisonSpec[];
   activeComparisonId?: string;
   explain?: ExplainDocument;
+  sessions?: AnalysisSession[];
+  activeSessionId?: string;
   variants?: AnalysisVariant[];
   comparison?: CohortComparisonSelection;
   /** @deprecated v1 compatibility only. New projects use `explain`. */
@@ -117,9 +119,15 @@ export type EvidenceProvenance = {
   query?: string;
   comparisonSpec?: ComparisonSpec;
   caveats: string[];
+  /**
+   * Modelling choices behind this evidence, copied from the variants that
+   * produced its datasets. Frozen at pin time so a shared story still carries
+   * them when the scenario itself is long gone.
+   */
+  assumptions?: string[];
 };
 
-export type ExplainCardKind = 'chart' | 'kpi' | 'table' | 'comparison' | 'map' | 'finding' | 'note' | 'section-intro';
+export type ExplainCardKind = 'chart' | 'kpi' | 'table' | 'comparison' | 'map' | 'finding' | 'note' | 'lineage' | 'account' | 'section-intro';
 export type ExplainEvidenceRole = 'supports' | 'contradicts' | 'context';
 export type ExplainEvidenceLink = { cardId: string; role: ExplainEvidenceRole; note?: string };
 export type ExplainCard = {
@@ -184,9 +192,40 @@ export type VariantOperation = {
   assumptions?: string[];
 };
 
+/**
+ * One line of enquiry: a question, the data it is asked of, and the variants
+ * tried against it.
+ *
+ * Variants alone could not express this. Two questions asked of the same
+ * dataset produced one undifferentiated pile of branches, and comparing across
+ * questions was indistinguishable from comparing within one. The session is a
+ * grouping tier, not a replacement for `parentVariantId` — branching lineage
+ * still lives on the variants.
+ */
+export type AnalysisSession = {
+  id: string;
+  name: string;
+  /**
+   * What this line of enquiry is asking, in the analyst's words. Always
+   * optional in practice — it ships empty and nothing requires it — but it is
+   * what makes a session self-describing in the account.
+   */
+  question: string;
+  baselineDatasetId: string;
+  createdAt: number;
+  /** Stable across renames, so the account can still name a renamed session. */
+  provenanceId: string;
+};
+
 export type AnalysisVariant = {
   id: string;
   name: string;
+  /**
+   * Assigned when the variant is added. Optional only because projects written
+   * before sessions existed have variants without one; those load into the
+   * session the migration synthesises.
+   */
+  sessionId?: string;
   baselineDatasetId: string;
   parentVariantId?: string;
   workflowOutputDatasetId?: string;

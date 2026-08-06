@@ -3,7 +3,8 @@ import { Copy, Trash2, Info, Play, Download, Loader2, CheckCircle, AlertCircle }
 import { useStore } from '../../store/useStore';
 import { buildUpToSQL } from '../../utils/workflowEngine';
 import { duckdbService } from '../../services/duckdb';
-import { materializeWorkflowMapLayer } from '../../services/layerMaterialization';
+import { materializeWorkflowOutput } from '../../services/layerMaterialization';
+import { registerWorkflowResult } from '../../services/workflowRun';
 import { cn } from '../../utils/cn';
 
 interface NodeActionsProps {
@@ -19,7 +20,6 @@ export const NodeActions = ({ id, selected = false, helperContent }: NodeActions
   const duplicateNode = useStore((s) => s.duplicateNode);
   const nodeExecutionStates = useStore((s) => s.nodeExecutionStates);
   const setNodeExecutionState = useStore((s) => s.setNodeExecutionState);
-  const addMapLayer = useStore((s) => s.addMapLayer);
   const addToast = useStore((s) => s.addToast);
   const [showHelper, setShowHelper] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -28,11 +28,11 @@ export const NodeActions = ({ id, selected = false, helperContent }: NodeActions
   const execState = nodeExecutionStates[id];
 
   const handleExecute = async () => {
-    const { nodes, edges } = useStore.getState();
+    const { nodes, edges, fragments } = useStore.getState();
     setNodeExecutionState(id, { status: 'running' });
     try {
-      const workflow = buildUpToSQL(nodes, edges, id);
-      const layer = await materializeWorkflowMapLayer({
+      const workflow = buildUpToSQL(nodes, edges, id, { fragments });
+      const result = await materializeWorkflowOutput({
         workflow,
         layerId: `exec-${id}`,
         name: `Step: ${nodes.find((n) => n.id === id)?.data.label || id}`,
@@ -40,13 +40,16 @@ export const NodeActions = ({ id, selected = false, helperContent }: NodeActions
         sourceKind: 'step',
         visualisationConfig: workflow.visualisationConfig,
       });
-      if (!layer.featureCount) {
-        addToast({ type: 'warning', message: 'Execution produced no features.' });
+      if (!result.featureCount) {
+        addToast({ type: 'warning', message: 'Execution produced no rows.' });
         setNodeExecutionState(id, { status: 'done', featureCount: 0 });
         return;
       }
-      addMapLayer(layer);
-      setNodeExecutionState(id, { status: 'done', featureCount: layer.featureCount });
+      registerWorkflowResult(result, { nodeId: id });
+      if (result.kind === 'table') {
+        addToast({ type: 'success', message: `Step produced ${result.featureCount.toLocaleString()} rows with no geometry — available to charts, comparison and the report.` });
+      }
+      setNodeExecutionState(id, { status: 'done', featureCount: result.featureCount });
     } catch (err: any) {
       setNodeExecutionState(id, { status: 'error', error: err.message });
       addToast({ type: 'error', message: `Step error: ${err.message}` });
@@ -54,10 +57,10 @@ export const NodeActions = ({ id, selected = false, helperContent }: NodeActions
   };
 
   const handleExport = async (format: 'geojson' | 'csv' = 'geojson') => {
-    const { nodes, edges } = useStore.getState();
+    const { nodes, edges, fragments } = useStore.getState();
     setExporting(true);
     try {
-      const workflow = buildUpToSQL(nodes, edges, id);
+      const workflow = buildUpToSQL(nodes, edges, id, { fragments });
       if (format === 'geojson') {
         const tableName = `alur_export_${id.replace(/[^a-zA-Z0-9_]/g, '_')}_${Date.now()}`;
         await duckdbService.materializeQueryAsTable(workflow.resultSql, tableName);

@@ -574,3 +574,256 @@ describe('layout preferences', () => {
     expect(useStore.getState().project.name).toBe('');
   });
 });
+
+describe('scenario variants', () => {
+  const variant = (id: string, nodeIds: string[]) => ({
+    id,
+    name: id,
+    baselineDatasetId: 'base',
+    parameters: {},
+    assumptions: ['Fixed budget'],
+    operations: [],
+    createdAt: 1,
+    provenance: { workflowNodeIds: nodeIds },
+  });
+
+  beforeEach(() => {
+    useStore.getState().resetWorkspace();
+    useStore.setState({ toasts: [] });
+  });
+
+  it('points a variant at whichever dataset its run produced', () => {
+    useStore.getState().addVariant(variant('variant-a', ['score-node']));
+    useStore.getState().registerWorkflowNodeOutput('score-node', 'exec-score-node');
+
+    expect(useStore.getState().visualAnalytics.variants[0].workflowOutputDatasetId).toBe('exec-score-node');
+  });
+
+  it('leaves variants built on other nodes alone', () => {
+    useStore.getState().addVariant(variant('variant-a', ['score-node']));
+    useStore.getState().addVariant(variant('variant-b', ['other-node']));
+    useStore.getState().registerWorkflowNodeOutput('score-node', 'exec-score-node');
+
+    const outputs = useStore.getState().visualAnalytics.variants.map((item) => item.workflowOutputDatasetId);
+    expect(outputs).toEqual(['exec-score-node', undefined]);
+  });
+
+  it('does not record an undo step, because running is not an edit', () => {
+    useStore.getState().addVariant(variant('variant-a', ['score-node']));
+    const before = useStore.getState().analysisHistory.past.length;
+    useStore.getState().registerWorkflowNodeOutput('score-node', 'exec-score-node');
+
+    expect(useStore.getState().analysisHistory.past).toHaveLength(before);
+  });
+
+  it('keeps the parent workflow nodes when branching, so the branch can be run', () => {
+    useStore.getState().addVariant(variant('variant-a', ['score-node']));
+    useStore.getState().registerWorkflowNodeOutput('score-node', 'exec-score-node');
+    useStore.getState().branchVariant('variant-a', 'variant-branch');
+
+    const branch = useStore.getState().visualAnalytics.variants.find((item) => item.id === 'variant-branch')!;
+    expect(branch.provenance.workflowNodeIds).toEqual(['score-node']);
+    expect(branch.parentVariantId).toBe('variant-a');
+    // Cleared: the branch has not been run, so it has no result of its own yet.
+    expect(branch.workflowOutputDatasetId).toBeUndefined();
+  });
+});
+
+describe('drawing features', () => {
+  const geometryNode = (): WorkflowNode =>
+    ({ id: 'draw-1', type: 'geometry', position: { x: 0, y: 0 }, data: { label: 'Sites', type: 'geometry', config: {} } }) as WorkflowNode;
+
+  const drawnLayer = () => (useStore.getState().nodes[0].data.config as any).layer;
+
+  beforeEach(() => {
+    useStore.getState().resetWorkspace();
+    useStore.setState({ toasts: [], nodes: [geometryNode()] });
+  });
+
+  it('commits a point the moment it is placed, and stays armed for the next', () => {
+    useStore.getState().startDrawing('draw-1', 'point');
+    useStore.getState().addDrawingVertex([-0.1, 51.5]);
+
+    expect(drawnLayer().features).toHaveLength(1);
+    expect(drawnLayer().features[0].kind).toBe('point');
+    expect(useStore.getState().ui.drawing).toMatchObject({ nodeId: 'draw-1', kind: 'point', positions: [] });
+  });
+
+  it('collects vertices for a polygon until it is finished', () => {
+    useStore.getState().startDrawing('draw-1', 'polygon');
+    [[0, 0], [1, 0], [1, 1]].forEach((position) => useStore.getState().addDrawingVertex(position));
+    expect(useStore.getState().nodes[0].data.config.layer).toBeUndefined();
+
+    useStore.getState().finishDrawing();
+    expect(drawnLayer().features[0].positions).toHaveLength(3);
+    // Still armed, so several shapes can be drawn without re-arming.
+    expect(useStore.getState().ui.drawing?.positions).toEqual([]);
+  });
+
+  it('refuses to finish a shape with too few vertices, and keeps the work', () => {
+    useStore.getState().startDrawing('draw-1', 'polygon');
+    useStore.getState().addDrawingVertex([0, 0]);
+    useStore.getState().addDrawingVertex([1, 1]);
+    useStore.getState().finishDrawing();
+
+    expect(useStore.getState().nodes[0].data.config.layer).toBeUndefined();
+    expect(useStore.getState().ui.drawing?.positions).toHaveLength(2);
+    expect(useStore.getState().toasts[0].message).toMatch(/at least 3 points/);
+  });
+
+  it('takes back the last vertex without leaving the mode', () => {
+    useStore.getState().startDrawing('draw-1', 'line');
+    useStore.getState().addDrawingVertex([0, 0]);
+    useStore.getState().addDrawingVertex([1, 1]);
+    useStore.getState().undoDrawingVertex();
+
+    expect(useStore.getState().ui.drawing?.positions).toEqual([[0, 0]]);
+  });
+
+  it('discards the shape in progress when drawing is cancelled', () => {
+    useStore.getState().startDrawing('draw-1', 'polygon');
+    useStore.getState().addDrawingVertex([0, 0]);
+    useStore.getState().cancelDrawing();
+
+    expect(useStore.getState().ui.drawing).toBeUndefined();
+    expect(useStore.getState().nodes[0].data.config.layer).toBeUndefined();
+  });
+
+  it('gives a feature drawn later the columns declared earlier', () => {
+    useStore.setState((state) => ({
+      nodes: state.nodes.map((node) => ({ ...node, data: { ...node.data, config: { layer: { name: 'Sites', fields: [{ name: 'label', type: 'text' }], features: [] } } } })),
+    }));
+    useStore.getState().startDrawing('draw-1', 'point');
+    useStore.getState().addDrawingVertex([0, 0]);
+
+    expect(drawnLayer().features[0].properties).toEqual({ label: '' });
+  });
+});
+
+describe('lines of enquiry', () => {
+  const variant = (id: string) => ({
+    id,
+    name: id,
+    baselineDatasetId: 'base',
+    parameters: {},
+    assumptions: [],
+    operations: [],
+    createdAt: 1,
+    provenance: { workflowNodeIds: [] },
+  });
+
+  beforeEach(() => {
+    useStore.getState().resetWorkspace();
+    useStore.setState({ toasts: [] });
+  });
+
+  it('stamps a new variant with whichever enquiry is open', () => {
+    useStore.getState().createSession({ id: 's1', name: 'Retrofit', question: 'Which LSOAs first?', baselineDatasetId: 'base' });
+    useStore.getState().addVariant(variant('v1'));
+
+    expect(useStore.getState().visualAnalytics.variants[0].sessionId).toBe('s1');
+    expect(useStore.getState().visualAnalytics.activeSessionId).toBe('s1');
+  });
+
+  it('keeps a branch in its parent enquiry even when another is open', () => {
+    useStore.getState().createSession({ id: 's1', name: 'First', question: '', baselineDatasetId: 'base' });
+    useStore.getState().addVariant(variant('v1'));
+    useStore.getState().createSession({ id: 's2', name: 'Second', question: '', baselineDatasetId: 'base' });
+    useStore.getState().branchVariant('v1', 'v1-branch');
+
+    const branch = useStore.getState().visualAnalytics.variants.find((item) => item.id === 'v1-branch')!;
+    expect(branch.sessionId).toBe('s1');
+    const event = useStore.getState().provenanceEvents.find((item) => item.activity === 'variant.branched')!;
+    expect(event.sessionId).toBe('s1');
+  });
+
+  it('files every event under the open enquiry without each call site saying so', () => {
+    useStore.getState().createSession({ id: 's1', name: 'Retrofit', question: '', baselineDatasetId: 'base' });
+    useStore.getState().addVariant(variant('v1'));
+    useStore.getState().undoAnalysis();
+
+    expect(useStore.getState().provenanceEvents.every((event) => event.sessionId === 's1')).toBe(true);
+  });
+
+  it('removes an enquiry with its variants but keeps the record of it', () => {
+    useStore.getState().createSession({ id: 's1', name: 'Retrofit', question: '', baselineDatasetId: 'base' });
+    useStore.getState().addVariant(variant('v1'));
+    useStore.getState().removeSession('s1');
+
+    expect(useStore.getState().visualAnalytics.variants).toHaveLength(0);
+    expect(useStore.getState().visualAnalytics.activeSessionId).toBeUndefined();
+    expect(useStore.getState().provenanceEvents.some((event) => event.activity === 'session.created')).toBe(true);
+  });
+
+  it('logs a rename but not a question edit', () => {
+    useStore.getState().createSession({ id: 's1', name: 'Retrofit', question: '', baselineDatasetId: 'base' });
+    useStore.getState().updateSession('s1', { question: 'Which LSOAs first?' });
+    expect(useStore.getState().provenanceEvents.some((event) => event.activity === 'session.renamed')).toBe(false);
+
+    useStore.getState().updateSession('s1', { name: 'Retrofit phase 1' });
+    const renamed = useStore.getState().provenanceEvents.find((event) => event.activity === 'session.renamed')!;
+    expect(renamed.summary).toBe('Renamed the line of enquiry from “Retrofit” to “Retrofit phase 1”');
+  });
+});
+
+describe('provenance account', () => {
+  const variant = (id: string) => ({
+    id,
+    name: id,
+    baselineDatasetId: 'base',
+    parameters: {},
+    assumptions: [],
+    operations: [],
+    createdAt: 1,
+    provenance: { workflowNodeIds: [] },
+  });
+
+  beforeEach(() => {
+    useStore.getState().resetWorkspace();
+    useStore.setState({ toasts: [] });
+  });
+
+  it('records a branch with both ends of the lineage, so the tree survives the variants', () => {
+    useStore.getState().addVariant(variant('variant-a'));
+    useStore.getState().branchVariant('variant-a', 'variant-b');
+
+    const branched = useStore.getState().provenanceEvents.find((event) => event.activity === 'variant.branched')!;
+    expect(branched.used).toEqual(['variant-a']);
+    expect(branched.generated).toEqual(['variant-b']);
+    expect(branched.summary).toBe('Branched “variant-a branch” from “variant-a”');
+  });
+
+  it('keeps the record of a deleted variant', () => {
+    useStore.getState().addVariant(variant('variant-a'));
+    useStore.getState().removeVariant('variant-a');
+
+    expect(useStore.getState().visualAnalytics.variants).toHaveLength(0);
+    expect(useStore.getState().provenanceEvents.map((event) => event.activity)).toEqual([
+      'variant.created',
+      'variant.deleted',
+    ]);
+  });
+
+  it('grows the account on undo rather than rewinding it', () => {
+    useStore.getState().addVariant(variant('variant-a'));
+    const before = useStore.getState().provenanceEvents.length;
+    useStore.getState().undoAnalysis();
+
+    const events = useStore.getState().provenanceEvents;
+    expect(events.length).toBe(before + 1);
+    expect(events[events.length - 1].activity).toBe('history.undone');
+    // The undone action is still described: reversing something is part of how
+    // the analyst arrived where they did.
+    expect(events[0].activity).toBe('variant.created');
+  });
+
+  it('logs a rename but not an unrelated variant edit', () => {
+    useStore.getState().addVariant(variant('variant-a'));
+    useStore.getState().updateVariant('variant-a', { assumptions: ['Budget doubled'] });
+    expect(useStore.getState().provenanceEvents.some((event) => event.activity === 'variant.renamed')).toBe(false);
+
+    useStore.getState().updateVariant('variant-a', { name: 'High ambition' });
+    const renamed = useStore.getState().provenanceEvents.find((event) => event.activity === 'variant.renamed')!;
+    expect(renamed.summary).toBe('Renamed variant from “variant-a” to “High ambition”');
+  });
+});

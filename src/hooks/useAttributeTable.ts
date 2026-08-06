@@ -8,6 +8,7 @@ import {
   queryLayerSelectionBounds,
 } from '../services/visualAnalyticsService';
 import { queryNodeColumnProfile, queryNodePreviewRows } from '../services/workflowPreviewService';
+import { indicativeParameters } from '../utils/workflowParameters';
 import { useDebouncedValue } from './useDebouncedValue';
 import type { ColumnProfile, HistogramBin } from '../components/DataTable';
 import type { VisualFilter } from '../types/visualAnalytics';
@@ -46,6 +47,7 @@ export function useAttributeTable() {
   const selectedNodeId = useStore((s) => s.selectedNodeId);
   const selectedLayerId = useStore((s) => s.selectedLayerId);
   const nodeSchemas = useStore((s) => s.nodeSchemas);
+  const fragments = useStore((s) => s.fragments);
   const visualAnalytics = useStore((s) => s.visualAnalytics);
   const datasetRegistry = useStore((s) => s.datasetRegistry);
   const isManualSQL = useStore((s) => s.isManualSQL);
@@ -213,6 +215,7 @@ export function useAttributeTable() {
         const result = await queryNodePreviewRows({
           nodes,
           edges,
+          fragments,
           nodeId: selectedNodeId,
           schema: nodeSchemas[selectedNodeId],
           search: debouncedSearch,
@@ -222,6 +225,7 @@ export function useAttributeTable() {
           pageSize,
           filters,
           computedFields,
+          parameters: indicativeParameters(useStore.getState().visualAnalytics.variants),
         });
         if (cancelled) return;
         setNodeRows(result.rows);

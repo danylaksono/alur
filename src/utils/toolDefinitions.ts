@@ -8,8 +8,8 @@ export const llmToolDefinitions = [
         id: { type: 'string', description: 'Unique identifier for the node (optional).' },
         type: {
           type: 'string',
-          enum: ['input', 'analysis', 'attribute', 'aggregate', 'filter', 'join', 'visualisation', 'output'],
-          description: 'The type of node to create. "join" joins two inputs (A=left keeps geometry, B=right attributes get an r_ prefix); connect A to input-0 and B to input-1.'
+          enum: ['input', 'analysis', 'attribute', 'aggregate', 'allocate', 'score', 'filter', 'join', 'visualisation', 'output', 'fragment'],
+          description: 'The type of node to create. "join" joins two inputs (A=left keeps geometry, B=right attributes get an r_ prefix); connect A to input-0 and B to input-1. "aggregate" summarises numbers by group (mode="summary") or dissolves geometry (mode="spatial"). "allocate" works down rows in priority order spending a budget or capacity until a limit is reached. "score" combines several columns into one weighted score and ranks by it. "fragment" places one of the named operations this project has saved.'
         },
         label: { type: 'string', description: 'Human-readable label for the node.' },
         position: {
@@ -29,9 +29,74 @@ export const llmToolDefinitions = [
             distance: { type: 'number', description: 'For ST_Buffer: the buffer distance.' },
             expression: { type: 'string', description: 'For attribute nodes: the SQL expression.' },
             resultField: { type: 'string', description: 'For attribute nodes: the name of the new field.' },
-            groupBy: { type: 'string', description: 'For aggregate nodes: the column name to group by.' },
-            condition: { type: 'string', description: 'For filter nodes: the SQL WHERE condition (e.g. need > 10).' },
-            mode: { type: 'string', enum: ['spatial', 'attribute'], description: 'For join nodes: spatial predicate join or attribute key join.' },
+            groupBy: { type: 'string', description: 'For aggregate nodes: the column to group by. Omit to collapse the whole table to one row.' },
+            measures: {
+              type: 'array',
+              description: 'For aggregate nodes with mode="summary": what to compute per group.',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  fn: { type: 'string', enum: ['count', 'count_distinct', 'sum', 'avg', 'median', 'min', 'max'] },
+                  field: { type: 'string', description: 'The column to aggregate. Not needed for "count", which counts rows.' },
+                  alias: { type: 'string', description: 'Output column name. Derived from the function and column when omitted.' },
+                },
+                required: ['fn'],
+              },
+            },
+            includeGeometry: { type: 'boolean', description: 'For aggregate nodes with mode="summary" and a group column: merge each group\'s geometry so the summary can still be mapped.' },
+            scoreModel: {
+              type: 'object',
+              description: 'For score nodes: the weighted criteria. Each column is normalised across the whole result before weighting, so columns on different scales combine safely.',
+              properties: {
+                criteria: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      field: { type: 'string', description: 'The numeric column.' },
+                      weight: { type: 'number', description: 'Relative importance. Weights are shares of their total, so they need not sum to 1.' },
+                      direction: { type: 'string', enum: ['higher', 'lower'], description: 'Whether a higher or lower value is better.' },
+                      normalisation: { type: 'string', enum: ['min-max', 'z-score', 'rank'], description: 'How the column is put on a common scale.' },
+                    },
+                    required: ['field', 'weight', 'direction', 'normalisation'],
+                  },
+                },
+                missingValueTreatment: { type: 'string', enum: ['zero', 'mean', 'exclude'], description: 'What a missing value contributes. "exclude" leaves the whole row unscored.' },
+              },
+              required: ['criteria', 'missingValueTreatment'],
+            },
+            includeContributions: { type: 'boolean', description: 'For score nodes: keep a column per criterion showing what it contributed. Defaults to true.' },
+            orderBy: { type: 'string', description: 'For allocate nodes: the column deciding who is served first (usually a score).' },
+            amountField: { type: 'string', description: 'For allocate nodes: the column being consumed, such as cost or capacity.' },
+            limit: { type: 'number', description: 'For allocate nodes: how much there is to go round.' },
+            partitionBy: { type: 'string', description: 'For allocate nodes: give each value of this column its own limit instead of sharing one.' },
+            count: { type: 'number', description: 'For filter nodes with mode="top-n": how many rows to keep. Ties are kept together.' },
+            direction: { type: 'string', enum: ['desc', 'asc'], description: 'For allocate and top-n filter nodes: desc serves the highest values first.' },
+            condition: { type: 'string', description: 'For filter nodes with mode="condition": the SQL WHERE condition (e.g. need > 10).' },
+            predicates: {
+              type: 'array',
+              description: 'For filter nodes with mode="criteria": named conditions. Each row keeps a record of which ones it fails, so exclusions can be explained instead of the rows simply disappearing.',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  label: { type: 'string', description: 'What this condition means in plain words, e.g. "Large enough site". Used as the recorded exclusion reason.' },
+                  expression: { type: 'string', description: 'The SQL condition, e.g. area_m2 >= 500.' },
+                  severity: { type: 'string', enum: ['hard', 'soft'], description: '"hard" can remove the row; "soft" only marks it, so near-misses stay visible.' },
+                },
+                required: ['expression'],
+              },
+            },
+            outcome: { type: 'string', enum: ['drop', 'tag'], description: 'For filter nodes with mode="criteria": "drop" removes rows failing a hard condition, "tag" keeps every row and only records the failures. Defaults to drop.' },
+            exclusionField: { type: 'string', description: 'For filter nodes with mode="criteria": base name for the recorded columns. Defaults to alur_excluded.' },
+            fragmentId: { type: 'string', description: 'For fragment nodes: the id of the saved operation to place. Only ids listed in the conversation context exist.' },
+            arguments: { type: 'object', description: 'For fragment nodes: a value per parameter the operation asks for, keyed by parameter id.' },
+            mode: {
+              type: 'string',
+              enum: ['spatial', 'attribute', 'summary', 'condition', 'top-n', 'criteria', 'flag', 'cut', 'scale'],
+              description: 'Join: "spatial" or "attribute". Aggregate: "summary" (numbers) or "spatial" (dissolve geometry). Filter: "condition", "top-n", or "criteria" (named conditions that record why each row was excluded). Allocate: "flag" keeps every row and marks where the limit hit, "cut" drops rows past it, "scale" gives the straddling row a partial share.',
+            },
             joinType: { type: 'string', enum: ['left', 'inner'], description: 'For join nodes: left join keeps unmatched A rows.' },
             predicate: { type: 'string', enum: ['ST_Intersects', 'ST_Within', 'ST_Contains', 'ST_DWithin'], description: 'For spatial join nodes: the predicate.' },
             leftKey: { type: 'string', description: 'For attribute join nodes: key column on input A.' },

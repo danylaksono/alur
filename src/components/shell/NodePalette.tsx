@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Calculator, Database, Eye, Filter, GitMerge, Layers, Loader2, Palette, Plus, Search, Workflow, Zap } from 'lucide-react';
+import { Calculator, Database, Eye, Filter, Gauge, GitMerge, Layers, Loader2, Package, Palette, PenLine, Plus, Search, SlidersHorizontal, Trash2, Workflow, Zap } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { buildWorkflowSQL } from '../../utils/workflowEngine';
 import { nextNodePosition } from '../../utils/nodePlacement';
 import { spatialFunctions } from '../../utils/spatialFunctions';
-import { materializeWorkflowMapLayer } from '../../services/layerMaterialization';
+import { materializeWorkflowOutput } from '../../services/layerMaterialization';
+import { registerWorkflowResult } from '../../services/workflowRun';
 import { VariantPanel } from '../Variants/VariantPanel';
 import { cn } from '../../utils/cn';
 
@@ -18,25 +19,32 @@ const colorStyles: Record<string, { hoverBg: string; hoverBorder: string; iconBg
   cyan: { hoverBg: 'hover:bg-cyan-50', hoverBorder: 'hover:border-cyan-200', iconBg: 'bg-cyan-50', iconHoverBg: 'group-hover:bg-cyan-100' },
 };
 
-type NodeType = 'input' | 'analysis' | 'attribute' | 'filter' | 'aggregate' | 'join' | 'visualisation' | 'output';
+type NodeType = 'input' | 'geometry' | 'analysis' | 'attribute' | 'filter' | 'aggregate' | 'allocate' | 'score' | 'join' | 'visualisation' | 'output' | 'fragment';
 
 const nodeCards: Array<{ type: NodeType; icon: typeof Database; title: string; desc: string; color: string; config?: Record<string, unknown> }> = [
   { type: 'input', icon: Database, title: 'Data Input', desc: 'Load Parquet or CSV', color: 'blue' },
+  { type: 'geometry', icon: PenLine, title: 'Draw Features', desc: 'Create points, lines or areas', color: 'cyan' },
   { type: 'analysis', icon: Zap, title: 'Spatial Analysis', desc: 'Buffer, intersect, transform…', color: 'purple' },
   { type: 'attribute', icon: Calculator, title: 'Attribute Calc', desc: 'Add computed columns', color: 'slate' },
-  { type: 'filter', icon: Filter, title: 'Filter', desc: 'SQL WHERE conditions', color: 'amber' },
-  { type: 'aggregate', icon: Layers, title: 'Aggregate', desc: 'GROUP BY, dissolve', color: 'orange' },
+  { type: 'score', icon: SlidersHorizontal, title: 'Score', desc: 'Weighted score across columns', color: 'purple', config: { resultField: 'alur_score', scoreModel: { criteria: [], missingValueTreatment: 'zero' } } },
+  { type: 'filter', icon: Filter, title: 'Filter', desc: 'WHERE conditions or top N', color: 'amber' },
+  { type: 'aggregate', icon: Layers, title: 'Summarise', desc: 'Group and total, or dissolve', color: 'orange', config: { mode: 'summary', measures: [{ id: 'measure-rows', fn: 'count' }] } },
+  { type: 'allocate', icon: Gauge, title: 'Allocate', desc: 'Spend down a budget or capacity', color: 'amber', config: { mode: 'flag', direction: 'desc' } },
   { type: 'join', icon: GitMerge, title: 'Join', desc: 'Attribute or spatial join', color: 'cyan' },
   { type: 'visualisation', icon: Palette, title: 'Visualisation', desc: 'Attach a reusable map style', color: 'purple', config: { kind: 'choropleth', method: 'quantile', classCount: 5, paletteId: 'teal' } },
   { type: 'output', icon: Eye, title: 'Layer Output', desc: 'Visualize or export the result', color: 'emerald', config: { outputMode: 'visualize' } },
 ];
 
 const nodeLabels: Record<NodeType, string> = {
+  fragment: 'Operation',
   input: 'Data Source',
+  geometry: 'Drawn layer',
   analysis: 'Spatial Op',
   attribute: 'Attribute Op',
   filter: 'Filter',
-  aggregate: 'Aggregate',
+  aggregate: 'Summarise',
+  allocate: 'Allocate',
+  score: 'Score',
   join: 'Join',
   visualisation: 'Visualisation',
   output: 'Layer Output',
@@ -45,10 +53,11 @@ const nodeLabels: Record<NodeType, string> = {
 export const NodePalette = () => {
   const addNode = useStore((s) => s.addNode);
   const duckdbReady = useStore((s) => s.duckdbReady);
-  const addMapLayer = useStore((s) => s.addMapLayer);
   const addToast = useStore((s) => s.addToast);
   const requestWorkflowFit = useStore((s) => s.requestWorkflowFit);
   const nodeCount = useStore((s) => s.nodes.length);
+  const fragments = useStore((s) => s.fragments);
+  const removeFragment = useStore((s) => s.removeFragment);
   const [executing, setExecuting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -61,6 +70,11 @@ export const NodePalette = () => {
         item.title.toLowerCase().includes(normalizedQuery) || item.desc.toLowerCase().includes(normalizedQuery)
       )
     : nodeCards;
+  const matchedFragments = isSearching
+    ? fragments.filter((item) =>
+        item.name.toLowerCase().includes(normalizedQuery) || (item.description || '').toLowerCase().includes(normalizedQuery)
+      )
+    : fragments;
   const matchedFunctions = isSearching
     ? spatialFunctions.filter((fn) =>
         fn.name.toLowerCase().includes(normalizedQuery) || fn.summary.toLowerCase().includes(normalizedQuery)
@@ -87,20 +101,27 @@ export const NodePalette = () => {
     const { nodes, edges } = useStore.getState();
     try {
       setExecuting(true);
-      const workflow = buildWorkflowSQL(nodes, edges);
-      const layer = await materializeWorkflowMapLayer({
+      const workflow = buildWorkflowSQL(nodes, edges, { fragments: useStore.getState().fragments });
+      const result = await materializeWorkflowOutput({
         workflow,
         layerId: workflow.outputLayerName,
         name: 'Workflow Result',
+        sourceNodeId: workflow.terminalNodeId || undefined,
         sourceKind: 'workflow',
         visualisationConfig: workflow.visualisationConfig,
       });
-      if (!layer.featureCount) {
-        addToast({ type: 'warning', message: 'Workflow executed but produced no features.' });
+      if (!result.featureCount) {
+        addToast({ type: 'warning', message: 'Workflow executed but produced no rows.' });
         return;
       }
-      addMapLayer({ ...layer, name: `Workflow Result (${layer.featureCount.toLocaleString()} features)` });
-      addToast({ type: 'success', message: `Workflow complete — ${layer.featureCount.toLocaleString()} features added to the map.` });
+      const rows = result.featureCount.toLocaleString();
+      registerWorkflowResult(result, {
+        nodeId: workflow.terminalNodeId || undefined,
+        layerName: `Workflow Result (${rows} features)`,
+      });
+      addToast({ type: 'success', message: result.kind === 'layer'
+        ? `Workflow complete — ${rows} features added to the map.`
+        : `Workflow complete — ${rows} rows registered. The result has no geometry, so it is not on the map.` });
     } catch (err: any) {
       console.error('Workflow execution error:', err);
       addToast({ type: 'error', message: `Workflow error: ${err.message}` });
@@ -136,6 +157,47 @@ export const NodePalette = () => {
       </div>
 
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-3">
+        {matchedFragments.length > 0 && (
+          <div>
+            <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              This project's operations{isSearching && ` (${matchedFragments.length})`}
+            </h3>
+            <div className="grid grid-cols-1 gap-1.5">
+              {matchedFragments.map((fragment) => (
+                <div
+                  key={fragment.id}
+                  className="group flex items-center justify-between rounded-lg border border-cyan-100 p-2 text-left text-xs transition-all hover:border-cyan-300 hover:bg-cyan-50/60"
+                >
+                  <button
+                    type="button"
+                    onClick={() => handleAddNode('fragment', { fragmentId: fragment.id, arguments: {} }, fragment.name)}
+                    className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                  >
+                    <div className="shrink-0 rounded-md bg-cyan-50 p-1.5">
+                      <Package className="h-3.5 w-3.5 text-cyan-600" />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="block text-xs font-semibold text-foreground">{fragment.name}</span>
+                      <span className="block truncate text-[11px] text-muted-foreground">
+                        {fragment.description || `${fragment.nodes.length} step${fragment.nodes.length === 1 ? '' : 's'}`}
+                      </span>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => removeFragment(fragment.id)}
+                    title={`Forget "${fragment.name}"`}
+                    aria-label={`Forget ${fragment.name}`}
+                    className="shrink-0 rounded p-1 text-slate-300 opacity-0 transition-opacity hover:text-rose-600 group-hover:opacity-100"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div>
           <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
             Nodes{isSearching && ` (${matchedNodes.length})`}

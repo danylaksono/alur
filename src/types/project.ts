@@ -4,8 +4,10 @@ import type { BasemapId } from '../utils/basemaps';
 import type { LayerVisualisation, LegendSpec } from './visualisation';
 import type { VisualAnalyticsState } from './visualAnalytics';
 import type { DatasetDescriptor } from './datasets';
+import type { ProvenanceEvent } from './provenance';
+import type { WorkflowFragment } from '../utils/workflowFragments';
 
-export const PROJECT_MANIFEST_VERSION = 2 as const;
+export const PROJECT_MANIFEST_VERSION = 3 as const;
 
 export type ProjectSourceDescriptor = {
   nodeId: string;
@@ -41,6 +43,8 @@ export type ProjectManifestV1 = {
   workflow: {
     nodes: WorkflowNode[];
     edges: Edge[];
+    /** Optional so projects written before saved operations existed still validate. */
+    fragments?: WorkflowFragment[];
   };
   sources: ProjectSourceDescriptor[];
   datasets: DatasetDescriptor[];
@@ -64,11 +68,18 @@ export type ProjectManifestV1 = {
 };
 
 export type ProjectManifestV2 = Omit<ProjectManifestV1, 'version' | 'workspace'> & {
-  version: typeof PROJECT_MANIFEST_VERSION;
+  version: 2;
   /** Optional so v2 files written before naming existed still validate. */
   name?: string;
+  /**
+   * The account of what was done, versioned independently of this manifest so
+   * the log can evolve without forcing a project migration. Optional so v2
+   * files written before the log existed still validate; they load with an
+   * empty account rather than a fabricated one.
+   */
+  provenanceEvents?: ProvenanceEvent[];
   workspace: Omit<ProjectManifestV1['workspace'], 'activeRailTab' | 'workspaceMode'> & {
-    activeRailTab: 'layers' | 'charts' | 'chat' | 'cohorts' | 'nodes';
+    activeRailTab: 'layers' | 'charts' | 'chat' | 'cohorts' | 'score' | 'nodes';
     workspaceMode: 'explore' | 'compare' | 'explain' | 'board';
     /** Optional so v2 files written before layouts existed still validate. */
     isRailExpanded?: boolean;
@@ -79,4 +90,14 @@ export type ProjectManifestV2 = Omit<ProjectManifestV1, 'version' | 'workspace'>
   };
 };
 
-export type ProjectManifest = ProjectManifestV2;
+/**
+ * v3 adds the session tier. Nothing was removed, so the only migration work is
+ * giving a v2 project's loose variants a line of enquiry to belong to —
+ * `visualAnalytics.sessions` and `activeSessionId` carry through the shared
+ * `VisualAnalyticsState`.
+ */
+export type ProjectManifestV3 = Omit<ProjectManifestV2, 'version'> & {
+  version: typeof PROJECT_MANIFEST_VERSION;
+};
+
+export type ProjectManifest = ProjectManifestV3;

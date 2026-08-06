@@ -70,6 +70,71 @@ describe('buildWorkflowSQL', () => {
     expect(result.sql).toContain('WHERE population > 1000');
   });
 
+  it('records why each row was excluded and still removes the failures', () => {
+    const nodes: WorkflowNode[] = [
+      makeNode({ id: 'src', data: { label: 'Src', type: 'input', config: { tableName: 'data' } } }),
+      makeNode({
+        id: 'flt',
+        position: { x: 200, y: 0 },
+        data: {
+          label: 'Eligibility',
+          type: 'filter',
+          config: {
+            mode: 'criteria',
+            predicates: [
+              { id: 'a', label: 'Large enough', expression: 'area > 500', severity: 'hard' },
+              { id: 'b', label: 'Near a stop', expression: 'stop_m < 400', severity: 'soft' },
+            ],
+          },
+        },
+      }),
+    ];
+    const edges: Edge[] = [{ id: 'e1', source: 'src', target: 'flt', type: 'smoothstep' }];
+    const result = buildWorkflowSQL(nodes, edges);
+
+    expect(result.sql).toContain('WHERE COALESCE((area > 500), FALSE)');
+    expect(result.sql).toContain("THEN 'Large enough'");
+    expect(result.sql).toContain('AS "alur_excluded_by"');
+    expect(result.sql).toContain('AS "alur_excluded_count"');
+    // The intermediate list is consumed by the outer projection and dropped,
+    // so downstream nodes never see it.
+    expect(result.sql).toContain('EXCLUDE ("__alur_exclusion_reasons")');
+  });
+
+  it('keeps every row when the filter only tags', () => {
+    const nodes: WorkflowNode[] = [
+      makeNode({ id: 'src', data: { label: 'Src', type: 'input', config: { tableName: 'data' } } }),
+      makeNode({
+        id: 'flt',
+        position: { x: 200, y: 0 },
+        data: {
+          label: 'Eligibility',
+          type: 'filter',
+          config: {
+            mode: 'criteria',
+            outcome: 'tag',
+            predicates: [{ id: 'a', label: 'Large enough', expression: 'area > 500', severity: 'hard' }],
+          },
+        },
+      }),
+    ];
+    const edges: Edge[] = [{ id: 'e1', source: 'src', target: 'flt', type: 'smoothstep' }];
+    const result = buildWorkflowSQL(nodes, edges);
+
+    expect(result.sql).toContain('AS "alur_excluded"');
+    // Tagging must not filter: the exclusion is recorded, not enacted.
+    expect(result.sql).not.toContain('WHERE COALESCE');
+  });
+
+  it('rejects a criteria filter with no conditions', () => {
+    const nodes: WorkflowNode[] = [
+      makeNode({ id: 'src', data: { label: 'Src', type: 'input', config: { tableName: 'data' } } }),
+      makeNode({ id: 'flt', position: { x: 200, y: 0 }, data: { label: 'Filter', type: 'filter', config: { mode: 'criteria', predicates: [] } } }),
+    ];
+    const edges: Edge[] = [{ id: 'e1', source: 'src', target: 'flt', type: 'smoothstep' }];
+    expect(() => buildWorkflowSQL(nodes, edges)).toThrow(/at least one condition/i);
+  });
+
   it('generates a reproducible row-selection filter workflow', () => {
     const nodes: WorkflowNode[] = [
       makeNode({ id: 'src', data: { label: 'Src', type: 'input', config: { tableName: 'data' } } }),
@@ -302,5 +367,257 @@ describe('join node', () => {
 
     const single = joinNodes({ mode: 'spatial' });
     expect(() => buildWorkflowSQL(single.nodes, [single.edges[0]])).toThrow('requires 2 input connections');
+  });
+});
+
+describe('terminal node attribution', () => {
+  it('names the node whose output the final CTE holds', () => {
+    const nodes = [
+      makeNode({ id: 'input-1', data: { label: 'In', type: 'input', config: { tableName: 'wards' } } as any }),
+      makeNode({ id: 'filter-1', type: 'filter', data: { label: 'Filter', type: 'filter', config: { condition: 'need > 10' } } as any }),
+    ];
+    const edges: Edge[] = [{ id: 'e1', source: 'input-1', target: 'filter-1' }];
+    expect(buildWorkflowSQL(nodes, edges).terminalNodeId).toBe('filter-1');
+  });
+
+  it('names the target node when running only part of the graph', () => {
+    const nodes = [
+      makeNode({ id: 'input-1', data: { label: 'In', type: 'input', config: { tableName: 'wards' } } as any }),
+      makeNode({ id: 'filter-1', type: 'filter', data: { label: 'Filter', type: 'filter', config: { condition: 'need > 10' } } as any }),
+      makeNode({ id: 'attribute-1', type: 'attribute', data: { label: 'Score', type: 'attribute', config: { expression: 'need * 2', resultField: 'score' } } as any }),
+    ];
+    const edges: Edge[] = [
+      { id: 'e1', source: 'input-1', target: 'filter-1' },
+      { id: 'e2', source: 'filter-1', target: 'attribute-1' },
+    ];
+    expect(buildUpToSQL(nodes, edges, 'filter-1').terminalNodeId).toBe('filter-1');
+  });
+});
+
+describe('summary aggregation', () => {
+  const summaryNodes = (config: Record<string, unknown>) => ({
+    nodes: [
+      makeNode({ id: 'input-1', data: { label: 'In', type: 'input', config: { tableName: 'cells' } } as any }),
+      makeNode({ id: 'agg-1', type: 'aggregate', data: { label: 'Summarise', type: 'aggregate', config: { mode: 'summary', ...config } } as any }),
+    ],
+    edges: [{ id: 'e1', source: 'input-1', target: 'agg-1' }] as Edge[],
+  });
+
+  it('groups numeric measures by one or more keys', () => {
+    const { nodes, edges } = summaryNodes({
+      groupBy: ['substation_id'],
+      measures: [{ id: 'm1', fn: 'sum', field: 'proposed_kw' }, { id: 'm2', fn: 'count' }],
+    });
+    const sql = buildWorkflowSQL(nodes, edges).sql;
+    expect(sql).toContain('SUM(TRY_CAST("proposed_kw" AS DOUBLE)) AS "sum_proposed_kw"');
+    expect(sql).toContain('COUNT(*) AS "row_count"');
+    expect(sql).toContain('GROUP BY "substation_id"');
+  });
+
+  it('supports several group keys', () => {
+    const { nodes, edges } = summaryNodes({
+      groupBy: ['ward', 'year'],
+      measures: [{ id: 'm1', fn: 'avg', field: 'cost' }],
+    });
+    expect(buildWorkflowSQL(nodes, edges).sql).toContain('GROUP BY "ward", "year"');
+  });
+
+  it('aggregates the whole table when no key is given', () => {
+    const { nodes, edges } = summaryNodes({ measures: [{ id: 'm1', fn: 'sum', field: 'cost' }] });
+    const sql = buildWorkflowSQL(nodes, edges).sql;
+    expect(sql).toContain('SUM(TRY_CAST("cost" AS DOUBLE))');
+    expect(sql).not.toContain('GROUP BY');
+  });
+
+  it('unions the group geometry when asked, so the summary stays mappable', () => {
+    const { nodes, edges } = summaryNodes({
+      groupBy: ['ward'],
+      measures: [{ id: 'm1', fn: 'sum', field: 'cost' }],
+      includeGeometry: true,
+    });
+    const result = buildWorkflowSQL(nodes, edges);
+    expect(result.sql).toContain('ST_Union_Agg("geometry") AS geom_agg');
+    expect(result.geomColumn).toBe('geom_agg');
+  });
+
+  it('reports no geometry column when the summary is a plain table', () => {
+    const { nodes, edges } = summaryNodes({ groupBy: ['ward'], measures: [{ id: 'm1', fn: 'count' }] });
+    expect(buildWorkflowSQL(nodes, edges).geomColumn).toBe('');
+  });
+
+  it('refuses to compile a half-configured measure', () => {
+    const { nodes, edges } = summaryNodes({ measures: [{ id: 'm1', fn: 'sum' }] });
+    expect(() => buildWorkflowSQL(nodes, edges)).toThrow('needs a column');
+  });
+
+  it('still dissolves geometry in spatial mode', () => {
+    const nodes = [
+      makeNode({ id: 'input-1', data: { label: 'In', type: 'input', config: { tableName: 'cells' } } as any }),
+      makeNode({ id: 'agg-1', type: 'aggregate', data: { label: 'Dissolve', type: 'aggregate', config: { operation: 'ST_Union_Agg', groupBy: 'ward' } } as any }),
+    ];
+    const sql = buildWorkflowSQL(nodes, [{ id: 'e1', source: 'input-1', target: 'agg-1' }]).sql;
+    expect(sql).toContain('ST_Union_Agg("geometry") AS geom_agg');
+    expect(sql).toContain('GROUP BY "ward"');
+  });
+});
+
+describe('allocation', () => {
+  const allocateNodes = (config: Record<string, unknown>) => ({
+    nodes: [
+      makeNode({ id: 'input-1', data: { label: 'In', type: 'input', config: { tableName: 'candidates' } } as any }),
+      makeNode({ id: 'alloc-1', type: 'allocate', data: { label: 'Allocate', type: 'allocate', config } as any }),
+    ],
+    edges: [{ id: 'e1', source: 'input-1', target: 'alloc-1' }] as Edge[],
+  });
+
+  it('flags rows against the limit without dropping any', () => {
+    const { nodes, edges } = allocateNodes({ orderBy: 'score', amountField: 'cost', limit: 10000000 });
+    const sql = buildWorkflowSQL(nodes, edges).sql;
+    expect(sql).toContain('ROWS UNBOUNDED PRECEDING');
+    expect(sql).toContain('"cost_status"');
+    expect(sql).not.toContain("WHERE \"cost_status\" = 'within'");
+  });
+
+  it('drops rows past the limit in cut mode', () => {
+    const { nodes, edges } = allocateNodes({ orderBy: 'score', amountField: 'cost', limit: 5000, mode: 'cut' });
+    expect(buildWorkflowSQL(nodes, edges).sql).toContain(`WHERE "cost_status" = 'within'`);
+  });
+
+  it('gives the straddling row a partial share in scale mode', () => {
+    const { nodes, edges } = allocateNodes({ orderBy: 'score', amountField: 'cost', limit: 5000, mode: 'scale' });
+    expect(buildWorkflowSQL(nodes, edges).sql).toContain('"allocated_cost"');
+  });
+
+  it('keeps the upstream geometry, so an allocation is still mappable', () => {
+    const { nodes, edges } = allocateNodes({ orderBy: 'score', amountField: 'cost', limit: 5000 });
+    expect(buildWorkflowSQL(nodes, edges).geomColumn).toBe('geometry');
+  });
+
+  it('refuses to compile without a limit', () => {
+    const { nodes, edges } = allocateNodes({ orderBy: 'score', amountField: 'cost' });
+    expect(() => buildWorkflowSQL(nodes, edges)).toThrow('numeric limit');
+  });
+});
+
+describe('top-N filtering', () => {
+  const topNNodes = (config: Record<string, unknown>) => ({
+    nodes: [
+      makeNode({ id: 'input-1', data: { label: 'In', type: 'input', config: { tableName: 'candidates' } } as any }),
+      makeNode({ id: 'filter-1', type: 'filter', data: { label: 'Top N', type: 'filter', config: { mode: 'top-n', ...config } } as any }),
+    ],
+    edges: [{ id: 'e1', source: 'input-1', target: 'filter-1' }] as Edge[],
+  });
+
+  it('qualifies on rank rather than nesting a subquery', () => {
+    const { nodes, edges } = topNNodes({ field: 'score', count: 50 });
+    const sql = buildWorkflowSQL(nodes, edges).sql;
+    expect(sql).toContain('QUALIFY RANK() OVER (ORDER BY "score" DESC) <= 50');
+  });
+
+  it('refuses to compile without a column or a count', () => {
+    expect(() => buildWorkflowSQL(...Object.values(topNNodes({ count: 50 })) as [any, any])).toThrow('column to rank by');
+    expect(() => buildWorkflowSQL(...Object.values(topNNodes({ field: 'score' })) as [any, any])).toThrow('how many rows');
+  });
+});
+
+describe('composite score', () => {
+  const scoreNodes = (config: Record<string, unknown>) => ({
+    nodes: [
+      makeNode({ id: 'input-1', data: { label: 'In', type: 'input', config: { tableName: 'candidates' } } as any }),
+      makeNode({ id: 'score-1', type: 'score', data: { label: 'Score', type: 'score', config } as any }),
+    ],
+    edges: [{ id: 'e1', source: 'input-1', target: 'score-1' }] as Edge[],
+  });
+
+  const model = {
+    criteria: [
+      { field: 'heat', weight: 3, direction: 'higher', normalisation: 'min-max' },
+      { field: 'imd', weight: 1, direction: 'lower', normalisation: 'rank' },
+    ],
+    missingValueTreatment: 'zero',
+  };
+
+  it('emits a score, a rank and one contribution column per criterion', () => {
+    const { nodes, edges } = scoreNodes({ scoreModel: model, resultField: 'priority' });
+    const sql = buildWorkflowSQL(nodes, edges).sql;
+    expect(sql).toContain('AS "priority"');
+    expect(sql).toContain('AS "priority_rank"');
+    expect(sql).toContain('AS "priority_c_heat"');
+    expect(sql).toContain('AS "priority_c_imd"');
+  });
+
+  it('ranks in a second pass, because a window cannot read its own SELECT alias', () => {
+    const { nodes, edges } = scoreNodes({ scoreModel: model, resultField: 'priority' });
+    const sql = buildWorkflowSQL(nodes, edges).sql;
+    expect(sql).toContain('RANK() OVER (ORDER BY "priority" DESC NULLS LAST)');
+    // The ranking SELECT wraps the scoring one, so RANK appears before the
+    // score column it reads.
+    expect(sql.indexOf('RANK() OVER')).toBeLessThan(sql.indexOf('AS "priority"'));
+  });
+
+  it('honours weight, direction and normalisation from the model', () => {
+    const { nodes, edges } = scoreNodes({ scoreModel: model, resultField: 'priority' });
+    const sql = buildWorkflowSQL(nodes, edges).sql;
+    expect(sql).toContain('(0.75) *');
+    expect(sql).toContain('(0.25) *');
+    expect(sql).toContain('PERCENT_RANK() OVER (ORDER BY');
+  });
+
+  it('drops the contribution columns when they are turned off', () => {
+    const { nodes, edges } = scoreNodes({ scoreModel: model, resultField: 'priority', includeContributions: false });
+    const sql = buildWorkflowSQL(nodes, edges).sql;
+    expect(sql).toContain('AS "priority"');
+    expect(sql).not.toContain('priority_c_heat');
+  });
+
+  it('defaults its output column so a freshly dropped node still compiles', () => {
+    const { nodes, edges } = scoreNodes({ scoreModel: model });
+    expect(buildWorkflowSQL(nodes, edges).sql).toContain('AS "alur_score"');
+  });
+
+  it('keeps the upstream geometry, so a scored layer is still mappable', () => {
+    const { nodes, edges } = scoreNodes({ scoreModel: model });
+    expect(buildWorkflowSQL(nodes, edges).geomColumn).toBe('geometry');
+  });
+
+  it('refuses to compile an empty or unweighted model', () => {
+    expect(() => buildWorkflowSQL(...Object.values(scoreNodes({ scoreModel: { criteria: [], missingValueTreatment: 'zero' } })) as [any, any]))
+      .toThrow('at least one criterion');
+    expect(() => buildWorkflowSQL(...Object.values(scoreNodes({
+      scoreModel: { criteria: [{ field: 'heat', weight: 0, direction: 'higher', normalisation: 'min-max' }], missingValueTreatment: 'zero' },
+    })) as [any, any])).toThrow('above zero');
+  });
+});
+
+describe('variant parameters', () => {
+  const parameterised = (config: Record<string, unknown>) => ({
+    nodes: [
+      makeNode({ id: 'input-1', data: { label: 'In', type: 'input', config: { tableName: 'candidates' } } as any }),
+      makeNode({ id: 'filter-1', type: 'filter', data: { label: 'Top N', type: 'filter', config: { mode: 'top-n', ...config } } as any }),
+    ],
+    edges: [{ id: 'e1', source: 'input-1', target: 'filter-1' }] as Edge[],
+  });
+
+  it('compiles a reference into the value the variant supplied', () => {
+    const { nodes, edges } = parameterised({ field: 'score', count: { $param: 'topN' } });
+    expect(buildWorkflowSQL(nodes, edges, { parameters: { topN: 25 } }).sql).toContain('<= 25');
+  });
+
+  it('produces different SQL for different variants from one graph', () => {
+    const { nodes, edges } = parameterised({ field: 'score', count: { $param: 'topN' } });
+    const first = buildWorkflowSQL(nodes, edges, { parameters: { topN: 10 } }).sql;
+    const second = buildWorkflowSQL(nodes, edges, { parameters: { topN: 200 } }).sql;
+    expect(first).toContain('<= 10');
+    expect(second).toContain('<= 200');
+  });
+
+  it('uses a declared default when no variant is being run', () => {
+    const { nodes, edges } = parameterised({ field: 'score', count: { $param: 'topN', default: 50 } });
+    expect(buildWorkflowSQL(nodes, edges).sql).toContain('<= 50');
+  });
+
+  it('fails with an actionable message when nothing supplies the value', () => {
+    const { nodes, edges } = parameterised({ field: 'score', count: { $param: 'topN' } });
+    expect(() => buildWorkflowSQL(nodes, edges)).toThrow(/needs a value for "topN"/);
   });
 });

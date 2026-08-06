@@ -12,6 +12,7 @@ import type { GeocodingResult } from '../../services/geocodingService';
 import { mvtTileUrl, registerMvtProtocol, registerMvtTileSource, unregisterMvtTileSource } from '../../services/mvtTileService';
 import { boundsForLayer, mvtSourceForLayer } from '../../utils/layerSource';
 import { compileVisualFiltersWhereClause } from '../../utils/visualFilterSql';
+import { previewCollection, type DrawnLayer } from '../../utils/drawnFeatures';
 import { ScreenGridLayerGL } from 'screengrid';
 import {
   buildGlyphGridLayerOptions,
@@ -69,6 +70,9 @@ function formatPopupValue(value: unknown): string {
   if (typeof value === 'object') return JSON.stringify(value).slice(0, 100);
   return String(value).slice(0, 80);
 }
+
+/** One source for every drawn layer: only one is ever being edited. */
+const DRAW_SOURCE_ID = '__alur_draw';
 
 const escapeHtml = (value: string) => value
   .replace(/&/g, '&amp;')
@@ -129,6 +133,12 @@ export const MapView = () => {
   const focusLayer = useStore((s) => s.focusLayer);
   const addToast = useStore((s) => s.addToast);
   const mapCamera = useStore((s) => s.ui.mapCamera);
+  const drawing = useStore((s) => s.ui.drawing);
+  const nodes = useStore((s) => s.nodes);
+  const addDrawingVertex = useStore((s) => s.addDrawingVertex);
+  const finishDrawing = useStore((s) => s.finishDrawing);
+  const cancelDrawing = useStore((s) => s.cancelDrawing);
+  const undoDrawingVertex = useStore((s) => s.undoDrawingVertex);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectionBox, setSelectionBox] = useState<[[number, number], [number, number]] | null>(null);
   const [coordinates, setCoordinates] = useState('');
@@ -350,6 +360,88 @@ export const MapView = () => {
       if (!m.dragPan.isEnabled()) m.dragPan.enable();
     };
   }, [selectionMode, addToast, selectLayer, setFeatureSelection]);
+
+  /**
+   * Drawing. A click adds a vertex, Enter or a double-click finishes the shape,
+   * Backspace takes back the last vertex and Escape leaves the mode.
+   *
+   * Implemented on MapLibre's own events rather than raw pointer handlers —
+   * unlike box select, drawing wants the map's coordinate translation and does
+   * not need to suppress panning, so an analyst can pan between vertices.
+   */
+  useEffect(() => {
+    const m = map.current;
+    if (!m || !drawing) return;
+    const canvas = m.getCanvas();
+    canvas.style.cursor = 'crosshair';
+    // Suppresses the zoom that would otherwise fire when finishing a shape.
+    m.doubleClickZoom.disable();
+
+    const onClick = (event: maplibregl.MapMouseEvent) => {
+      addDrawingVertex([event.lngLat.lng, event.lngLat.lat]);
+    };
+    const onDoubleClick = (event: maplibregl.MapMouseEvent) => {
+      event.preventDefault();
+      finishDrawing();
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.preventDefault(); cancelDrawing(); }
+      else if (event.key === 'Enter') { event.preventDefault(); finishDrawing(); }
+      else if (event.key === 'Backspace') { event.preventDefault(); undoDrawingVertex(); }
+    };
+
+    m.on('click', onClick);
+    m.on('dblclick', onDoubleClick);
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      m.off('click', onClick);
+      m.off('dblclick', onDoubleClick);
+      window.removeEventListener('keydown', onKeyDown);
+      canvas.style.cursor = '';
+      m.doubleClickZoom.enable();
+    };
+  }, [drawing, addDrawingVertex, finishDrawing, cancelDrawing, undoDrawingVertex]);
+
+  /** Renders committed and in-progress geometry for the node being drawn into. */
+  useEffect(() => {
+    const m = map.current;
+    if (!m) return;
+
+    const syncDrawing = () => {
+      // Derived from the nodes rather than remembered: a ref does not survive
+      // the map unmounting when the drawer is maximised, and geometry drawn
+      // while the map was hidden would then never reappear.
+      //
+      // Committed layers are excluded because they are already on the map as
+      // real layers; drawing them again would double-render every feature.
+      const collection = {
+        type: 'FeatureCollection' as const,
+        features: nodes.flatMap((node) => {
+          if (node.data.type !== 'geometry') return [];
+          const layer: DrawnLayer | undefined = node.data.config?.layer;
+          if (!layer) return [];
+          const active = drawing?.nodeId === node.id ? drawing : undefined;
+          if (node.data.config?.tableName && !active) return [];
+          return previewCollection(layer, active).features;
+        }),
+      };
+
+      const existing = m.getSource(DRAW_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
+      if (existing) { existing.setData(collection); return; }
+      if (!collection.features.length) return;
+
+      m.addSource(DRAW_SOURCE_ID, { type: 'geojson', data: collection });
+      m.addLayer({ id: `${DRAW_SOURCE_ID}-fill`, type: 'fill', source: DRAW_SOURCE_ID, filter: ['==', ['geometry-type'], 'Polygon'], paint: { 'fill-color': '#6366f1', 'fill-opacity': 0.18 } });
+      m.addLayer({ id: `${DRAW_SOURCE_ID}-line`, type: 'line', source: DRAW_SOURCE_ID, filter: ['!=', ['geometry-type'], 'Point'], paint: { 'line-color': '#4f46e5', 'line-width': 2 } });
+      m.addLayer({ id: `${DRAW_SOURCE_ID}-point`, type: 'circle', source: DRAW_SOURCE_ID, filter: ['==', ['geometry-type'], 'Point'], paint: { 'circle-radius': 5, 'circle-color': '#4f46e5', 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 1.5 } });
+    };
+
+    // Style readiness is a ref, so an effect that returned early on it would
+    // never run again — the drawing would stay invisible until some other
+    // state changed. Same deferral the layer sync uses.
+    if (!styleReady.current) { m.once('style.load', syncDrawing); return () => { m.off('style.load', syncDrawing); }; }
+    syncDrawing();
+  }, [drawing, nodes]);
 
   useEffect(() => {
     const m = map.current;

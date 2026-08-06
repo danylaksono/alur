@@ -17,6 +17,7 @@ export const TableTab = ({ table }: { table: ReturnType<typeof useAttributeTable
   const edges = useStore((s) => s.edges);
   const selectedNodeId = useStore((s) => s.selectedNodeId);
   const nodeSchemas = useStore((s) => s.nodeSchemas);
+  const fragments = useStore((s) => s.fragments);
   const addToast = useStore((s) => s.addToast);
   const setDatasetOverviewLayerId = useStore((s) => s.setDatasetOverviewLayerId);
   const addChart = useStore((s) => s.addChart);
@@ -76,6 +77,7 @@ export const TableTab = ({ table }: { table: ReturnType<typeof useAttributeTable
       return buildNodeTableExportSql({
         nodes,
         edges,
+        fragments,
         nodeId: selectedNodeId,
         schema: nodeSchemas[selectedNodeId],
         filters: table.filters,

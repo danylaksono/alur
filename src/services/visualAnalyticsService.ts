@@ -24,6 +24,7 @@ import { chooseTimeGrain, enumerateTimeBuckets, temporalBucketKey } from '../uti
 import type { DatasetFieldProfile, DatasetGeometryProfile, DatasetProfile, DatasetProfileIssue } from '../types/datasets';
 import { metadataForLayer } from '../utils/datasetMetadata';
 import { boundsForLayer } from '../utils/layerSource';
+import { coordinateExtent } from '../utils/extent';
 import { analyticalQueryClient, analyticalQueryKey } from './analyticalQueryClient';
 
 type AnalyticsLayer = { id: string; source?: MapLayer['source']; geojson?: GeoJSON.FeatureCollection };
@@ -102,9 +103,7 @@ export const queryLayerSelectionBounds = async (
       .filter((feature) => selected.has(String(feature.properties?.[FEATURE_ID_PROPERTY] ?? feature.id ?? '')))
       .flatMap((feature) => geometryCoordinates(feature.geometry));
     if (!coordinates.length) return null;
-    const xs = coordinates.map(([x]) => x);
-    const ys = coordinates.map(([, y]) => y);
-    return [[Math.min(...xs), Math.min(...ys)], [Math.max(...xs), Math.max(...ys)]];
+    return coordinateExtent(coordinates);
   }
 
   const values = [...selected].slice(0, 5000).map((id) => `'${id.replace(/'/g, "''")}'`).join(', ');

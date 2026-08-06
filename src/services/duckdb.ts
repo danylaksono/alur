@@ -124,6 +124,7 @@ class DuckDBService {
     private h3Loaded = false;
 
     private initPromise: Promise<void> | null = null;
+    private h3Promise: Promise<boolean> | null = null;
 
     /**
      * Idempotent + concurrency-safe: React StrictMode double-mounts effects, and
@@ -160,19 +161,6 @@ class DuckDBService {
             this.spatialLoaded = false;
         }
 
-        try {
-            // NOTE: h3 lives in the community repo; `INSTALL h3 FROM community` does
-            // load it, but in duckdb-wasm 1.28 a loaded community extension breaks
-            // registerFileHandle/registerFileBuffer for the rest of the session
-            // ("No files found that match the pattern" on every upload). Keep the
-            // core-repo install (a harmless no-op today) until upstream fixes that;
-            // hexbin styling uses hexbinService's pure-SQL/JS binning instead.
-            await this.conn.query(`INSTALL h3; LOAD h3;`);
-            this.h3Loaded = true;
-        } catch {
-            this.h3Loaded = false;
-        }
-        
         this.initialized = true;
     }
 
@@ -180,8 +168,44 @@ class DuckDBService {
         return this.spatialLoaded;
     }
 
+    /** Whether h3 has already been loaded. Use `ensureH3()` to load it. */
     get isH3Loaded() {
         return this.h3Loaded;
+    }
+
+    /**
+     * Loads the community h3 extension on first use, never at startup.
+     *
+     * Two reasons it is lazy. It costs a network round trip — measured at ~1.8s
+     * cold — and ALUR otherwise runs entirely offline once loaded, so every
+     * session should not pay for a capability most of them never touch.
+     *
+     * The historical reason it was absent is gone: on duckdb-wasm 1.28 a loaded
+     * community extension broke registerFileHandle/registerFileBuffer for the
+     * rest of the session, so no file could be opened afterwards. Retested on
+     * 1.32 — file registration survives repeated loads, verified in a browser.
+     *
+     * Returns false rather than throwing when the extension cannot be fetched,
+     * because every caller has a working fallback and being offline is not an
+     * error. A failure is not cached, so a later attempt can still succeed.
+     */
+    async ensureH3(): Promise<boolean> {
+        if (this.h3Loaded) return true;
+        if (!this.h3Promise) {
+            this.h3Promise = (async () => {
+                await this.init();
+                if (!this.conn) return false;
+                try {
+                    await this.conn.query(`INSTALL h3 FROM community; LOAD h3;`);
+                    this.h3Loaded = true;
+                    return true;
+                } catch {
+                    this.h3Promise = null;
+                    return false;
+                }
+            })();
+        }
+        return this.h3Promise;
     }
 
     async query(sql: string) {
@@ -873,3 +897,11 @@ class DuckDBService {
 }
 
 export const duckdbService = new DuckDBService();
+
+if (typeof window !== 'undefined' && import.meta.env?.DEV) {
+  // Debug handle, alongside __alurStore and __alurMap. E2E runs must reach the
+  // engine through this rather than by importing this module by path: after an
+  // edit Vite serves it under a cache-busting query string, which constructs a
+  // second, uninitialised service that fails every query.
+  (window as unknown as Record<string, unknown>).__alurDuckdb = duckdbService;
+}

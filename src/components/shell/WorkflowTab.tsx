@@ -1,15 +1,21 @@
-import { useEffect } from 'react';
-import { ReactFlow, ReactFlowProvider, Controls, Background, BackgroundVariant, ConnectionLineType, useReactFlow } from '@xyflow/react';
+import { useEffect, useState } from 'react';
+import { ReactFlow, ReactFlowProvider, Controls, Background, BackgroundVariant, ConnectionLineType, Panel, useReactFlow } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useStore } from '../../store/useStore';
 import { InputNode } from '../Flow/InputNode';
+import { GeometryNode } from '../Flow/GeometryNode';
 import { AnalysisNode } from '../Flow/AnalysisNode';
 import { AttributeNode } from '../Flow/AttributeNode';
 import { AggregateNode } from '../Flow/AggregateNode';
+import { AllocateNode } from '../Flow/AllocateNode';
+import { ScoreNode } from '../Flow/ScoreNode';
+import { FragmentNode } from '../Flow/FragmentNode';
+import { SaveFragmentDialog } from '../Flow/SaveFragmentDialog';
 import { FilterNode } from '../Flow/FilterNode';
 import { JoinNode } from '../Flow/JoinNode';
 import { OutputNode } from '../Flow/OutputNode';
 import { VisualisationNode } from '../Flow/VisualisationNode';
+import { Package } from 'lucide-react';
 import { ErrorBoundary } from '../ErrorBoundary';
 
 /** One grid step. Drives both the visible dots and node snapping. */
@@ -17,13 +23,17 @@ const GRID_SPACING = 24;
 
 const nodeTypes = {
   input: InputNode,
+  geometry: GeometryNode,
   analysis: AnalysisNode,
   attribute: AttributeNode,
   aggregate: AggregateNode,
+  allocate: AllocateNode,
+  score: ScoreNode,
   filter: FilterNode,
   join: JoinNode,
   visualisation: VisualisationNode,
   output: OutputNode,
+  fragment: FragmentNode,
 };
 
 /** Honours fit requests from the node palette, which lives outside this provider. */
@@ -46,6 +56,12 @@ export const WorkflowTab = () => {
   const onConnect = useStore((s) => s.onConnect);
   const setSelectedNodeId = useStore((s) => s.setSelectedNodeId);
   const setSelectedLayerId = useStore((s) => s.setSelectedLayerId);
+  const [savingFragment, setSavingFragment] = useState<string[] | null>(null);
+
+  // A saved operation has to be a run of steps, so the offer only appears once
+  // there is more than one thing selected — and never for a data source, which
+  // would bake one file into a supposedly reusable operation.
+  const selectedIds = nodes.filter((node) => node.selected && node.data.type !== 'input').map((node) => node.id);
 
   return (
     <ReactFlowProvider>
@@ -90,9 +106,22 @@ export const WorkflowTab = () => {
             <Background id="workflow-grid-dots" variant={BackgroundVariant.Dots} gap={GRID_SPACING} size={1.4} color="#cbd5e1" />
             <Controls />
             <FitRequestListener />
+            {selectedIds.length > 1 && (
+              <Panel position="top-center">
+                <button
+                  type="button"
+                  onClick={() => setSavingFragment(selectedIds)}
+                  className="flex items-center gap-1.5 rounded-lg border border-cyan-200 bg-white px-3 py-1.5 text-[11px] font-bold text-cyan-700 shadow-md transition-colors hover:bg-cyan-50"
+                >
+                  <Package className="h-3.5 w-3.5" />
+                  Save {selectedIds.length} steps as an operation
+                </button>
+              </Panel>
+            )}
           </ReactFlow>
         </ErrorBoundary>
       </div>
+      {savingFragment && <SaveFragmentDialog selectedIds={savingFragment} onClose={() => setSavingFragment(null)} />}
     </ReactFlowProvider>
   );
 };
