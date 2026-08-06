@@ -1,6 +1,6 @@
 # ALUR SIL Readiness Plan — Scenario Portfolio, Provenance, Iteration, Geometry
 
-**Date:** 2026-08-05 · **Status:** W1 and W2 done and verified in the browser; W3, W4, W5 proposed. **Next action is to run Case 3, not to build W3.** · **Companion to** [improvement-plan.md](improvement-plan.md), which took all five SIL diagnostics to passing. This plan addresses what running the case studies needs that passing the diagnostics did not.
+**Date:** 2026-08-05 · **Status:** W1, W2 and W3 done and verified in the browser; W4 and W5 proposed. W3 was built ahead of a case study because no case-study data exists yet — its scope should be revisited once Case 3 has been run. · **Companion to** [improvement-plan.md](improvement-plan.md), which took all five SIL diagnostics to passing. This plan addresses what running the case studies needs that passing the diagnostics did not.
 
 ## Framing
 
@@ -130,9 +130,22 @@ A readable rendering of the log for the active session: what was asked, what was
 
 ---
 
-## Workstream 3 — Variant runner
+## Workstream 3 — Variant runner · **done, ahead of its case study**
 
 **Generic pitch:** run the same pipeline over several parameter sets and collect the results side by side.
+
+**As built.** [`utils/workflowParameters.ts`](../src/utils/workflowParameters.ts) resolves `{ $param: 'name' }` references anywhere in a node config; `buildWorkflowSQL` applies them immediately after fragment expansion, so an operation's own steps can name a parameter too. [`services/variantSweepService.ts`](../src/services/variantSweepService.ts) runs the graph once per variant, sequentially, and returns a per-variant outcome. The variant panel gained a *Run across N variants* button that names which parameters a sweep will vary.
+
+Decisions worth recording:
+
+- **References may declare a `default`.** Without one, adding a reference makes the workflow unrunnable outside a sweep — a trap rather than a safeguard.
+- **A failing variant does not abort the sweep.** One variant failing is a finding about that variant. The account records `Ran the workflow across 3 variants, 1 failing`.
+- **3.3 (`reconcile`) is still not built**, as planned. Case 1's `propose → aggregate → reconcile → persist` needs a fixed point the DAG cannot express; reporting that boundary remains more useful than hiding it behind a general iterator.
+
+**Two defects found by the browser run and fixed:**
+
+- **Sweep results were mis-attributed.** `registerWorkflowResult` binds an output to *every* variant whose `provenance.workflowNodeIds` contains the terminal node — which is right for a single run and catastrophic for a sweep, since each iteration overwrote the last and all three variants ended up pointing at the final dataset. It now takes an optional `variantId` that scopes the binding to the run that produced it.
+- **Parameterised graphs could not be previewed.** The schema fetcher and node preview compiled strictly, so a reference without a default broke every downstream preview and column list while the graph was still being built. Both now compile with `indicativeParameters` — the first variant that defines each value. A preview has always been one view of the data rather than the result, so this is honest as well as necessary.
 
 This is the answer to the iteration gap the previous plan named ("what is missing is *iteration*, not mutation") and it is smaller than it looks, because the representation already exists: `AnalysisVariant.parameters: Record<string, unknown>` is already a parameter set, and LAEP already demonstrates the shape — a scenario is a *specification* that a separate runner executes (`useScenarioSimulation`, `useScenarioModellerRunner`), rather than being the pipeline itself.
 

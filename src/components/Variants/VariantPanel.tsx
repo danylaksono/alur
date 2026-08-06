@@ -1,9 +1,11 @@
-import { Compass, GitBranch, GitCompareArrows, Plus, SlidersHorizontal } from 'lucide-react';
+import { Compass, GitBranch, GitCompareArrows, Play, Plus, SlidersHorizontal } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useStore, type WorkflowNode } from '../../store/useStore';
 import type { AnalysisVariant, VariantOperation } from '../../types/visualAnalytics';
 import { equalWeightedScoreModel } from '../../utils/scoreModel';
 import { comparableVariants, comparisonFromVariants } from '../../utils/scenarioComparison';
+import { parametersUsed } from '../../utils/workflowParameters';
+import { sweepVariants } from '../../services/variantSweepService';
 
 export const VariantPanel = () => {
   const datasets = useStore((state) => state.datasetRegistry);
@@ -32,6 +34,9 @@ export const VariantPanel = () => {
   );
   const comparable = useMemo(() => comparableVariants(variants, datasets), [variants, datasets]);
   const [datasetId, setDatasetId] = useState(datasetList[0]?.id || '');
+  const [sweeping, setSweeping] = useState(false);
+  const nodes = useStore((state) => state.nodes);
+  const parameters = useMemo(() => parametersUsed(nodes), [nodes]);
 
   const compareScenarios = () => {
     const spec = comparisonFromVariants(variants, datasets);
@@ -43,6 +48,21 @@ export const VariantPanel = () => {
   };
   const dataset = datasets[datasetId];
   const [fields, setFields] = useState<string[]>([]);
+
+  const runSweep = async () => {
+    setSweeping(true);
+    try {
+      const report = await sweepVariants(variants);
+      addToast({
+        type: report.failed ? 'warning' : 'success',
+        message: report.failed
+          ? `Ran ${report.ok} of ${report.outcomes.length} variants. ${report.outcomes.filter((outcome) => outcome.status === 'failed')[0]?.error || ''}`
+          : `Ran all ${report.ok} variants. Each result is registered under its own variant.`,
+      });
+    } finally {
+      setSweeping(false);
+    }
+  };
 
   const startSession = (baselineDatasetId: string, name: string) =>
     createSession({ id: `session-${Date.now()}`, name, question: '', baselineDatasetId });
@@ -88,6 +108,15 @@ export const VariantPanel = () => {
       const ready = Boolean(variant.workflowOutputDatasetId && datasets[variant.workflowOutputDatasetId]);
       return <div key={variant.id} className="flex items-center gap-2"><div className="min-w-0 flex-1"><p className="truncate text-[10px] font-bold text-slate-700">{variant.name}</p><p className="text-[9px] text-slate-500">{ready ? 'Result ready' : 'Run the workflow to produce its result'}{variant.parentVariantId ? ' · branch' : ''}</p></div><button type="button" onClick={() => branchVariant(variant.id)} className="rounded p-1.5 text-slate-400 hover:bg-slate-50 hover:text-emerald-600" aria-label={`Branch ${variant.name}`}><GitBranch className="h-3.5 w-3.5" /></button></div>;
     })}</div>}
+
+    {variants.length > 1 && <div className="mt-3 border-t border-slate-100 pt-3">
+      <button type="button" disabled={sweeping} onClick={runSweep} className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-[10px] font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40"><Play className="h-3 w-3" />{sweeping ? 'Running…' : `Run across ${variants.length} variants`}</button>
+      <p className="mt-1 text-[9px] leading-relaxed text-slate-400">
+        {parameters.length
+          ? `Each run substitutes ${parameters.join(', ')} from the variant.`
+          : 'Runs the same workflow once per variant. Use a { $param } value in a node config to vary it.'}
+      </p>
+    </div>}
 
     {variants.length > 1 && <div className="mt-3 border-t border-slate-100 pt-3">
       <button

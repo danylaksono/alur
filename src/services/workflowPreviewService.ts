@@ -94,6 +94,7 @@ export const queryNodePreviewRows = async ({
   filters = [],
   computedFields = [],
   fragments = [],
+  parameters,
 }: {
   nodes: WorkflowNode[];
   edges: Edge[];
@@ -107,8 +108,14 @@ export const queryNodePreviewRows = async ({
   pageSize: number;
   filters?: VisualFilter[];
   computedFields?: ComputedField[];
+  /**
+   * Indicative values for `{ $param }` references. Without them a graph whose
+   * parameters have no defaults cannot be previewed at all, which is precisely
+   * when the analyst most needs to see what the node produces.
+   */
+  parameters?: Record<string, unknown>;
 }) => {
-  const { withClause } = buildWorkflowSQL(nodes, edges, { fragments });
+  const { withClause } = buildWorkflowSQL(nodes, edges, { fragments, parameters });
   const targetAlias = cteAlias(nodeId);
   const relation = buildComputedRelation(targetAlias, computedFields);
   const whereClause = combinedWhereClause(schema, search, filters, computedFields);

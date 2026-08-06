@@ -20,12 +20,19 @@ import {
   type FilterPredicate,
 } from './filterPredicates';
 import { expandFragments, type WorkflowFragment } from './workflowFragments';
+import { resolveNodeParameters } from './workflowParameters';
 import type { ScoreModelSpec } from '../types/visualAnalytics';
 
 export type WorkflowBuildOptions = {
   limit?: number;
   /** Saved operations the workflow may place. Omit only for graphs known to have none. */
   fragments?: WorkflowFragment[];
+  /**
+   * Values for `{ $param: … }` references in node configs. Omitting them is
+   * fine for a graph with no references, and for one whose references all
+   * carry defaults.
+   */
+  parameters?: Record<string, unknown>;
 };
 
 /**
@@ -180,6 +187,9 @@ export function buildWorkflowSQL(nodes: WorkflowNode[], edges: Edge[], options?:
   // Saved operations become ordinary nodes before anything else looks at the
   // graph, so every node type works inside one without being taught to.
   ({ nodes, edges } = expandFragments(nodes, edges, options?.fragments || []));
+  // Then parameters, for the same reason and in this order: an operation's own
+  // steps can name a parameter, and they do not exist until it is expanded.
+  nodes = resolveNodeParameters(nodes, options?.parameters);
 
   const sorted = topoSort(nodes, edges);
 

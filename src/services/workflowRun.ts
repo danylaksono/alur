@@ -15,9 +15,9 @@ import type { WorkflowMaterialisation } from './layerMaterialization';
  */
 export const registerWorkflowResult = (
   result: WorkflowMaterialisation,
-  { nodeId, layerName }: { nodeId?: string; layerName?: string } = {},
+  { nodeId, layerName, variantId }: { nodeId?: string; layerName?: string; variantId?: string } = {},
 ) => {
-  const { addMapLayer, registerDataset, registerWorkflowNodeOutput, recordProvenance } = useStore.getState();
+  const { addMapLayer, registerDataset, registerWorkflowNodeOutput, updateVariant, recordProvenance } = useStore.getState();
 
   const datasetId = result.kind === 'layer' ? result.layer.id : result.dataset.id;
   if (result.kind === 'layer') {
@@ -25,7 +25,11 @@ export const registerWorkflowResult = (
   } else {
     registerDataset(result.dataset);
   }
-  if (nodeId) registerWorkflowNodeOutput(nodeId, datasetId);
+  // A sweep runs one graph for many variants, so every variant on the terminal
+  // node would claim every run's output and the last would win for all of them.
+  // Naming the variant binds the result to the run that actually produced it.
+  if (variantId) updateVariant(variantId, { workflowOutputDatasetId: datasetId });
+  else if (nodeId) registerWorkflowNodeOutput(nodeId, datasetId);
   // Recorded here for the same reason the rest of this function lives here:
   // every run path passes through, so the account cannot miss one.
   recordProvenance({

@@ -122,9 +122,11 @@ export function summariseProvenance(activity: ProvenanceActivity, payload: Recor
     }
     case 'sweep.ran': {
       const variants = asCount(payload.variantCount);
-      return variants === null
-        ? 'Ran the workflow across variants'
-        : `Ran the workflow across ${plural(variants, 'variant')}`;
+      const failed = asCount(payload.failed);
+      const scope = variants === null ? 'variants' : plural(variants, 'variant');
+      // A partial sweep is the interesting case, so the count that failed is
+      // part of the sentence rather than something to look up afterwards.
+      return failed ? `Ran the workflow across ${scope}, ${failed} failing` : `Ran the workflow across ${scope}`;
     }
     case 'filter.applied': {
       const label = asText(payload.description, asText(payload.field, 'a condition'));

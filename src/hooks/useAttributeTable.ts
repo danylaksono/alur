@@ -8,6 +8,7 @@ import {
   queryLayerSelectionBounds,
 } from '../services/visualAnalyticsService';
 import { queryNodeColumnProfile, queryNodePreviewRows } from '../services/workflowPreviewService';
+import { indicativeParameters } from '../utils/workflowParameters';
 import { useDebouncedValue } from './useDebouncedValue';
 import type { ColumnProfile, HistogramBin } from '../components/DataTable';
 import type { VisualFilter } from '../types/visualAnalytics';
@@ -224,6 +225,7 @@ export function useAttributeTable() {
           pageSize,
           filters,
           computedFields,
+          parameters: indicativeParameters(useStore.getState().visualAnalytics.variants),
         });
         if (cancelled) return;
         setNodeRows(result.rows);

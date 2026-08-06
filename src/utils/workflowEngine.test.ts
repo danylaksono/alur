@@ -588,3 +588,36 @@ describe('composite score', () => {
     })) as [any, any])).toThrow('above zero');
   });
 });
+
+describe('variant parameters', () => {
+  const parameterised = (config: Record<string, unknown>) => ({
+    nodes: [
+      makeNode({ id: 'input-1', data: { label: 'In', type: 'input', config: { tableName: 'candidates' } } as any }),
+      makeNode({ id: 'filter-1', type: 'filter', data: { label: 'Top N', type: 'filter', config: { mode: 'top-n', ...config } } as any }),
+    ],
+    edges: [{ id: 'e1', source: 'input-1', target: 'filter-1' }] as Edge[],
+  });
+
+  it('compiles a reference into the value the variant supplied', () => {
+    const { nodes, edges } = parameterised({ field: 'score', count: { $param: 'topN' } });
+    expect(buildWorkflowSQL(nodes, edges, { parameters: { topN: 25 } }).sql).toContain('<= 25');
+  });
+
+  it('produces different SQL for different variants from one graph', () => {
+    const { nodes, edges } = parameterised({ field: 'score', count: { $param: 'topN' } });
+    const first = buildWorkflowSQL(nodes, edges, { parameters: { topN: 10 } }).sql;
+    const second = buildWorkflowSQL(nodes, edges, { parameters: { topN: 200 } }).sql;
+    expect(first).toContain('<= 10');
+    expect(second).toContain('<= 200');
+  });
+
+  it('uses a declared default when no variant is being run', () => {
+    const { nodes, edges } = parameterised({ field: 'score', count: { $param: 'topN', default: 50 } });
+    expect(buildWorkflowSQL(nodes, edges).sql).toContain('<= 50');
+  });
+
+  it('fails with an actionable message when nothing supplies the value', () => {
+    const { nodes, edges } = parameterised({ field: 'score', count: { $param: 'topN' } });
+    expect(() => buildWorkflowSQL(nodes, edges)).toThrow(/needs a value for "topN"/);
+  });
+});
