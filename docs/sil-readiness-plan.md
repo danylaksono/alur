@@ -1,6 +1,6 @@
 # ALUR SIL Readiness Plan — Scenario Portfolio, Provenance, Iteration, Geometry
 
-**Date:** 2026-08-05 · **Status:** W1, W2 and W3 done and verified in the browser; W4 and W5 proposed. W3 was built ahead of a case study because no case-study data exists yet — its scope should be revisited once Case 3 has been run. · **Companion to** [improvement-plan.md](improvement-plan.md), which took all five SIL diagnostics to passing. This plan addresses what running the case studies needs that passing the diagnostics did not.
+**Date:** 2026-08-05 · **Status:** W1–W4 done and verified in the browser; W5 proposed. W3 and W4 were built ahead of a case study because no case-study data exists yet — their scope should be revisited once Case 3 has been run. · **Companion to** [improvement-plan.md](improvement-plan.md), which took all five SIL diagnostics to passing. This plan addresses what running the case studies needs that passing the diagnostics did not.
 
 ## Framing
 
@@ -165,9 +165,19 @@ Case 1's `propose → aggregate → reconcile → persist` needs the aggregate o
 
 ---
 
-## Workstream 4 — Geometry authoring
+## Workstream 4 — Geometry authoring · **done**
 
 **Generic pitch:** create a dataset by drawing it, not only by loading it.
+
+**As built.** [`utils/drawnFeatures.ts`](../src/utils/drawnFeatures.ts) holds the model — points, lines, polygons, and columns the analyst names and types. [`Flow/GeometryNode.tsx`](../src/components/Flow/GeometryNode.tsx) is the node: three draw modes, a feature list, a schema editor, *Create dataset*, and GeoJSON/Parquet export. Drawing itself is a mode on the map — click to add a vertex, Enter or double-click to finish, Backspace to take one back, Escape to leave — with the shape in progress rendered live.
+
+Decisions worth recording:
+
+- **No drawing dependency was added.** Point, line and polygon capture is a few dozen lines against MapLibre's own events, and owning it keeps the schema editor and the preview in one model. Vertex editing after the fact is *not* supported — a feature is deleted and redrawn. That is the honest limit of this pass.
+- **Committing routes through `ingestFile`.** A drawn layer is a GeoJSON FeatureCollection, so going through the loading path inherits geometry conversion, CRS detection, the dataset registry entry, the map layer and the source cache — and puts drawn data on exactly the same footing as loaded data. Everything downstream works without being taught that drawing exists, which is also the domain-neutrality argument: nothing in the node knows what a drawn feature means.
+- **The drawn layer lives in the node's config**, so it travels in the project manifest, survives undo, and duplicates with the node — all things node configs already do. The shape *in progress* lives in UI state instead, because a half-drawn polygon is not part of the project.
+
+**A defect found by the browser run and fixed:** the preview tracked which node to render in a React ref, which does not survive the map unmounting when the workflow drawer is maximised — so geometry drawn while the map was hidden never reappeared. It is now derived from the nodes themselves, rendering every geometry node that has features and has not yet been committed (committed ones are already real map layers, and drawing them twice would double-render every feature).
 
 The previously reported hard limit — no workflow node can bring a new spatial object into existence — is now in scope, because the dissertation's EVCP work treats charge-point placement plus simulation output as SIL. Note that this exposes a genuine inconsistency in the source material: `Case-Studies.md` defines Intervene as "applying planning actions **to selected spatial units**", which excludes feature creation, while the EVCP chapter depends on it. **Resolve that in the paper explicitly**; do not let the implementation silently pick a side.
 
@@ -234,7 +244,7 @@ Which generic capability discharges which obligation. Read right-to-left when as
 | Append-only PROV-shaped event log, session account | W2 | **Refine** — "can the user explain how this scenario came to be?" answered from a record rather than reconstructed from state |
 | Shareable project link plus exported account | W5 | Cuts across all five — the diagnostics become externally checkable rather than author-attested |
 
-The previous plan's finding that **feature creation is not reached at all** is retired by W4. Record in the paper that it *was* the boundary of a generic platform until a generic geometry-authoring surface was added, and that the surface required no planning vocabulary. That sequence is a stronger result than either endpoint alone.
+**Standing after W4:** the previous plan's finding that **feature creation is not reached at all** is retired. Record in the paper that it *was* the boundary of a generic platform until a generic geometry-authoring surface was added, and that the surface required no planning vocabulary. That sequence is a stronger result than either endpoint alone.
 
 ---
 

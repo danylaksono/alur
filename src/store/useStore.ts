@@ -61,6 +61,16 @@ import { appendProvenanceEvent, createProvenanceEvent, createProvenanceId, type 
 import { chartDatasetId, chartDatasetSource, kpiDatasetSource } from '../utils/datasetSource';
 import { visualFilterLabel } from '../utils/visualFilters';
 import { normalisedWeights } from '../utils/scoreModel';
+import {
+  addFeature,
+  canCommitDrawing,
+  createDrawnFeature,
+  emptyDrawnLayer,
+  minimumVertices,
+  type DrawGeometryKind,
+  type DrawnLayer,
+} from '../utils/drawnFeatures';
+import type { Position } from 'geojson';
 
 export type NodeExecutionState = {
   status: 'idle' | 'running' | 'done' | 'error';
@@ -97,7 +107,7 @@ export type MapLayer = {
 export type WorkflowNode = Node & {
   data: {
     label: string;
-    type: 'input' | 'analysis' | 'attribute' | 'aggregate' | 'allocate' | 'score' | 'filter' | 'join' | 'visualisation' | 'output' | 'fragment';
+    type: 'input' | 'geometry' | 'analysis' | 'attribute' | 'aggregate' | 'allocate' | 'score' | 'filter' | 'join' | 'visualisation' | 'output' | 'fragment';
     config: any;
   }
 };
@@ -203,6 +213,13 @@ export type UIState = {
   isCommandPaletteOpen: boolean;
   datasetOverviewLayerId: string | null;
   layerStyleRequest?: { layerId: string; field?: string; requestedAt: number };
+  /**
+   * The geometry node currently being drawn into, and the shape in progress.
+   * Held here rather than in the node's config because it is transient: an
+   * unfinished polygon is not part of the project, and a reload should not
+   * restore a half-drawn shape.
+   */
+  drawing?: { nodeId: string; kind: DrawGeometryKind; positions: Position[] };
   recoverySave: { status: 'idle' | 'saving' | 'saved' | 'error'; savedAt?: number };
   mapCamera: { longitude: number; latitude: number; zoom: number; bearing: number; pitch: number };
   workspaceMode: 'explore' | 'compare' | 'explain' | 'board';
@@ -399,6 +416,12 @@ export interface AppState {
   clearAnalysisHistory: () => void;
   recordProvenance: (input: ProvenanceEventInput) => void;
   clearProvenance: () => void;
+  startDrawing: (nodeId: string, kind: DrawGeometryKind) => void;
+  addDrawingVertex: (position: Position) => void;
+  undoDrawingVertex: () => void;
+  /** Commits the shape to its node if it has enough vertices, then clears. */
+  finishDrawing: () => void;
+  cancelDrawing: () => void;
   createSession: (session: Omit<AnalysisSession, 'createdAt' | 'provenanceId'> & Partial<Pick<AnalysisSession, 'createdAt' | 'provenanceId'>>) => void;
   updateSession: (sessionId: string, patch: Partial<Pick<AnalysisSession, 'name' | 'question'>>) => void;
   removeSession: (sessionId: string) => void;
@@ -654,6 +677,21 @@ const recordProvenanceEvent = (state: AppState, input: ProvenanceEventInput) =>
  * Weights as shares rather than raw numbers. Three criteria at weight 1 are an
  * equal split, and the account should say 33% three times rather than 100%.
  */
+/**
+ * Writes a finished shape into its geometry node's config.
+ *
+ * The drawn layer lives in the node rather than in a store slice of its own so
+ * it travels in the project manifest, survives undo, and is duplicated with the
+ * node — all of which node configs already do.
+ */
+const appendDrawnFeature = (nodes: WorkflowNode[], nodeId: string, kind: DrawGeometryKind, positions: Position[]): WorkflowNode[] => {
+  const node = nodes.find((item) => item.id === nodeId);
+  if (!node) return nodes;
+  const layer: DrawnLayer = node.data.config?.layer || emptyDrawnLayer(node.data.label);
+  const next = addFeature(layer, createDrawnFeature(kind, positions, layer.fields));
+  return nodes.map((item) => (item.id === nodeId ? { ...item, data: { ...item.data, config: { ...item.data.config, layer: next } } } : item));
+};
+
 const weightsFromScoreConfig = (config: unknown): Record<string, number> | null => {
   const spec = (config as { scoreModel?: ScoreModelSpec } | null | undefined)?.scoreModel;
   if (!spec || !Array.isArray(spec.criteria) || !spec.criteria.length) return null;
@@ -977,6 +1015,48 @@ export const useStore = create<AppState>()(persist((set, get) => ({
 
   /** Only for starting a new project. The log is otherwise never truncated. */
   clearProvenance: () => set({ provenanceEvents: [] }),
+
+  startDrawing: (nodeId, kind) => set((state) => ({
+    ui: { ...state.ui, drawing: { nodeId, kind, positions: [] } },
+  })),
+
+  addDrawingVertex: (position) => set((state) => {
+    const drawing = state.ui.drawing;
+    if (!drawing) return state;
+    const positions = [...drawing.positions, position];
+    // A point is finished the moment it is placed; anything else keeps
+    // collecting until the analyst says it is done.
+    if (drawing.kind === 'point') {
+      return {
+        nodes: appendDrawnFeature(state.nodes, drawing.nodeId, 'point', positions),
+        ui: { ...state.ui, drawing: { ...drawing, positions: [] } },
+      };
+    }
+    return { ui: { ...state.ui, drawing: { ...drawing, positions } } };
+  }),
+
+  undoDrawingVertex: () => set((state) => {
+    const drawing = state.ui.drawing;
+    if (!drawing?.positions.length) return state;
+    return { ui: { ...state.ui, drawing: { ...drawing, positions: drawing.positions.slice(0, -1) } } };
+  }),
+
+  finishDrawing: () => set((state) => {
+    const drawing = state.ui.drawing;
+    if (!drawing) return state;
+    if (!canCommitDrawing(drawing.kind, drawing.positions)) {
+      // Keeps the mode and the vertices: finishing early is a slip, and
+      // discarding the work would punish it.
+      return { toasts: [...state.toasts, { id: `toast-${Date.now()}`, type: 'warning' as const, message: `A ${drawing.kind} needs at least ${minimumVertices(drawing.kind)} points.` }] };
+    }
+    return {
+      nodes: appendDrawnFeature(state.nodes, drawing.nodeId, drawing.kind, drawing.positions),
+      // Stays in the same mode so several shapes can be drawn in a row.
+      ui: { ...state.ui, drawing: { ...drawing, positions: [] } },
+    };
+  }),
+
+  cancelDrawing: () => set((state) => ({ ui: { ...state.ui, drawing: undefined } })),
 
   createSession: (session) => set((state) => {
     const created: AnalysisSession = {

@@ -3,6 +3,7 @@ import { ReactFlow, ReactFlowProvider, Controls, Background, BackgroundVariant, 
 import '@xyflow/react/dist/style.css';
 import { useStore } from '../../store/useStore';
 import { InputNode } from '../Flow/InputNode';
+import { GeometryNode } from '../Flow/GeometryNode';
 import { AnalysisNode } from '../Flow/AnalysisNode';
 import { AttributeNode } from '../Flow/AttributeNode';
 import { AggregateNode } from '../Flow/AggregateNode';
@@ -22,6 +23,7 @@ const GRID_SPACING = 24;
 
 const nodeTypes = {
   input: InputNode,
+  geometry: GeometryNode,
   analysis: AnalysisNode,
   attribute: AttributeNode,
   aggregate: AggregateNode,

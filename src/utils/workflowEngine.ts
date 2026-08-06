@@ -216,10 +216,14 @@ export function buildWorkflowSQL(nodes: WorkflowNode[], edges: Edge[], options?:
     );
     const parentAliases = parentEdges.map(edge => cteAlias(edge.source));
 
-    if (type === 'input') {
+    if (type === 'input' || type === 'geometry') {
       const tableName = config?.tableName;
       if (!tableName) {
-        throw new Error(`Input node "${node.id}" has no table loaded.`);
+        // A drawn layer exists only in the node until it is committed, so the
+        // message points at the step that would make it queryable.
+        throw new Error(type === 'geometry'
+          ? `Drawn layer "${node.id}" has not been created yet. Use "Create dataset" on the node to make it queryable.`
+          : `Input node "${node.id}" has no table loaded.`);
       }
       ctes.push(`${alias} AS (\n  SELECT * FROM ${qi(tableName)}\n)`);
       lastAlias = alias;

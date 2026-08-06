@@ -629,6 +629,77 @@ describe('scenario variants', () => {
   });
 });
 
+describe('drawing features', () => {
+  const geometryNode = (): WorkflowNode =>
+    ({ id: 'draw-1', type: 'geometry', position: { x: 0, y: 0 }, data: { label: 'Sites', type: 'geometry', config: {} } }) as WorkflowNode;
+
+  const drawnLayer = () => (useStore.getState().nodes[0].data.config as any).layer;
+
+  beforeEach(() => {
+    useStore.getState().resetWorkspace();
+    useStore.setState({ toasts: [], nodes: [geometryNode()] });
+  });
+
+  it('commits a point the moment it is placed, and stays armed for the next', () => {
+    useStore.getState().startDrawing('draw-1', 'point');
+    useStore.getState().addDrawingVertex([-0.1, 51.5]);
+
+    expect(drawnLayer().features).toHaveLength(1);
+    expect(drawnLayer().features[0].kind).toBe('point');
+    expect(useStore.getState().ui.drawing).toMatchObject({ nodeId: 'draw-1', kind: 'point', positions: [] });
+  });
+
+  it('collects vertices for a polygon until it is finished', () => {
+    useStore.getState().startDrawing('draw-1', 'polygon');
+    [[0, 0], [1, 0], [1, 1]].forEach((position) => useStore.getState().addDrawingVertex(position));
+    expect(useStore.getState().nodes[0].data.config.layer).toBeUndefined();
+
+    useStore.getState().finishDrawing();
+    expect(drawnLayer().features[0].positions).toHaveLength(3);
+    // Still armed, so several shapes can be drawn without re-arming.
+    expect(useStore.getState().ui.drawing?.positions).toEqual([]);
+  });
+
+  it('refuses to finish a shape with too few vertices, and keeps the work', () => {
+    useStore.getState().startDrawing('draw-1', 'polygon');
+    useStore.getState().addDrawingVertex([0, 0]);
+    useStore.getState().addDrawingVertex([1, 1]);
+    useStore.getState().finishDrawing();
+
+    expect(useStore.getState().nodes[0].data.config.layer).toBeUndefined();
+    expect(useStore.getState().ui.drawing?.positions).toHaveLength(2);
+    expect(useStore.getState().toasts[0].message).toMatch(/at least 3 points/);
+  });
+
+  it('takes back the last vertex without leaving the mode', () => {
+    useStore.getState().startDrawing('draw-1', 'line');
+    useStore.getState().addDrawingVertex([0, 0]);
+    useStore.getState().addDrawingVertex([1, 1]);
+    useStore.getState().undoDrawingVertex();
+
+    expect(useStore.getState().ui.drawing?.positions).toEqual([[0, 0]]);
+  });
+
+  it('discards the shape in progress when drawing is cancelled', () => {
+    useStore.getState().startDrawing('draw-1', 'polygon');
+    useStore.getState().addDrawingVertex([0, 0]);
+    useStore.getState().cancelDrawing();
+
+    expect(useStore.getState().ui.drawing).toBeUndefined();
+    expect(useStore.getState().nodes[0].data.config.layer).toBeUndefined();
+  });
+
+  it('gives a feature drawn later the columns declared earlier', () => {
+    useStore.setState((state) => ({
+      nodes: state.nodes.map((node) => ({ ...node, data: { ...node.data, config: { layer: { name: 'Sites', fields: [{ name: 'label', type: 'text' }], features: [] } } } })),
+    }));
+    useStore.getState().startDrawing('draw-1', 'point');
+    useStore.getState().addDrawingVertex([0, 0]);
+
+    expect(drawnLayer().features[0].properties).toEqual({ label: '' });
+  });
+});
+
 describe('lines of enquiry', () => {
   const variant = (id: string) => ({
     id,

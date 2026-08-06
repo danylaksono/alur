@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Calculator, Database, Eye, Filter, Gauge, GitMerge, Layers, Loader2, Package, Palette, Plus, Search, SlidersHorizontal, Trash2, Workflow, Zap } from 'lucide-react';
+import { Calculator, Database, Eye, Filter, Gauge, GitMerge, Layers, Loader2, Package, Palette, PenLine, Plus, Search, SlidersHorizontal, Trash2, Workflow, Zap } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { buildWorkflowSQL } from '../../utils/workflowEngine';
 import { nextNodePosition } from '../../utils/nodePlacement';
@@ -19,10 +19,11 @@ const colorStyles: Record<string, { hoverBg: string; hoverBorder: string; iconBg
   cyan: { hoverBg: 'hover:bg-cyan-50', hoverBorder: 'hover:border-cyan-200', iconBg: 'bg-cyan-50', iconHoverBg: 'group-hover:bg-cyan-100' },
 };
 
-type NodeType = 'input' | 'analysis' | 'attribute' | 'filter' | 'aggregate' | 'allocate' | 'score' | 'join' | 'visualisation' | 'output' | 'fragment';
+type NodeType = 'input' | 'geometry' | 'analysis' | 'attribute' | 'filter' | 'aggregate' | 'allocate' | 'score' | 'join' | 'visualisation' | 'output' | 'fragment';
 
 const nodeCards: Array<{ type: NodeType; icon: typeof Database; title: string; desc: string; color: string; config?: Record<string, unknown> }> = [
   { type: 'input', icon: Database, title: 'Data Input', desc: 'Load Parquet or CSV', color: 'blue' },
+  { type: 'geometry', icon: PenLine, title: 'Draw Features', desc: 'Create points, lines or areas', color: 'cyan' },
   { type: 'analysis', icon: Zap, title: 'Spatial Analysis', desc: 'Buffer, intersect, transform…', color: 'purple' },
   { type: 'attribute', icon: Calculator, title: 'Attribute Calc', desc: 'Add computed columns', color: 'slate' },
   { type: 'score', icon: SlidersHorizontal, title: 'Score', desc: 'Weighted score across columns', color: 'purple', config: { resultField: 'alur_score', scoreModel: { criteria: [], missingValueTreatment: 'zero' } } },
@@ -37,6 +38,7 @@ const nodeCards: Array<{ type: NodeType; icon: typeof Database; title: string; d
 const nodeLabels: Record<NodeType, string> = {
   fragment: 'Operation',
   input: 'Data Source',
+  geometry: 'Drawn layer',
   analysis: 'Spatial Op',
   attribute: 'Attribute Op',
   filter: 'Filter',
