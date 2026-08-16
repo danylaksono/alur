@@ -1,54 +1,304 @@
-import { useState } from 'react';
-import { Calculator, Cloud, Database, Eye, Filter, Gauge, GitMerge, Layers, Loader2, Package, Palette, PenLine, Plus, Search, SlidersHorizontal, Trash2, Workflow, Zap } from 'lucide-react';
-import { useStore } from '../../store/useStore';
-import { buildWorkflowSQL } from '../../utils/workflowEngine';
-import { nextNodePosition } from '../../utils/nodePlacement';
-import { spatialFunctions } from '../../utils/spatialFunctions';
-import { materializeWorkflowOutput } from '../../services/layerMaterialization';
-import { registerWorkflowResult } from '../../services/workflowRun';
-import { VariantPanel } from '../Variants/VariantPanel';
-import { cn } from '../../utils/cn';
+import { useState } from "react";
+import {
+  Calculator,
+  ChevronDown,
+  Cloud,
+  Database,
+  Eye,
+  Filter,
+  Gauge,
+  GitMerge,
+  Layers,
+  Loader2,
+  Package,
+  Palette,
+  PenLine,
+  Plus,
+  Search,
+  SlidersHorizontal,
+  Trash2,
+  Workflow,
+  Zap,
+} from "lucide-react";
+import { useStore } from "../../store/useStore";
+import { buildWorkflowSQL } from "../../utils/workflowEngine";
+import { nextNodePosition } from "../../utils/nodePlacement";
+import { spatialFunctions } from "../../utils/spatialFunctions";
+import { materializeWorkflowOutput } from "../../services/layerMaterialization";
+import { registerWorkflowResult } from "../../services/workflowRun";
+import { VariantPanel } from "../Variants/VariantPanel";
+import { cn } from "../../utils/cn";
 
-const colorStyles: Record<string, { hoverBg: string; hoverBorder: string; iconBg: string; iconHoverBg: string }> = {
-  blue: { hoverBg: 'hover:bg-blue-50', hoverBorder: 'hover:border-blue-200', iconBg: 'bg-blue-50', iconHoverBg: 'group-hover:bg-blue-100' },
-  purple: { hoverBg: 'hover:bg-purple-50', hoverBorder: 'hover:border-purple-200', iconBg: 'bg-purple-50', iconHoverBg: 'group-hover:bg-purple-100' },
-  slate: { hoverBg: 'hover:bg-slate-50', hoverBorder: 'hover:border-slate-200', iconBg: 'bg-slate-50', iconHoverBg: 'group-hover:bg-slate-100' },
-  orange: { hoverBg: 'hover:bg-orange-50', hoverBorder: 'hover:border-orange-200', iconBg: 'bg-orange-50', iconHoverBg: 'group-hover:bg-orange-100' },
-  amber: { hoverBg: 'hover:bg-amber-50', hoverBorder: 'hover:border-amber-200', iconBg: 'bg-amber-50', iconHoverBg: 'group-hover:bg-amber-100' },
-  emerald: { hoverBg: 'hover:bg-emerald-50', hoverBorder: 'hover:border-emerald-200', iconBg: 'bg-emerald-50', iconHoverBg: 'group-hover:bg-emerald-100' },
-  cyan: { hoverBg: 'hover:bg-cyan-50', hoverBorder: 'hover:border-cyan-200', iconBg: 'bg-cyan-50', iconHoverBg: 'group-hover:bg-cyan-100' },
+const colorStyles: Record<
+  string,
+  { hoverBg: string; hoverBorder: string; iconBg: string; iconHoverBg: string }
+> = {
+  blue: {
+    hoverBg: "hover:bg-blue-50",
+    hoverBorder: "hover:border-blue-200",
+    iconBg: "bg-blue-50",
+    iconHoverBg: "group-hover:bg-blue-100",
+  },
+  purple: {
+    hoverBg: "hover:bg-purple-50",
+    hoverBorder: "hover:border-purple-200",
+    iconBg: "bg-purple-50",
+    iconHoverBg: "group-hover:bg-purple-100",
+  },
+  slate: {
+    hoverBg: "hover:bg-slate-50",
+    hoverBorder: "hover:border-slate-200",
+    iconBg: "bg-slate-50",
+    iconHoverBg: "group-hover:bg-slate-100",
+  },
+  orange: {
+    hoverBg: "hover:bg-orange-50",
+    hoverBorder: "hover:border-orange-200",
+    iconBg: "bg-orange-50",
+    iconHoverBg: "group-hover:bg-orange-100",
+  },
+  amber: {
+    hoverBg: "hover:bg-amber-50",
+    hoverBorder: "hover:border-amber-200",
+    iconBg: "bg-amber-50",
+    iconHoverBg: "group-hover:bg-amber-100",
+  },
+  emerald: {
+    hoverBg: "hover:bg-emerald-50",
+    hoverBorder: "hover:border-emerald-200",
+    iconBg: "bg-emerald-50",
+    iconHoverBg: "group-hover:bg-emerald-100",
+  },
+  cyan: {
+    hoverBg: "hover:bg-cyan-50",
+    hoverBorder: "hover:border-cyan-200",
+    iconBg: "bg-cyan-50",
+    iconHoverBg: "group-hover:bg-cyan-100",
+  },
 };
 
-type NodeType = 'input' | 'geometry' | 'analysis' | 'attribute' | 'filter' | 'aggregate' | 'allocate' | 'score' | 'join' | 'visualisation' | 'output' | 'fragment';
+type NodeType =
+  | "input"
+  | "geometry"
+  | "analysis"
+  | "attribute"
+  | "filter"
+  | "aggregate"
+  | "allocate"
+  | "score"
+  | "join"
+  | "visualisation"
+  | "output"
+  | "fragment";
 
-const nodeCards: Array<{ type: NodeType; icon: typeof Database; title: string; desc: string; color: string; config?: Record<string, unknown>; label?: string }> = [
-  { type: 'input', icon: Database, title: 'Data Input', desc: 'Load Parquet or CSV', color: 'blue' },
-  { type: 'input', icon: Cloud, title: 'Remote Data', desc: 'Read Parquet over the web', color: 'blue', config: { sourceMode: 'remote' }, label: 'Remote Source' },
-  { type: 'geometry', icon: PenLine, title: 'Draw Features', desc: 'Create points, lines or areas', color: 'cyan' },
-  { type: 'analysis', icon: Zap, title: 'Spatial Analysis', desc: 'Buffer, intersect, transform…', color: 'purple' },
-  { type: 'attribute', icon: Calculator, title: 'Attribute Calc', desc: 'Add computed columns', color: 'slate' },
-  { type: 'score', icon: SlidersHorizontal, title: 'Score', desc: 'Weighted score across columns', color: 'purple', config: { resultField: 'alur_score', scoreModel: { criteria: [], missingValueTreatment: 'zero' } } },
-  { type: 'filter', icon: Filter, title: 'Filter', desc: 'WHERE conditions or top N', color: 'amber' },
-  { type: 'aggregate', icon: Layers, title: 'Summarise', desc: 'Group and total, or dissolve', color: 'orange', config: { mode: 'summary', measures: [{ id: 'measure-rows', fn: 'count' }] } },
-  { type: 'allocate', icon: Gauge, title: 'Allocate', desc: 'Spend down a budget or capacity', color: 'amber', config: { mode: 'flag', direction: 'desc' } },
-  { type: 'join', icon: GitMerge, title: 'Join', desc: 'Attribute or spatial join', color: 'cyan' },
-  { type: 'visualisation', icon: Palette, title: 'Visualisation', desc: 'Attach a reusable map style', color: 'purple', config: { kind: 'choropleth', method: 'quantile', classCount: 5, paletteId: 'teal' } },
-  { type: 'output', icon: Eye, title: 'Layer Output', desc: 'Visualize or export the result', color: 'emerald', config: { outputMode: 'visualize' }, label: 'Layer Output' },
+/** Logical buckets used to group the palette cards. */
+type NodeGroupId = "source" | "transform" | "analyse" | "output";
+
+type NodeCard = {
+  type: NodeType;
+  icon: typeof Database;
+  title: string;
+  desc: string;
+  color: string;
+  group: NodeGroupId;
+  config?: Record<string, unknown>;
+  label?: string;
+};
+
+/** Palette sections, in display order. Only Source starts expanded. */
+const nodeGroups: Array<{
+  id: NodeGroupId;
+  title: string;
+  defaultOpen?: boolean;
+}> = [
+  { id: "source", title: "Source", defaultOpen: true },
+  { id: "transform", title: "Transform" },
+  { id: "analyse", title: "Analyse" },
+  { id: "output", title: "Output" },
+];
+
+const nodeCards: NodeCard[] = [
+  {
+    type: "input",
+    icon: Database,
+    title: "Data Input",
+    desc: "Load Parquet or CSV",
+    color: "blue",
+    group: "source",
+  },
+  {
+    type: "input",
+    icon: Cloud,
+    title: "Remote Data",
+    desc: "Read Parquet over the web",
+    color: "blue",
+    config: { sourceMode: "remote" },
+    label: "Remote Source",
+    group: "source",
+  },
+  {
+    type: "geometry",
+    icon: PenLine,
+    title: "Draw Features",
+    desc: "Create points, lines or areas",
+    color: "cyan",
+    group: "source",
+  },
+  {
+    type: "attribute",
+    icon: Calculator,
+    title: "Attribute Calc",
+    desc: "Add computed columns",
+    color: "slate",
+    group: "transform",
+  },
+  {
+    type: "filter",
+    icon: Filter,
+    title: "Filter",
+    desc: "WHERE conditions or top N",
+    color: "amber",
+    group: "transform",
+  },
+  {
+    type: "aggregate",
+    icon: Layers,
+    title: "Summarise",
+    desc: "Group and total, or dissolve",
+    color: "orange",
+    config: {
+      mode: "summary",
+      measures: [{ id: "measure-rows", fn: "count" }],
+    },
+    group: "transform",
+  },
+  {
+    type: "join",
+    icon: GitMerge,
+    title: "Join",
+    desc: "Attribute or spatial join",
+    color: "cyan",
+    group: "transform",
+  },
+  {
+    type: "allocate",
+    icon: Gauge,
+    title: "Allocate",
+    desc: "Spend down a budget or capacity",
+    color: "amber",
+    config: { mode: "flag", direction: "desc" },
+    group: "transform",
+  },
+  {
+    type: "analysis",
+    icon: Zap,
+    title: "Spatial Analysis",
+    desc: "Buffer, intersect, transform…",
+    color: "purple",
+    group: "analyse",
+  },
+  {
+    type: "score",
+    icon: SlidersHorizontal,
+    title: "Score",
+    desc: "Weighted score across columns",
+    color: "purple",
+    config: {
+      resultField: "alur_score",
+      scoreModel: { criteria: [], missingValueTreatment: "zero" },
+    },
+    group: "analyse",
+  },
+  {
+    type: "visualisation",
+    icon: Palette,
+    title: "Visualisation",
+    desc: "Attach a reusable map style",
+    color: "purple",
+    config: {
+      kind: "choropleth",
+      method: "quantile",
+      classCount: 5,
+      paletteId: "teal",
+    },
+    group: "output",
+  },
+  {
+    type: "output",
+    icon: Eye,
+    title: "Layer Output",
+    desc: "Visualize or export the result",
+    color: "emerald",
+    config: { outputMode: "visualize" },
+    label: "Layer Output",
+    group: "output",
+  },
 ];
 
 const nodeLabels: Record<NodeType, string> = {
-  fragment: 'Operation',
-  input: 'Data Source',
-  geometry: 'Drawn layer',
-  analysis: 'Spatial Op',
-  attribute: 'Attribute Op',
-  filter: 'Filter',
-  aggregate: 'Summarise',
-  allocate: 'Allocate',
-  score: 'Score',
-  join: 'Join',
-  visualisation: 'Visualisation',
-  output: 'Layer Output',
+  fragment: "Operation",
+  input: "Data Source",
+  geometry: "Drawn layer",
+  analysis: "Spatial Op",
+  attribute: "Attribute Op",
+  filter: "Filter",
+  aggregate: "Summarise",
+  allocate: "Allocate",
+  score: "Score",
+  join: "Join",
+  visualisation: "Visualisation",
+  output: "Layer Output",
+};
+
+/** One palette card. Shared by grouped and search-flattened lists. */
+const NodeCardButton = ({
+  item,
+  onAdd,
+}: {
+  item: NodeCard;
+  onAdd: (
+    type: NodeType,
+    config?: Record<string, unknown>,
+    label?: string,
+  ) => void;
+}) => {
+  const Icon = item.icon;
+  const cs = colorStyles[item.color] || colorStyles.blue;
+  return (
+    <button
+      type="button"
+      onClick={() => onAdd(item.type, item.config, item.label)}
+      className={cn(
+        "group flex cursor-pointer items-center justify-between rounded-lg border p-2 text-left text-xs transition-all",
+        cs.hoverBg,
+        cs.hoverBorder,
+      )}
+    >
+      <div className="flex min-w-0 items-center gap-2">
+        <div
+          className={cn(
+            "shrink-0 rounded-md p-1.5 transition-colors",
+            cs.iconBg,
+            cs.iconHoverBg,
+          )}
+        >
+          <Icon
+            className="h-3.5 w-3.5"
+            style={{ color: `var(--${item.color})` }}
+          />
+        </div>
+        <div className="min-w-0">
+          <span className="block text-xs font-semibold text-foreground">
+            {item.title}
+          </span>
+          <span className="block truncate text-[11px] text-muted-foreground">
+            {item.desc}
+          </span>
+        </div>
+      </div>
+      <Plus className="h-3 w-3 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+    </button>
+  );
 };
 
 export const NodePalette = () => {
@@ -60,29 +310,39 @@ export const NodePalette = () => {
   const fragments = useStore((s) => s.fragments);
   const removeFragment = useStore((s) => s.removeFragment);
   const [executing, setExecuting] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
 
   const normalizedQuery = searchQuery.trim().toLowerCase();
   const isSearching = normalizedQuery.length > 0;
   // One field searches both lists: beginners type "buffer" without knowing
   // whether that is a node type or a spatial function.
   const matchedNodes = isSearching
-    ? nodeCards.filter((item) =>
-        item.title.toLowerCase().includes(normalizedQuery) || item.desc.toLowerCase().includes(normalizedQuery)
+    ? nodeCards.filter(
+        (item) =>
+          item.title.toLowerCase().includes(normalizedQuery) ||
+          item.desc.toLowerCase().includes(normalizedQuery),
       )
     : nodeCards;
   const matchedFragments = isSearching
-    ? fragments.filter((item) =>
-        item.name.toLowerCase().includes(normalizedQuery) || (item.description || '').toLowerCase().includes(normalizedQuery)
+    ? fragments.filter(
+        (item) =>
+          item.name.toLowerCase().includes(normalizedQuery) ||
+          (item.description || "").toLowerCase().includes(normalizedQuery),
       )
     : fragments;
   const matchedFunctions = isSearching
-    ? spatialFunctions.filter((fn) =>
-        fn.name.toLowerCase().includes(normalizedQuery) || fn.summary.toLowerCase().includes(normalizedQuery)
+    ? spatialFunctions.filter(
+        (fn) =>
+          fn.name.toLowerCase().includes(normalizedQuery) ||
+          fn.summary.toLowerCase().includes(normalizedQuery),
       )
     : [];
 
-  const handleAddNode = (type: NodeType, config: Record<string, unknown> = {}, label?: string) => {
+  const handleAddNode = (
+    type: NodeType,
+    config: Record<string, unknown> = {},
+    label?: string,
+  ) => {
     addNode({
       id: `${type}-${Date.now()}`,
       type,
@@ -102,17 +362,22 @@ export const NodePalette = () => {
     const { nodes, edges } = useStore.getState();
     try {
       setExecuting(true);
-      const workflow = buildWorkflowSQL(nodes, edges, { fragments: useStore.getState().fragments });
+      const workflow = buildWorkflowSQL(nodes, edges, {
+        fragments: useStore.getState().fragments,
+      });
       const result = await materializeWorkflowOutput({
         workflow,
         layerId: workflow.outputLayerName,
-        name: 'Workflow Result',
+        name: "Workflow Result",
         sourceNodeId: workflow.terminalNodeId || undefined,
-        sourceKind: 'workflow',
+        sourceKind: "workflow",
         visualisationConfig: workflow.visualisationConfig,
       });
       if (!result.featureCount) {
-        addToast({ type: 'warning', message: 'Workflow executed but produced no rows.' });
+        addToast({
+          type: "warning",
+          message: "Workflow executed but produced no rows.",
+        });
         return;
       }
       const rows = result.featureCount.toLocaleString();
@@ -120,12 +385,16 @@ export const NodePalette = () => {
         nodeId: workflow.terminalNodeId || undefined,
         layerName: `Workflow Result (${rows} features)`,
       });
-      addToast({ type: 'success', message: result.kind === 'layer'
-        ? `Workflow complete — ${rows} features added to the map.`
-        : `Workflow complete — ${rows} rows registered. The result has no geometry, so it is not on the map.` });
+      addToast({
+        type: "success",
+        message:
+          result.kind === "layer"
+            ? `Workflow complete — ${rows} features added to the map.`
+            : `Workflow complete — ${rows} rows registered. The result has no geometry, so it is not on the map.`,
+      });
     } catch (err: any) {
-      console.error('Workflow execution error:', err);
-      addToast({ type: 'error', message: `Workflow error: ${err.message}` });
+      console.error("Workflow execution error:", err);
+      addToast({ type: "error", message: `Workflow error: ${err.message}` });
     } finally {
       setExecuting(false);
     }
@@ -137,13 +406,15 @@ export const NodePalette = () => {
         <h3 className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
           <Workflow className="h-3.5 w-3.5" /> Workflow
           <span className="ml-auto rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-slate-500 ring-1 ring-slate-200">
-            {nodeCount} {nodeCount === 1 ? 'node' : 'nodes'}
+            {nodeCount} {nodeCount === 1 ? "node" : "nodes"}
           </span>
         </h3>
       </div>
 
       <div className="shrink-0 border-b p-3">
-        <label htmlFor="alur-node-search" className="sr-only">Search nodes and spatial functions</label>
+        <label htmlFor="alur-node-search" className="sr-only">
+          Search nodes and spatial functions
+        </label>
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
           <input
@@ -161,7 +432,8 @@ export const NodePalette = () => {
         {matchedFragments.length > 0 && (
           <div>
             <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-              This project's operations{isSearching && ` (${matchedFragments.length})`}
+              This project's operations
+              {isSearching && ` (${matchedFragments.length})`}
             </h3>
             <div className="grid grid-cols-1 gap-1.5">
               {matchedFragments.map((fragment) => (
@@ -171,16 +443,25 @@ export const NodePalette = () => {
                 >
                   <button
                     type="button"
-                    onClick={() => handleAddNode('fragment', { fragmentId: fragment.id, arguments: {} }, fragment.name)}
+                    onClick={() =>
+                      handleAddNode(
+                        "fragment",
+                        { fragmentId: fragment.id, arguments: {} },
+                        fragment.name,
+                      )
+                    }
                     className="flex min-w-0 flex-1 items-center gap-2 text-left"
                   >
                     <div className="shrink-0 rounded-md bg-cyan-50 p-1.5">
                       <Package className="h-3.5 w-3.5 text-cyan-600" />
                     </div>
                     <div className="min-w-0">
-                      <span className="block text-xs font-semibold text-foreground">{fragment.name}</span>
+                      <span className="block text-xs font-semibold text-foreground">
+                        {fragment.name}
+                      </span>
                       <span className="block truncate text-[11px] text-muted-foreground">
-                        {fragment.description || `${fragment.nodes.length} step${fragment.nodes.length === 1 ? '' : 's'}`}
+                        {fragment.description ||
+                          `${fragment.nodes.length} step${fragment.nodes.length === 1 ? "" : "s"}`}
                       </span>
                     </div>
                   </button>
@@ -199,39 +480,60 @@ export const NodePalette = () => {
           </div>
         )}
 
-        <div>
-          <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-            Nodes{isSearching && ` (${matchedNodes.length})`}
-          </h3>
-          {isSearching && matchedNodes.length === 0 && (
-            <p className="pb-1 text-[11px] italic text-muted-foreground">No node types matched</p>
-          )}
-          <div className="grid grid-cols-1 gap-1.5">
-            {matchedNodes.map((item) => {
-              const Icon = item.icon;
-              const cs = colorStyles[item.color] || colorStyles.blue;
+        {isSearching ? (
+          <div>
+            <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              Nodes ({matchedNodes.length})
+            </h3>
+            {matchedNodes.length === 0 ? (
+              <p className="pb-1 text-[11px] italic text-muted-foreground">
+                No node types matched
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 gap-1.5">
+                {matchedNodes.map((item) => (
+                  <NodeCardButton
+                    key={item.title}
+                    item={item}
+                    onAdd={handleAddNode}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {nodeGroups.map((group) => {
+              const items = nodeCards.filter((card) => card.group === group.id);
               return (
-                <button
-                  key={item.title}
-                  type="button"
-                  onClick={() => handleAddNode(item.type, item.config, item.label)}
-                  className={cn('group flex cursor-pointer items-center justify-between rounded-lg border p-2 text-left text-xs transition-all', cs.hoverBg, cs.hoverBorder)}
+                <details
+                  key={group.id}
+                  open={group.defaultOpen}
+                  className="rounded-xl border border-slate-200 bg-slate-50/60 [&[open]>summary_svg]:rotate-180"
                 >
-                  <div className="flex min-w-0 items-center gap-2">
-                    <div className={cn('shrink-0 rounded-md p-1.5 transition-colors', cs.iconBg, cs.iconHoverBg)}>
-                      <Icon className="h-3.5 w-3.5" style={{ color: `var(--${item.color})` }} />
-                    </div>
-                    <div className="min-w-0">
-                      <span className="block text-xs font-semibold text-foreground">{item.title}</span>
-                      <span className="block truncate text-[11px] text-muted-foreground">{item.desc}</span>
+                  <summary className="flex cursor-pointer select-none items-center gap-2 px-3 py-2.5 text-[11px] font-semibold text-slate-600">
+                    <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform" />
+                    {group.title}
+                    <span className="ml-auto rounded-full bg-white px-1.5 py-0.5 text-[10px] font-normal text-slate-500 ring-1 ring-slate-200">
+                      {items.length}
+                    </span>
+                  </summary>
+                  <div className="border-t border-slate-200 p-2">
+                    <div className="grid grid-cols-1 gap-1.5">
+                      {items.map((item) => (
+                        <NodeCardButton
+                          key={item.title}
+                          item={item}
+                          onAdd={handleAddNode}
+                        />
+                      ))}
                     </div>
                   </div>
-                  <Plus className="h-3 w-3 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
-                </button>
+                </details>
               );
             })}
           </div>
-        </div>
+        )}
 
         {isSearching && (
           <div>
@@ -242,7 +544,9 @@ export const NodePalette = () => {
                 region per panel keeps trackpad and keyboard navigation sane. */}
             <div className="space-y-1">
               {matchedFunctions.length === 0 ? (
-                <p className="p-2 text-[11px] italic text-muted-foreground">No functions matched</p>
+                <p className="p-2 text-[11px] italic text-muted-foreground">
+                  No functions matched
+                </p>
               ) : (
                 matchedFunctions.map((fn) => (
                   <button
@@ -250,11 +554,17 @@ export const NodePalette = () => {
                     type="button"
                     className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] transition-colors hover:bg-purple-50"
                     title={fn.summary}
-                    onClick={() => handleAddNode('analysis', { operation: fn.name }, fn.name)}
+                    onClick={() =>
+                      handleAddNode("analysis", { operation: fn.name }, fn.name)
+                    }
                   >
                     <Zap className="h-2.5 w-2.5 shrink-0 text-purple-500" />
-                    <span className="shrink-0 font-mono font-semibold text-purple-700">{fn.name}</span>
-                    <span className="truncate text-muted-foreground">{fn.summary}</span>
+                    <span className="shrink-0 font-mono font-semibold text-purple-700">
+                      {fn.name}
+                    </span>
+                    <span className="truncate text-muted-foreground">
+                      {fn.summary}
+                    </span>
                   </button>
                 ))
               )}
@@ -267,7 +577,8 @@ export const NodePalette = () => {
              nodes rather than behind two disclosures in a separate mode. */
           <details className="rounded-xl border border-slate-200 bg-slate-50/60">
             <summary className="cursor-pointer px-3 py-2.5 text-[11px] font-semibold text-slate-600">
-              Scenarios <span className="font-normal text-slate-500">(advanced)</span>
+              Scenarios{" "}
+              <span className="font-normal text-slate-500">(advanced)</span>
             </summary>
             <div className="border-t border-slate-200 px-3 pb-3">
               <VariantPanel />
@@ -283,9 +594,13 @@ export const NodePalette = () => {
           className="flex w-full items-center justify-center gap-2 rounded-lg bg-slate-900 py-2.5 text-xs font-semibold text-white shadow transition-all hover:bg-black active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
         >
           {executing ? (
-            <><Loader2 className="h-4 w-4 animate-spin" /> Executing…</>
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" /> Executing…
+            </>
           ) : (
-            <><Zap className="h-4 w-4 fill-white" /> Execute Workflow</>
+            <>
+              <Zap className="h-4 w-4 fill-white" /> Execute Workflow
+            </>
           )}
         </button>
       </div>
