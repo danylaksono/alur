@@ -1,7 +1,7 @@
-import { useRef, type ChangeEvent } from 'react';
-import { FilePlus2, MousePointerClick, X } from 'lucide-react';
-import { useStore } from '../../store/useStore';
-import { ingestFile } from '../../services/dataIngestion';
+import { useRef, type ChangeEvent } from "react";
+import { FilePlus2, MousePointerClick, X } from "lucide-react";
+import { useStore } from "../../store/useStore";
+import { ingestFile } from "../../services/dataIngestion";
 
 /**
  * First-run overlay shown over the empty map. Non-interactive backdrop so map
@@ -19,7 +19,7 @@ export const MapEmptyState = () => {
 
   const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
-    e.target.value = '';
+    e.target.value = "";
     for (const file of files) {
       await ingestFile(file);
     }
@@ -40,11 +40,15 @@ export const MapEmptyState = () => {
         <div className="rounded-full bg-primary/10 p-3">
           <MousePointerClick className="h-5 w-5 text-primary" />
         </div>
-        <h2 className="text-sm font-bold text-slate-800">Start exploring your data</h2>
+        <h2 className="text-sm font-bold text-slate-800">
+          Start exploring your data
+        </h2>
         <p className="text-xs leading-relaxed text-slate-500">
-          Drop a <span className="font-semibold">Parquet, CSV, JSON, or GeoJSON</span> file
-          to inspect rows, compare distributions, build charts, map spatial patterns and create a reproducible workflow.
-          Everything runs in your browser.
+          Drop a{" "}
+          <span className="font-semibold">Parquet, CSV, JSON, or GeoJSON</span>{" "}
+          file to inspect rows, compare distributions, build charts, map spatial
+          patterns and create a reproducible workflow. Everything runs in your
+          browser.
         </p>
         <button
           type="button"
@@ -53,7 +57,7 @@ export const MapEmptyState = () => {
           className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <FilePlus2 className="h-3.5 w-3.5" />
-          {duckdbReady ? 'Add data' : 'Engine initializing…'}
+          {duckdbReady ? "Add data" : "Engine initializing…"}
         </button>
         <input
           ref={fileInputRef}
