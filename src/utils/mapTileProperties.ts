@@ -5,6 +5,7 @@ const visualisationFields = (visualisation?: LayerVisualisation): string[] => {
   if (!visualisation || visualisation.kind === 'simple') return [];
   if (visualisation.kind === 'bivariate') return [visualisation.fieldX, visualisation.fieldY];
   if (visualisation.kind === 'glyph_grid') return visualisation.fields;
+  if (visualisation.kind === 'h3grid') return visualisation.valueField ? [visualisation.valueField] : [];
   if ('field' in visualisation && visualisation.field) return [visualisation.field];
   return [];
 };

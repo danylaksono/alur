@@ -22,6 +22,14 @@ import {
   type GlyphPoint,
 } from '../../services/glyphGridService';
 import type { GlyphGridVisualisation } from '../../types/visualisation';
+import type { H3GridVisualisation } from '../../types/visualisation';
+import {
+  buildH3GridLayerProps,
+  loadDeckGeo,
+  loadDeckMapbox,
+  queryH3GridRows,
+  type H3GridDatum,
+} from '../../services/h3DeckService';
 import { requiredMapTileProperties } from '../../utils/mapTileProperties';
 import { queryLayerFeatureDetails } from '../../services/visualAnalyticsService';
 import { MapInteractionToolbar } from './MapInteractionToolbar';
@@ -115,6 +123,8 @@ export const MapView = () => {
   const styleReady = useRef(false);
   const glyphLayers = useRef<Map<string, { layer: ScreenGridLayerGL<GlyphPoint, number, number[]>; key: string }>>(new Map());
   const glyphPointCache = useRef<Map<string, { key: string; promise: Promise<GlyphPoint[]> }>>(new Map());
+  const deckOverlayRef = useRef<any>(null);
+  const deckPopupRef = useRef<maplibregl.Popup | null>(null);
   const selectionDrag = useRef<{ start: { x: number; y: number }; operation: SelectionOperation } | null>(null);
   type LayerEventName = 'click' | 'mousemove' | 'mouseleave';
   const layerEventHandlers = useRef<Map<string, Array<{ event: LayerEventName; mapLayerId: string; fn: (...args: any[]) => void }>>>(new Map());
@@ -242,6 +252,10 @@ export const MapView = () => {
       m.off('moveend', storeCamera);
       locationMarker.current?.remove();
       locationMarker.current = null;
+      deckPopupRef.current?.remove();
+      deckPopupRef.current = null;
+      deckOverlayRef.current?.finalize?.();
+      deckOverlayRef.current = null;
       m.remove();
       registerMap(null);
       map.current = null;
@@ -763,9 +777,9 @@ export const MapView = () => {
         }
 
         if (m.getLayer(layerId)) {
-          // Glyph-grid layers render on the screengrid canvas instead; hiding the
-          // base layer keeps feature clicks from competing with cell clicks.
-          const glyphActive = layer.visualisation?.kind === 'glyph_grid';
+          // Glyph-grid and deck H3-grid layers render on their own canvases
+          // instead; hiding the base layer keeps feature clicks from competing.
+          const glyphActive = layer.visualisation?.kind === 'glyph_grid' || layer.visualisation?.kind === 'h3grid';
           m.setLayoutProperty(layerId, 'visibility', layer.visible && !glyphActive ? 'visible' : 'none');
           m.setFilter(layerId, (layer.id === visualAnalytics.comparison?.datasetId ? null : compileMapFilter(layerFilters)) as any);
         }
@@ -866,6 +880,67 @@ export const MapView = () => {
     return () => { cancelled = true; };
   }, [mapLayers, layerFilterKey, selectedBasemapId, selectLayer, setFeatureSelection]);
 
+  // deck.gl H3-grid layers: rendered on the deck overlay canvas, fed from DuckDB.
+  useEffect(() => {
+    const m = map.current;
+    if (!m) return;
+    let cancelled = false;
+
+    const syncDeckLayers = async () => {
+      const wanted = mapLayers.filter(
+        (layer) => layer.visible && layer.visualisation?.kind === 'h3grid',
+      );
+
+      if (!wanted.length) {
+        deckOverlayRef.current?.setProps?.({ layers: [] });
+        return;
+      }
+      if (cancelled) return;
+
+      const [{ H3HexagonLayer }, { MapboxOverlay }] = await Promise.all([loadDeckGeo(), loadDeckMapbox()]);
+      if (cancelled) return;
+
+      if (!deckOverlayRef.current) {
+        const overlay = new MapboxOverlay({
+          interleaved: false,
+          onClick: (info: any) => {
+            const datum = info?.object as H3GridDatum | undefined;
+            const layerId = String(info?.layer?.id ?? '').replace('deck-h3-', '');
+            if (!datum || !layerId) return;
+            const target = mapLayers.find((l) => l.id === layerId);
+            selectLayer(layerId);
+            if (!deckPopupRef.current) {
+              deckPopupRef.current = new maplibregl.Popup({ closeButton: true, closeOnClick: false, maxWidth: '300px' });
+            }
+            const props: Record<string, unknown> = { cell: datum.cell };
+            if (datum.value !== null && datum.value !== undefined) props.value = datum.value;
+            deckPopupRef.current
+              .setLngLat(info.coordinate as [number, number])
+              .setHTML(popupHtml(target?.name || layerId, props))
+              .addTo(m);
+          },
+          onHover: (info: any) => {
+            m.getCanvas().style.cursor = info?.object ? 'pointer' : '';
+          },
+        });
+        m.addControl(overlay);
+        deckOverlayRef.current = overlay;
+      }
+
+      const built: any[] = [];
+      for (const layer of wanted) {
+        const vis = layer.visualisation as H3GridVisualisation;
+        const rows = await queryH3GridRows(layer, vis).catch(() => [] as H3GridDatum[]);
+        if (cancelled) return;
+        built.push(new H3HexagonLayer(buildH3GridLayerProps(layer, vis, rows) as any));
+      }
+      deckOverlayRef.current?.setProps?.({ layers: built });
+    };
+
+    syncDeckLayers();
+    return () => { cancelled = true; };
+  }, [mapLayers, layerFilterKey, selectLayer]);
+
   useEffect(() => {
     const m = map.current;
     if (!m) return;
@@ -925,7 +1000,7 @@ export const MapView = () => {
       const layerId = `input-layer-${layer.id}`;
       if (!m.getLayer(layerId)) return;
       const isInactive = Boolean(activeLayerId && layer.id !== activeLayerId);
-      const glyphActive = layer.visualisation?.kind === 'glyph_grid';
+      const glyphActive = layer.visualisation?.kind === 'glyph_grid' || layer.visualisation?.kind === 'h3grid';
 
       m.setLayoutProperty(layerId, 'visibility', layer.visible && !glyphActive ? 'visible' : 'none');
       m.setFilter(layerId, (layer.id === visualAnalytics.comparison?.datasetId ? null : compileMapFilter(visualAnalytics.datasets[layer.id]?.filters || [])) as any);

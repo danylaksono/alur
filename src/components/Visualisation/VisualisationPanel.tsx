@@ -14,6 +14,7 @@ import {
   buildHexbinVisualisation,
   buildBivariateVisualisation,
   buildGlyphGridVisualisation,
+  buildH3GridVisualisation,
   buildLegend,
   profileGeoJsonField,
   type FieldProfile,
@@ -25,6 +26,7 @@ import { cn } from '../../utils/cn';
 import { queryLayerFieldProfile, queryLayerTemporalRange, type TemporalRange } from '../../services/visualAnalyticsService';
 import { generateDotDensityGeoJSON } from '../../services/dotDensityService';
 import { generateHexbins, type HexbinMethod } from '../../services/hexbinService';
+import { resolveH3CellColumn } from '../../services/h3DeckService';
 import { TemporalSlider } from './TemporalSlider';
 
 const excludedFields = new Set(['geojson', 'geometry', 'geom']);
@@ -167,6 +169,9 @@ export const VisualisationPanel = ({
   const [glyphCellSize, setGlyphCellSize] = useState(48);
   const [glyphFields, setGlyphFields] = useState<string[]>([]);
   const [glyphAggregate, setGlyphAggregate] = useState<'count' | 'sum' | 'avg'>('count');
+  const [h3CellColumn, setH3CellColumn] = useState<string | null>(null);
+  const [h3Extruded, setH3Extruded] = useState(false);
+  const [h3ElevationScale, setH3ElevationScale] = useState(1);
   const [temporalField, setTemporalField] = useState('');
   const [temporalStart, setTemporalStart] = useState('');
   const [temporalEnd, setTemporalEnd] = useState('');
@@ -186,6 +191,18 @@ export const VisualisationPanel = ({
     });
     return () => { cancelled = true; };
   }, [selectedLayer?.id, temporalField]);
+
+  useEffect(() => {
+    if (!selectedLayer) {
+      setH3CellColumn(null);
+      return;
+    }
+    let cancelled = false;
+    resolveH3CellColumn(selectedLayer)
+      .then((column) => { if (!cancelled) setH3CellColumn(column); })
+      .catch(() => { if (!cancelled) setH3CellColumn(null); });
+    return () => { cancelled = true; };
+  }, [selectedLayer?.id, selectedLayer?.source]);
 
   useEffect(() => {
     if (!selectedLayer) {
@@ -229,6 +246,11 @@ export const VisualisationPanel = ({
         setGlyphAggregate(vis.aggregate);
         if (vis.fields[0]) setField(vis.fields[0]);
         else setField(fields[0] || '');
+      }
+      if (vis.kind === 'h3grid') {
+        setH3Extruded(vis.extruded);
+        setH3ElevationScale(vis.elevationScale);
+        setField(vis.valueField || fields[0] || '');
       }
       return;
     }
@@ -288,6 +310,7 @@ export const VisualisationPanel = ({
       (kind === 'extrusion' && geometryKind === 'polygon' && profile?.kind === 'numeric') ||
       (kind === 'graduated_line' && geometryKind === 'line' && profile?.kind === 'numeric') ||
       (kind === 'hexbin' && geometryKind === 'point' && (hexAggregate === 'count' || profile?.kind === 'numeric')) ||
+      (kind === 'h3grid' && Boolean(h3CellColumn)) ||
       (kind === 'glyph_grid' && (
         ['pie', 'donut', 'bars', 'radial'].includes(glyphType)
           ? glyphFields.length > 0
@@ -318,6 +341,19 @@ export const VisualisationPanel = ({
         fields: multivariate ? glyphFields : glyphAggregate === 'count' ? [] : [field],
         aggregate: multivariate ? 'count' : glyphAggregate,
         palette: multivariate ? CATEGORICAL_PALETTE : getPalette(paletteId).colors,
+      });
+      updateLayerVisualisation(selectedLayer.id, visualisation, buildLegend(visualisation));
+      return;
+    }
+
+    if (kind === 'h3grid') {
+      if (!canApply || !h3CellColumn) return;
+      const visualisation = buildH3GridVisualisation({
+        cellColumn: h3CellColumn,
+        valueField: field || undefined,
+        palette: getPalette(paletteId).colors,
+        extruded: h3Extruded,
+        elevationScale: h3ElevationScale,
       });
       updateLayerVisualisation(selectedLayer.id, visualisation, buildLegend(visualisation));
       return;
@@ -558,6 +594,7 @@ export const VisualisationPanel = ({
                   {geometryKind === 'point' && <option value="heatmap">Heatmap</option>}
                   {geometryKind === 'point' && <option value="hexbin">Hexbin</option>}
                   <option value="glyph_grid">Glyph grid</option>
+                  {h3CellColumn && <option value="h3grid">H3 grid (deck)</option>}
                   {geometryKind === 'polygon' && <option value="extrusion">3D extrusion</option>}
                   {geometryKind === 'polygon' && selectedLayer.geojson && <option value="dot_density">Dot density</option>}
                   {geometryKind === 'line' && <option value="graduated_line">Line width</option>}
@@ -578,7 +615,7 @@ export const VisualisationPanel = ({
               </label>
             </div>
 
-            {(kind === 'choropleth' || kind === 'heatmap' || kind === 'extrusion' || kind === 'hexbin') && (
+            {(kind === 'choropleth' || kind === 'heatmap' || kind === 'extrusion' || kind === 'hexbin' || kind === 'h3grid') && (
               <div className="grid grid-cols-3 gap-2">
                 {kind === 'choropleth' && <label className="space-y-1">
                   <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Method</span>
@@ -640,6 +677,30 @@ export const VisualisationPanel = ({
                     <option value="avg">Mean of field</option>
                   </select>
                 </label>}
+                {kind === 'h3grid' && (
+                  <label className="flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-semibold text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={h3Extruded}
+                      onChange={(event) => setH3Extruded(event.target.checked)}
+                      className="h-3.5 w-3.5 rounded border-slate-300 accent-cyan-600"
+                    />
+                    <span>Extrude 3D</span>
+                  </label>
+                )}
+                {kind === 'h3grid' && h3Extruded && (
+                  <label className="space-y-1">
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Height ×</span>
+                    <input
+                      type="number"
+                      min={0.01}
+                      step={0.5}
+                      value={h3ElevationScale}
+                      onChange={(event) => setH3ElevationScale(Number(event.target.value) || 1)}
+                      className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                    />
+                  </label>
+                )}
                 <label className="space-y-1">
                   <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Palette</span>
                   <select
@@ -653,6 +714,12 @@ export const VisualisationPanel = ({
                   </select>
                 </label>
               </div>
+            )}
+
+            {kind === 'h3grid' && (
+              <p className="text-[10px] leading-tight text-slate-500">
+                Drawn by deck.gl on its own canvas — analysis-only, not part of the exported map style.
+              </p>
             )}
 
             {kind === 'glyph_grid' && (

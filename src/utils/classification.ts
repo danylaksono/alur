@@ -13,6 +13,7 @@ import type {
   ClassificationMethod,
   GlyphGridVisualisation,
   GlyphGridGlyph,
+  H3GridVisualisation,
   LayerVisualisation,
   LegendSpec,
 } from '../types/visualisation';
@@ -358,6 +359,28 @@ export const buildGlyphGridVisualisation = ({
   opacity: 0.85,
 });
 
+export const buildH3GridVisualisation = ({
+  cellColumn,
+  valueField,
+  palette,
+  extruded = false,
+  elevationScale = 1,
+}: {
+  cellColumn: string;
+  valueField?: string;
+  palette: string[];
+  extruded?: boolean;
+  elevationScale?: number;
+}): H3GridVisualisation => ({
+  kind: 'h3grid',
+  cellColumn,
+  valueField: valueField || undefined,
+  palette,
+  opacity: 0.82,
+  extruded,
+  elevationScale: Math.max(0.01, elevationScale),
+});
+
 const classBreakItems = (breaks: number[], palette: string[]) =>
   palette.map((color, index) => {
     const low = index === 0 ? undefined : breaks[index - 1];
@@ -474,6 +497,21 @@ export const buildLegend = (
       : `${visualisation.aggregate}(${visualisation.fields[0] ?? ''})`;
     return {
       title: `Glyph ${shape} · ${metric}`,
+      kind: 'heatmap',
+      items: visualisation.palette.map((color, index) => ({
+        label: index === 0 ? 'Low' : index === visualisation.palette.length - 1 ? 'High' : '',
+        color,
+      })),
+    };
+  }
+
+  if (visualisation.kind === 'h3grid') {
+    const metric = visualisation.valueField
+      ? visualisation.valueField
+      : 'count';
+    const elevation = visualisation.extruded ? ` · 3D ×${visualisation.elevationScale}` : '';
+    return {
+      title: `H3 grid · ${metric}${elevation}`,
       kind: 'heatmap',
       items: visualisation.palette.map((color, index) => ({
         label: index === 0 ? 'Low' : index === visualisation.palette.length - 1 ? 'High' : '',

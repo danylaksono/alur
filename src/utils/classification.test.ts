@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildCategoricalVisualisation,
   buildChoroplethVisualisation,
+  buildH3GridVisualisation,
   buildLegend,
   classifyNumericValues,
   profileGeoJsonField,
@@ -62,5 +63,26 @@ describe('classification utilities', () => {
     const categoryLegend = buildLegend(categories);
     expect(categoryLegend.items.map((item) => item.label)).toContain('Other');
     expect(categoryLegend.items[0]).toMatchObject({ count: 1, percentage: 0.5 });
+  });
+
+  it('builds an h3 grid visualisation with sane defaults and a ramp legend', () => {
+    const vis = buildH3GridVisualisation({ cellColumn: 'h3_cell', palette: ['#fff', '#000'] });
+    expect(vis).toMatchObject({ kind: 'h3grid', cellColumn: 'h3_cell', extruded: false, elevationScale: 1, opacity: 0.82 });
+    expect(vis.valueField).toBeUndefined();
+
+    const valued = buildH3GridVisualisation({
+      cellColumn: 'cell',
+      valueField: 'population',
+      palette: ['#fff', '#000'],
+      extruded: true,
+      elevationScale: 3,
+    });
+    expect(valued.valueField).toBe('population');
+    expect(valued.extruded).toBe(true);
+
+    const legend = buildLegend(valued);
+    expect(legend.title).toContain('population');
+    expect(legend.kind).toBe('heatmap');
+    expect(legend.items.length).toBeGreaterThanOrEqual(2);
   });
 });

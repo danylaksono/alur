@@ -678,11 +678,17 @@ export const queryLayerDatasetProfile = async (layer: MapLayer): Promise<Dataset
     let sampledValid = sample.filter((feature) => Boolean(feature.geometry)).length;
     if ((layer.source.kind === 'duckdb-table' || layer.source.kind === 'duckdb-query') && layer.source.geometryColumn) {
       try {
+        // The analytics relation is usually the MVT tile table, where the
+        // geometry is stored as __alur_tile_geom (already in Web Mercator) —
+        // the source's geometry column name does not survive into that table.
+        // Sample validity from the source table instead so the column name is
+        // the one the layer actually declares.
+        const sourceTable = layer.source.tableName || table;
         const geometry = quoteIdentifier(layer.source.geometryColumn);
         const validityResult = await duckdbService.query(
           `SELECT COUNT(*) AS sample_count,
                   COUNT(*) FILTER (WHERE ${geometry} IS NOT NULL AND ST_IsValid(${geometry})) AS valid_count
-           FROM (SELECT ${geometry} FROM ${table} LIMIT 200) AS geometry_sample;`,
+           FROM (SELECT ${geometry} FROM ${quoteIdentifier(sourceTable)} LIMIT 200) AS geometry_sample;`,
         );
         const validity = normalizeRows(validityResult.toArray())[0] || {};
         sampledFeatures = Number(validity.sample_count ?? 0);

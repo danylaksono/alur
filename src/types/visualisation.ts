@@ -18,7 +18,8 @@ export type VisualisationKind =
   | 'graduated_line'
   | 'hexbin'
   | 'bivariate'
-  | 'glyph_grid';
+  | 'glyph_grid'
+  | 'h3grid';
 
 export type LegendItem = {
   label: string;
@@ -189,6 +190,25 @@ export type GlyphGridVisualisation = {
   opacity: number;
 };
 
+/**
+ * H3 hex grid drawn by deck.gl's H3HexagonLayer over the MapLibre map.
+ * Analysis-only style like glyph_grid: it renders on the deck overlay canvas,
+ * so it is not part of the exportable MapLibre style JSON.
+ */
+export type H3GridVisualisation = {
+  kind: 'h3grid';
+  /** Column holding H3 cell ids in their string form. */
+  cellColumn: string;
+  /** Numeric column driving the colour ramp (and optional elevation). */
+  valueField?: string;
+  palette: string[];
+  opacity: number;
+  /** Extrude each cell by its value, as 3D hex columns. */
+  extruded: boolean;
+  /** Elevation scale factor when extruded. */
+  elevationScale: number;
+};
+
 export type LayerVisualisation =
   | SimpleVisualisation
   | ChoroplethVisualisation
@@ -201,4 +221,5 @@ export type LayerVisualisation =
   | GraduatedLineVisualisation
   | HexbinVisualisation
   | BivariateVisualisation
-  | GlyphGridVisualisation;
+  | GlyphGridVisualisation
+  | H3GridVisualisation;

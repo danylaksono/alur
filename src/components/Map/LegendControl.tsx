@@ -8,7 +8,7 @@ import { cn } from '../../utils/cn';
 const MAX_ITEMS = 6;
 
 const legendKindLabel: Record<LegendSpec['kind'], string> = {
-  simple: 'Simple', choropleth: 'Classes', categorical: 'Categories', graduated_symbol: 'Symbols', heatmap: 'Heatmap', label: 'Labels', dot_density: 'Dots', extrusion: '3D', graduated_line: 'Width', hexbin: 'Hexbin', bivariate: 'Bivariate', glyph_grid: 'Glyphs',
+  simple: 'Simple', choropleth: 'Classes', categorical: 'Categories', graduated_symbol: 'Symbols', heatmap: 'Heatmap', label: 'Labels', dot_density: 'Dots', extrusion: '3D', graduated_line: 'Width', hexbin: 'Hexbin', bivariate: 'Bivariate', glyph_grid: 'Glyphs', h3grid: 'H3 grid',
 };
 
 export const LegendControl = ({ legends }: { legends: Array<{ layerId: string; layerName: string; legend: LegendSpec }> }) => {
