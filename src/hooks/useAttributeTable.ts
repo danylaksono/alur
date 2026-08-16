@@ -8,6 +8,7 @@ import {
   queryLayerSelectionBounds,
 } from '../services/visualAnalyticsService';
 import { queryNodeColumnProfile, queryNodePreviewRows } from '../services/workflowPreviewService';
+import { unloadedSourceNodes } from '../utils/workflowEngine';
 import { indicativeParameters } from '../utils/workflowParameters';
 import { useDebouncedValue } from './useDebouncedValue';
 import type { ColumnProfile, HistogramBin } from '../components/DataTable';
@@ -204,8 +205,10 @@ export function useAttributeTable() {
         setNodeTotal(undefined);
         return;
       }
-      const node = nodes.find((item) => item.id === selectedNodeId);
-      if (node?.data.type === 'input' && !node.data.config?.tableName) {
+      // Any unloaded source anywhere on the canvas fails the whole compile,
+      // not just a preview of that node, so waiting quietly beats logging an
+      // error the analyst can do nothing about.
+      if (unloadedSourceNodes(nodes).length) {
         setNodeRows([]);
         setNodeTotal(undefined);
         return;
@@ -277,7 +280,7 @@ export function useAttributeTable() {
         setColumnProfiles((current) => ({ ...current, [column]: profile }));
         return;
       }
-      if (!selectedNodeId) return;
+      if (!selectedNodeId || unloadedSourceNodes(nodes).length) return;
       const profile = await queryNodeColumnProfile({
         nodes,
         edges,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildWorkflowSQL, buildUpToSQL, cteAlias } from './workflowEngine';
+import { buildWorkflowSQL, buildUpToSQL, cteAlias, unloadedSourceNodes } from './workflowEngine';
 import type { WorkflowNode } from '../store/useStore';
 import type { Edge } from '@xyflow/react';
 
@@ -619,5 +619,33 @@ describe('variant parameters', () => {
   it('fails with an actionable message when nothing supplies the value', () => {
     const { nodes, edges } = parameterised({ field: 'score', count: { $param: 'topN' } });
     expect(() => buildWorkflowSQL(nodes, edges)).toThrow(/needs a value for "topN"/);
+  });
+});
+
+describe('unloadedSourceNodes', () => {
+  const loaded = makeNode({ id: 'a', data: { label: 'A', type: 'input', config: { tableName: 'places' } } as any });
+  const loading = makeNode({ id: 'b', data: { label: 'B', type: 'input', config: { remoteUrl: 'https://h/x.parquet' } } as any });
+  const drawn = makeNode({ id: 'c', data: { label: 'C', type: 'geometry', config: {} } as any });
+  const step = makeNode({ id: 'd', type: 'analysis', data: { label: 'D', type: 'analysis', config: { operation: 'ST_Buffer' } } as any });
+
+  it('names the sources that have nothing behind them yet', () => {
+    expect(unloadedSourceNodes([loaded, loading, drawn, step]).map((node) => node.id)).toEqual(['b', 'c']);
+    expect(unloadedSourceNodes([loaded, step])).toEqual([]);
+  });
+
+  it('agrees with what buildWorkflowSQL refuses to compile', () => {
+    const edges: Edge[] = [{ id: 'e1', source: 'b', target: 'd' }] as Edge[];
+    expect(unloadedSourceNodes([loading, step])).toHaveLength(1);
+    expect(() => buildWorkflowSQL([loading, step], edges)).toThrow(/has no table loaded/);
+
+    const readyEdges: Edge[] = [{ id: 'e2', source: 'a', target: 'd' }] as Edge[];
+    expect(unloadedSourceNodes([loaded, step])).toHaveLength(0);
+    expect(() => buildWorkflowSQL([loaded, step], readyEdges)).not.toThrow();
+  });
+
+  it('flags a source that is unrelated to the node being previewed, because the compiler still visits it', () => {
+    const edges: Edge[] = [{ id: 'e3', source: 'a', target: 'd' }] as Edge[];
+    expect(unloadedSourceNodes([loaded, step, loading])).toHaveLength(1);
+    expect(() => buildWorkflowSQL([loaded, step, loading], edges)).toThrow(/has no table loaded/);
   });
 });

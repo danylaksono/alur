@@ -176,6 +176,23 @@ function isBooleanPredicate(operation: string): boolean {
   return BOOLEAN_SPATIAL_PREDICATES.has(operation);
 }
 
+/**
+ * Source nodes that cannot be compiled yet, because nothing is behind them.
+ *
+ * `buildWorkflowSQL` throws on these, and it compiles every node it is given
+ * rather than only the target's ancestors — so one source still loading breaks
+ * a preview of any node on the canvas. Callers that would rather wait than
+ * fail check here first; keeping the predicate beside the code that throws is
+ * what stops the two drifting apart.
+ *
+ * A remote source is why this matters. A file registers in milliseconds, so
+ * the window was too short to notice, but a remote read is bounded by the
+ * network and a failed one never loads at all.
+ */
+export const unloadedSourceNodes = (nodes: WorkflowNode[]) =>
+  nodes.filter((node) =>
+    (node.data.type === 'input' || node.data.type === 'geometry') && !node.data.config?.tableName);
+
 // ─── main builder ─────────────────────────────────────────────────────
 
 export function buildWorkflowSQL(nodes: WorkflowNode[], edges: Edge[], options?: WorkflowBuildOptions): WorkflowResult {
