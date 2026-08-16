@@ -177,7 +177,9 @@ describe('sample visual analytics workflow smoke test', () => {
     expect(configProperties).toBeDefined();
     if (!configProperties) throw new Error('add_node config schema is missing');
     expect(configProperties.outputMode.enum).toEqual(['visualize', 'export']);
-    expect(configProperties.exportFormat.enum).toEqual(['geojson', 'csv', 'json', 'parquet']);
+    expect(configProperties.exportFormat.enum).toEqual([
+      'geojson', 'geojsonl', 'kml', 'kmz', 'gpx', 'wkt-csv', 'csv', 'json', 'parquet',
+    ]);
     expect(configProperties.kind.enum).toEqual(['choropleth', 'categorical', 'graduated_symbol', 'heatmap', 'label', 'dot_density']);
 
     const nodes: WorkflowNode[] = [

@@ -60,7 +60,7 @@ Your goal is to help users inspect, explore, transform, visualise, and gain insi
 - "join": Join two inputs. A (input-0) keeps its rows and geometry; B's (input-1) attributes are appended with an "r_" prefix. Config: mode ("spatial" with predicate ST_Intersects/ST_Within/ST_Contains/ST_DWithin + distance, or "attribute" with leftKey/rightKey), joinType ("left"|"inner").
 - "attribute": Column calculations. Requires "expression" and "resultField".
 - "fragment": Place one of the named operations this project has saved. Requires "fragmentId" and an "arguments" object keyed by the operation's parameter ids. Only place operations that appear in the provided context — never invent an id. If a user asks for something a saved operation clearly does, prefer it over rebuilding the same steps by hand.
-- "output": Mark the final result. Use config.outputMode="visualize" to add it to the map, or config.outputMode="export" with exportFormat ("geojson", "csv", "json", "parquet") to download it.
+- "output": Mark the final result. Use config.outputMode="visualize" to add it to the map, or config.outputMode="export" with exportFormat to download it. Spatial formats: "geojson", "geojsonl", "kml", "kmz", "gpx", "wkt-csv" (KML/KMZ/GPX need longitude/latitude data). Tabular formats, which drop geometry: "csv", "json", "parquet".
 
 Use structured tool calls. Only return a tool call when a UI action is required.
 `;
