@@ -122,9 +122,11 @@ class DuckDBService {
     private initialized = false;
     private spatialLoaded = false;
     private h3Loaded = false;
+    private httpfsLoaded = false;
 
     private initPromise: Promise<void> | null = null;
     private h3Promise: Promise<boolean> | null = null;
+    private httpfsPromise: Promise<boolean> | null = null;
 
     /**
      * Idempotent + concurrency-safe: React StrictMode double-mounts effects, and
@@ -153,7 +155,7 @@ class DuckDBService {
         
         this.db = db;
         this.conn = await db.connect();
-        
+
         try {
             await this.conn.query(`INSTALL spatial; LOAD spatial;`);
             this.spatialLoaded = true;
@@ -206,6 +208,42 @@ class DuckDBService {
             })();
         }
         return this.h3Promise;
+    }
+
+    /**
+     * Loads httpfs on first remote read, never at startup.
+     *
+     * This is what makes reading a file over the web cheap, and nothing else
+     * does. duckdb-wasm's own HTTP runtime answers a scan by downloading the
+     * whole object: measured against a 2.7 MB GeoParquet it fetched all
+     * 2.7 MB, and the `reliableHeadRequests` / `allowFullHTTPReads` filesystem
+     * config did not change that. With httpfs loaded the same query is served
+     * by one 16 KB ranged GET of the Parquet footer, and a bbox-filtered count
+     * over Overture's 576 MB divisions file costs ~834 KB because row-group
+     * statistics let it skip the rest.
+     *
+     * Lazy for the same reason as `ensureH3()`: it costs a network round trip,
+     * and a session that only ever opens local files should not pay for it.
+     * Returns false rather than throwing so callers can report the loss of
+     * range requests as the specific problem it is.
+     */
+    async ensureHttpfs(): Promise<boolean> {
+        if (this.httpfsLoaded) return true;
+        if (!this.httpfsPromise) {
+            this.httpfsPromise = (async () => {
+                await this.init();
+                if (!this.conn) return false;
+                try {
+                    await this.conn.query(`INSTALL httpfs; LOAD httpfs;`);
+                    this.httpfsLoaded = true;
+                    return true;
+                } catch {
+                    this.httpfsPromise = null;
+                    return false;
+                }
+            })();
+        }
+        return this.httpfsPromise;
     }
 
     async query(sql: string) {

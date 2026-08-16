@@ -97,6 +97,80 @@ const registerJsonDataset = async (tableName: string, parsed: ParsedJsonDataset)
   `);
 };
 
+/**
+ * Turns a table that is already in DuckDB into a node and a map layer.
+ *
+ * Shared by the file path and the remote range-read path so a dataset has one
+ * way of coming into existence rather than two, only one of which is tested.
+ * Everything before this point differs (a File is registered, a URL is
+ * scanned); everything after it — geometry inspection, CRS estimate, tile
+ * source, layer, toast — is identical and belongs in one place.
+ */
+export const finaliseIngestedTable = async ({
+  nodeId,
+  tableName,
+  displayName,
+  fingerprint,
+  updateStage,
+  operationId,
+  invalidGeometryCount = 0,
+}: {
+  nodeId: string;
+  tableName: string;
+  displayName: string;
+  fingerprint: SourceFingerprint;
+  updateStage: (detail: string, progress: number) => void;
+  operationId: string;
+  invalidGeometryCount?: number;
+}): Promise<{ tableName: string; layerId: string | null }> => {
+  const { addToast } = useStore.getState();
+
+  updateStage('Inspecting geometry and coordinate system…', 45);
+  const source = await duckdbService.prepareLayerSource(tableName, { kind: 'duckdb-table' });
+  const totalRows = await duckdbService.getTableFeatureCount(tableName);
+
+  if (!source) {
+    const dataset = await ensureWorkflowDataset(nodeId, tableName, displayName);
+    const currentConfig = useStore.getState().nodes.find((node) => node.id === nodeId)?.data.config || {};
+    useStore.getState().rebindDataset(tableDatasetId(tableName), dataset);
+    useStore.getState().updateNode(nodeId, { ...currentConfig, tableName: dataset.relationName || tableName, datasetId: dataset.id, fileName: displayName, sourceFingerprint: fingerprint, featureCount: totalRows, rowIdColumn: dataset.rowIdColumn, rowIdQuality: dataset.rowIdQuality, loadStatus: 'ready', loadStage: undefined });
+    useStore.getState().setSelectedNodeId(nodeId);
+    useStore.getState().finishLoadingOperation(operationId);
+    addToast({ type: 'warning', message: `Registered ${totalRows.toLocaleString()} rows as ${tableName}, but found no renderable geometry or latitude/longitude fields.` });
+    return { tableName, layerId: null };
+  }
+
+  updateStage('Preparing map features…', 78);
+  const renderedFeatureCount = await duckdbService.getTableFeatureCount(source.tileSource.tableName);
+  const { updateNode: updateNodeAgain, addMapLayer, focusLayer } = useStore.getState();
+  const baseConfig = useStore.getState().nodes.find((node) => node.id === nodeId)?.data.config || {};
+  updateNodeAgain(nodeId, {
+    ...baseConfig,
+    tableName,
+    fileName: displayName,
+    sourceFingerprint: fingerprint,
+    featureCount: totalRows,
+    invalidGeometryCount: Math.max(totalRows - renderedFeatureCount, invalidGeometryCount),
+    crs: source.crs,
+    crsName: source.crsName,
+    crsConfidence: source.crsConfidence,
+    crsReason: source.crsReason,
+    loadStatus: 'ready',
+    loadStage: undefined,
+  });
+  addMapLayer({ id: tableName, name: displayName, source, tileSource: source.tileSource, featureCount: renderedFeatureCount, sourceNodeId: nodeId, sourceKind: 'input' });
+  focusLayer(tableName);
+  useStore.getState().updateLoadingOperation(operationId, { detail: 'Drawing features on the map…', progress: 92, waitForLayerId: tableName });
+  const skipped = Math.max(0, totalRows - renderedFeatureCount);
+  addToast({
+    type: skipped ? 'warning' : 'success',
+    message: skipped
+      ? `Loaded ${renderedFeatureCount.toLocaleString()} map features from ${displayName}; preserved ${skipped.toLocaleString()} rows without valid geometry in the table.`
+      : `Loaded ${renderedFeatureCount.toLocaleString()} features from ${displayName}.`,
+  });
+  return { tableName, layerId: tableName };
+};
+
 /** Shared, typed ingestion path used by file pickers, URL/clipboard imports, and drag-and-drop. */
 export const ingestFile = async (
   file: File,
@@ -166,50 +240,15 @@ export const ingestFile = async (
     // and a failure here costs a convenience rather than the dataset.
     void cacheSource(file, { format: detectedFormat });
 
-    updateStage('Inspecting geometry and coordinate system…', 45);
-    const source = await duckdbService.prepareLayerSource(tableName, { kind: 'duckdb-table' });
-    const totalRows = await duckdbService.getTableFeatureCount(tableName);
-
-    if (!source) {
-      const dataset = await ensureWorkflowDataset(nodeId, tableName, file.name);
-      const currentConfig = useStore.getState().nodes.find((node) => node.id === nodeId)?.data.config || {};
-      useStore.getState().rebindDataset(tableDatasetId(tableName), dataset);
-      useStore.getState().updateNode(nodeId, { ...currentConfig, tableName: dataset.relationName || tableName, datasetId: dataset.id, fileName: file.name, sourceFingerprint: fingerprint, featureCount: totalRows, rowIdColumn: dataset.rowIdColumn, rowIdQuality: dataset.rowIdQuality, loadStatus: 'ready', loadStage: undefined });
-      useStore.getState().setSelectedNodeId(nodeId);
-      useStore.getState().finishLoadingOperation(operationId);
-      addToast({ type: 'warning', message: `Registered ${totalRows.toLocaleString()} rows as ${tableName}, but found no renderable geometry or latitude/longitude fields.` });
-      return { tableName, layerId: null };
-    }
-
-    updateStage('Preparing map features…', 78);
-    const renderedFeatureCount = await duckdbService.getTableFeatureCount(source.tileSource.tableName);
-    const { updateNode: updateNodeAgain, addMapLayer, focusLayer } = useStore.getState();
-    const baseConfig = useStore.getState().nodes.find((node) => node.id === nodeId)?.data.config || {};
-    updateNodeAgain(nodeId, {
-      ...baseConfig,
+    return await finaliseIngestedTable({
+      nodeId,
       tableName,
-      fileName: file.name,
-      sourceFingerprint: fingerprint,
-      featureCount: totalRows,
-      invalidGeometryCount: Math.max(totalRows - renderedFeatureCount, invalidGeometryCount),
-      crs: source.crs,
-      crsName: source.crsName,
-      crsConfidence: source.crsConfidence,
-      crsReason: source.crsReason,
-      loadStatus: 'ready',
-      loadStage: undefined,
+      displayName: file.name,
+      fingerprint,
+      updateStage,
+      operationId,
+      invalidGeometryCount,
     });
-    addMapLayer({ id: tableName, name: file.name, source, tileSource: source.tileSource, featureCount: renderedFeatureCount, sourceNodeId: nodeId, sourceKind: 'input' });
-    focusLayer(tableName);
-    useStore.getState().updateLoadingOperation(operationId, { detail: 'Drawing features on the map…', progress: 92, waitForLayerId: tableName });
-    const skipped = Math.max(0, totalRows - renderedFeatureCount);
-    addToast({
-      type: skipped ? 'warning' : 'success',
-      message: skipped
-        ? `Loaded ${renderedFeatureCount.toLocaleString()} map features from ${file.name}; preserved ${skipped.toLocaleString()} rows without valid geometry in the table.`
-        : `Loaded ${renderedFeatureCount.toLocaleString()} features from ${file.name}.`,
-    });
-    return { tableName, layerId: tableName };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     const state = useStore.getState();

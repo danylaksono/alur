@@ -10,7 +10,9 @@ import {
 } from '../types/project';
 import { PROVENANCE_SCHEMA_VERSION, type ProvenanceEvent } from '../types/provenance';
 import { ingestFile } from './dataIngestion';
+import { readRemoteSource } from './remoteSource';
 import { cachedSource } from './sourceCache';
+import type { RemoteBbox } from '../utils/remoteSource';
 import type { WorkflowFragment } from '../utils/workflowFragments';
 import { BASEMAPS } from '../utils/basemaps';
 import { downloadText, filenameTimestamp, safeFilename } from '../utils/download';
@@ -54,20 +56,29 @@ const sanitiseNode = (node: WorkflowNode): WorkflowNode => {
   };
 };
 
+const KNOWN_SOURCE_KINDS = new Set(['url', 'clipboard', 'remote']);
+
 const sourceDescriptorForNode = (node: WorkflowNode): ProjectSourceDescriptor | null => {
   if (node.data.type !== 'input') return null;
   const config = node.data.config || {};
   const fingerprint = isRecord(config.sourceFingerprint) ? config.sourceFingerprint : {};
+  const remoteUrl = typeof config.remoteUrl === 'string' ? config.remoteUrl : undefined;
   const name = String(fingerprint.name || config.fileName || '').trim();
   if (!name) return null;
+  const sourceKind = config.sourceMode === 'remote'
+    ? 'remote'
+    : typeof fingerprint.sourceKind === 'string' && KNOWN_SOURCE_KINDS.has(fingerprint.sourceKind)
+      ? fingerprint.sourceKind as ProjectSourceDescriptor['sourceKind']
+      : 'file';
   return {
     nodeId: node.id,
     name,
     tableName: typeof config.tableName === 'string' ? config.tableName : undefined,
     format: typeof fingerprint.format === 'string' ? fingerprint.format : name.split('.').pop()?.toLowerCase(),
-    sourceKind: fingerprint.sourceKind === 'url' || fingerprint.sourceKind === 'clipboard' ? fingerprint.sourceKind : 'file',
+    sourceKind,
     size: typeof fingerprint.size === 'number' ? fingerprint.size : undefined,
     lastModified: typeof fingerprint.lastModified === 'number' ? fingerprint.lastModified : undefined,
+    url: sourceKind === 'remote' ? remoteUrl : undefined,
   };
 };
 
@@ -480,6 +491,32 @@ export const restoreSourcesFromCache = async (
   const missing: ProjectSourceDescriptor[] = [];
 
   for (const source of sources) {
+    // A remote source needs no cache and no relink prompt: the file never left
+    // its host, so re-reading the saved slice reproduces it exactly. This is
+    // the one source kind that survives being emailed to somebody else.
+    if (source.sourceKind === 'remote' && source.url) {
+      try {
+        const node = manifest.workflow.nodes.find((item) => item.id === source.nodeId);
+        const config = (node?.data.config || {}) as Record<string, unknown>;
+        const result = await readRemoteSource({
+          url: source.url,
+          nodeId: source.nodeId,
+          bbox: isRecord(config.remoteBbox) ? (config.remoteBbox as unknown as RemoteBbox) : null,
+          limit: typeof config.remoteLimit === 'number' ? config.remoteLimit : null,
+          columns: Array.isArray(config.remoteColumns) ? config.remoteColumns.map(String) : undefined,
+        });
+        if (!result) {
+          missing.push(source);
+          continue;
+        }
+        if (result.layerId) applyRelinkedLayerPresentation(source.nodeId, result.layerId, manifest);
+        restored.push(source);
+      } catch {
+        missing.push(source);
+      }
+      continue;
+    }
+
     let file: File | null = null;
     try {
       file = await cachedSource(source);

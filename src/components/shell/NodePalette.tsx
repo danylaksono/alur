@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Calculator, Database, Eye, Filter, Gauge, GitMerge, Layers, Loader2, Package, Palette, PenLine, Plus, Search, SlidersHorizontal, Trash2, Workflow, Zap } from 'lucide-react';
+import { Calculator, Cloud, Database, Eye, Filter, Gauge, GitMerge, Layers, Loader2, Package, Palette, PenLine, Plus, Search, SlidersHorizontal, Trash2, Workflow, Zap } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { buildWorkflowSQL } from '../../utils/workflowEngine';
 import { nextNodePosition } from '../../utils/nodePlacement';
@@ -21,8 +21,9 @@ const colorStyles: Record<string, { hoverBg: string; hoverBorder: string; iconBg
 
 type NodeType = 'input' | 'geometry' | 'analysis' | 'attribute' | 'filter' | 'aggregate' | 'allocate' | 'score' | 'join' | 'visualisation' | 'output' | 'fragment';
 
-const nodeCards: Array<{ type: NodeType; icon: typeof Database; title: string; desc: string; color: string; config?: Record<string, unknown> }> = [
+const nodeCards: Array<{ type: NodeType; icon: typeof Database; title: string; desc: string; color: string; config?: Record<string, unknown>; label?: string }> = [
   { type: 'input', icon: Database, title: 'Data Input', desc: 'Load Parquet or CSV', color: 'blue' },
+  { type: 'input', icon: Cloud, title: 'Remote Data', desc: 'Read Parquet over the web', color: 'blue', config: { sourceMode: 'remote' }, label: 'Remote Source' },
   { type: 'geometry', icon: PenLine, title: 'Draw Features', desc: 'Create points, lines or areas', color: 'cyan' },
   { type: 'analysis', icon: Zap, title: 'Spatial Analysis', desc: 'Buffer, intersect, transform…', color: 'purple' },
   { type: 'attribute', icon: Calculator, title: 'Attribute Calc', desc: 'Add computed columns', color: 'slate' },
@@ -32,7 +33,7 @@ const nodeCards: Array<{ type: NodeType; icon: typeof Database; title: string; d
   { type: 'allocate', icon: Gauge, title: 'Allocate', desc: 'Spend down a budget or capacity', color: 'amber', config: { mode: 'flag', direction: 'desc' } },
   { type: 'join', icon: GitMerge, title: 'Join', desc: 'Attribute or spatial join', color: 'cyan' },
   { type: 'visualisation', icon: Palette, title: 'Visualisation', desc: 'Attach a reusable map style', color: 'purple', config: { kind: 'choropleth', method: 'quantile', classCount: 5, paletteId: 'teal' } },
-  { type: 'output', icon: Eye, title: 'Layer Output', desc: 'Visualize or export the result', color: 'emerald', config: { outputMode: 'visualize' } },
+  { type: 'output', icon: Eye, title: 'Layer Output', desc: 'Visualize or export the result', color: 'emerald', config: { outputMode: 'visualize' }, label: 'Layer Output' },
 ];
 
 const nodeLabels: Record<NodeType, string> = {
@@ -211,9 +212,9 @@ export const NodePalette = () => {
               const cs = colorStyles[item.color] || colorStyles.blue;
               return (
                 <button
-                  key={item.type}
+                  key={item.title}
                   type="button"
-                  onClick={() => handleAddNode(item.type, item.config, item.title === 'Layer Output' ? item.title : undefined)}
+                  onClick={() => handleAddNode(item.type, item.config, item.label)}
                   className={cn('group flex cursor-pointer items-center justify-between rounded-lg border p-2 text-left text-xs transition-all', cs.hoverBg, cs.hoverBorder)}
                 >
                   <div className="flex min-w-0 items-center gap-2">

@@ -14,9 +14,15 @@ export type ProjectSourceDescriptor = {
   name: string;
   tableName?: string;
   format?: string;
-  sourceKind?: 'file' | 'url' | 'clipboard';
+  sourceKind?: 'file' | 'url' | 'clipboard' | 'remote';
   size?: number;
   lastModified?: number;
+  /**
+   * Present only for `remote` sources. A remote source is the one kind that
+   * survives a project round trip on its own: the bytes were never ours to
+   * keep, so the address is the whole of what needs saving.
+   */
+  url?: string;
 };
 
 export type ProjectLayerPresentation = {

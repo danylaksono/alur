@@ -1,5 +1,11 @@
 export type IngestionFormat = 'parquet' | 'csv' | 'json' | 'geojson';
-export type IngestionSourceKind = 'file' | 'url' | 'clipboard';
+/**
+ * `url` downloads the whole file and then reads it; `remote` leaves the file
+ * where it is and reads parts of it over HTTP range requests. They are kept
+ * apart because only `remote` can be reopened from a saved project without the
+ * original bytes, and only `url` is bounded by a download cap.
+ */
+export type IngestionSourceKind = 'file' | 'url' | 'clipboard' | 'remote';
 
 export type IngestionSource =
   | { kind: 'file'; file: File }
