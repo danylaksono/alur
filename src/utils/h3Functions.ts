@@ -82,7 +82,8 @@ export const h3Operations: H3OperationMetadata[] = [
   {
     id: "h3_cell_to_boundary_geometry",
     label: "Cell → boundary geometry",
-    summary: "Cell outline as a real geometry column, so H3 cells become a mappable layer.",
+    summary:
+      "Cell outline as a real geometry column, so H3 cells become a mappable layer.",
     inputs: ["cell"],
     needsResolution: false,
     resultHint: "Polygon geometry",
