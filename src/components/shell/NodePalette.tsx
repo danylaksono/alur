@@ -8,6 +8,7 @@ import {
   Filter,
   Gauge,
   GitMerge,
+  Hexagon,
   Layers,
   Loader2,
   Package,
@@ -89,7 +90,8 @@ type NodeType =
   | "join"
   | "visualisation"
   | "output"
-  | "fragment";
+  | "fragment"
+  | "h3";
 
 /** Logical buckets used to group the palette cards. */
 type NodeGroupId = "source" | "transform" | "analyse" | "output";
@@ -210,6 +212,15 @@ const nodeCards: NodeCard[] = [
     group: "analyse",
   },
   {
+    type: "h3",
+    icon: Hexagon,
+    title: "H3 Operation",
+    desc: "Hex cells, polyfill, boundaries",
+    color: "cyan",
+    config: { mode: "encode", operation: "h3_latlng_to_cell" },
+    group: "analyse",
+  },
+  {
     type: "visualisation",
     icon: Palette,
     title: "Visualisation",
@@ -248,6 +259,7 @@ const nodeLabels: Record<NodeType, string> = {
   join: "Join",
   visualisation: "Visualisation",
   output: "Layer Output",
+  h3: "H3 Op",
 };
 
 /** One palette card. Shared by grouped and search-flattened lists. */

@@ -17,7 +17,10 @@ export function useSchemaFetcher() {
       if (!duckdbReady || nodes.length === 0) return;
 
       try {
-        const { withClause } = buildWorkflowSQL(nodes, edges, { fragments, parameters: indicativeParameters(variants) });
+        const { withClause, needsH3 } = buildWorkflowSQL(nodes, edges, { fragments, parameters: indicativeParameters(variants) });
+        // H3 nodes resolve through DuckDB's community h3 extension; make sure
+        // it is loaded before any per-node schema query touches them.
+        if (needsH3) await duckdbService.ensureH3();
 
         for (const node of nodes) {
           try {

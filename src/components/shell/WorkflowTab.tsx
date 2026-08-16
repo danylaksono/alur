@@ -15,6 +15,7 @@ import { FilterNode } from '../Flow/FilterNode';
 import { JoinNode } from '../Flow/JoinNode';
 import { OutputNode } from '../Flow/OutputNode';
 import { VisualisationNode } from '../Flow/VisualisationNode';
+import { H3Node } from '../Flow/H3Node';
 import { Package } from 'lucide-react';
 import { ErrorBoundary } from '../ErrorBoundary';
 
@@ -34,6 +35,7 @@ const nodeTypes = {
   visualisation: VisualisationNode,
   output: OutputNode,
   fragment: FragmentNode,
+  h3: H3Node,
 };
 
 /** Honours fit requests from the node palette, which lives outside this provider. */

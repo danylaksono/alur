@@ -115,7 +115,10 @@ export const queryNodePreviewRows = async ({
    */
   parameters?: Record<string, unknown>;
 }) => {
-  const { withClause } = buildWorkflowSQL(nodes, edges, { fragments, parameters });
+  const { withClause, needsH3 } = buildWorkflowSQL(nodes, edges, { fragments, parameters });
+  // H3 nodes resolve through DuckDB's community h3 extension; make sure it is
+  // present before the preview SQL (which references its functions) runs.
+  if (needsH3) await duckdbService.ensureH3();
   const targetAlias = cteAlias(nodeId);
   const relation = buildComputedRelation(targetAlias, computedFields);
   const whereClause = combinedWhereClause(schema, search, filters, computedFields);
@@ -158,7 +161,8 @@ export const queryNodeColumnProfile = async ({
   filters?: VisualFilter[];
   computedFields?: ComputedField[];
 }): Promise<ColumnProfile> => {
-  const { withClause } = buildWorkflowSQL(nodes, edges, { fragments });
+  const { withClause, needsH3 } = buildWorkflowSQL(nodes, edges, { fragments });
+  if (needsH3) await duckdbService.ensureH3();
   const targetAlias = cteAlias(nodeId);
   const type = columnType(schema, column);
   const relation = buildComputedRelation(targetAlias, computedFields);

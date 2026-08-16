@@ -1,0 +1,103 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - group "ALUR interactive visual analytics" [ref=e5]:
+      - heading "ALUR ALUR is in beta" [level=1] [ref=e6]:
+        - text: ALUR
+        - generic "ALUR is in beta" [ref=e7]: BETA
+      - button "Untitled project" [ref=e10] [cursor=pointer]
+    - generic [ref=e14]:
+      - generic "DuckDB engine initializing" [ref=e15]: Starting engine…
+      - generic [ref=e17]:
+        - button "Nothing to undo" [disabled] [ref=e18]
+        - button "Nothing to redo" [disabled] [ref=e22]
+      - button "Add data" [disabled] [ref=e26]
+      - button "Settings" [ref=e31] [cursor=pointer]
+  - generic [ref=e35]:
+    - navigation "Primary" [ref=e36]:
+      - generic [ref=e37]:
+        - button "Layers" [pressed] [ref=e38] [cursor=pointer]
+        - button "Charts" [ref=e43] [cursor=pointer]
+        - button "Table" [ref=e46] [cursor=pointer]
+        - button "Workflow" [ref=e51] [cursor=pointer]
+        - button "SQL" [ref=e56] [cursor=pointer]
+      - generic [ref=e59]:
+        - button "Compare" [ref=e61] [cursor=pointer]
+        - button "Score" [ref=e69] [cursor=pointer]
+        - button "Cohorts" [ref=e71] [cursor=pointer]
+      - button "Report" [ref=e79] [cursor=pointer]
+      - generic [ref=e83]:
+        - button "Copilot" [ref=e84] [cursor=pointer]
+        - 'button "Layout: Custom" [ref=e88] [cursor=pointer]'
+        - button "About" [ref=e94] [cursor=pointer]
+        - button "Expand navigation" [ref=e97] [cursor=pointer]
+    - complementary "Panel" [ref=e101]:
+      - generic [ref=e104]:
+        - generic [ref=e106]:
+          - heading "Data Layers" [level=3] [ref=e107]
+          - generic [ref=e112]:
+            - button "Export map style JSON" [disabled] [ref=e113]
+            - generic [ref=e117]: "0"
+        - generic [ref=e118]: Add data or run a workflow to create an explorable layer.
+      - separator "Resize side panel" [ref=e120]
+    - main [ref=e121]:
+      - generic [ref=e124]:
+        - generic [ref=e125]:
+          - generic [ref=e126]:
+            - region "Map" [ref=e127]
+            - generic:
+              - generic:
+                - generic [ref=e128]: 3000 km
+                - group [ref=e129]:
+                  - generic "Toggle attribution" [ref=e130] [cursor=pointer]
+                  - generic [ref=e131]:
+                    - link "MapLibre" [ref=e132] [cursor=pointer]:
+                      - /url: https://maplibre.org/
+                    - text: "| ©"
+                    - link "CARTO" [ref=e133] [cursor=pointer]:
+                      - /url: https://carto.com/about-carto/
+                    - text: ", ©"
+                    - link "OpenStreetMap" [ref=e134] [cursor=pointer]:
+                      - /url: http://www.openstreetmap.org/about/
+                    - text: contributors
+          - search "Search map locations" [ref=e136]:
+            - generic [ref=e140]: Search for a location
+            - combobox "Search for a location" [ref=e141]
+            - button "Search" [ref=e142] [cursor=pointer]
+          - generic "Map controls" [ref=e146]:
+            - button "Zoom in" [ref=e147] [cursor=pointer]
+            - button "Zoom out" [ref=e149] [cursor=pointer]
+            - button "Box select features" [disabled] [ref=e151]
+            - button "Zoom to active layer" [disabled] [ref=e157]
+            - button "Find my location" [ref=e161] [cursor=pointer]
+            - button "Toggle map fullscreen" [ref=e165] [cursor=pointer]
+            - button "Pin this map view to your report" [disabled] [ref=e171]
+            - button "Choose basemap" [ref=e175] [cursor=pointer]
+        - generic [ref=e178]:
+          - button "Dismiss welcome prompt" [ref=e179] [cursor=pointer]
+          - heading "Start exploring your data" [level=2] [ref=e190]
+          - paragraph [ref=e191]: Drop a Parquet, CSV, JSON, or GeoJSON file to inspect rows, compare distributions, build charts, map spatial patterns and create a reproducible workflow. Everything runs in your browser.
+          - button "Engine initializing…" [disabled] [ref=e192]
+      - generic [ref=e196]:
+        - separator "Resize data panel" [ref=e197]
+        - generic [ref=e198]:
+          - generic [ref=e199]:
+            - generic [ref=e200]:
+              - button "Workflow" [ref=e201] [cursor=pointer]
+              - button "Table" [ref=e206] [cursor=pointer]
+              - button "SQL" [ref=e211] [cursor=pointer]
+            - generic [ref=e214]:
+              - button "Maximize panel" [ref=e215] [cursor=pointer]
+              - button "Collapse panel" [ref=e221] [cursor=pointer]
+          - application [ref=e226]:
+            - generic "Control Panel" [ref=e229]:
+              - button "Zoom In" [ref=e230] [cursor=pointer]
+              - button "Zoom Out" [ref=e233] [cursor=pointer]
+              - button "Fit View" [ref=e236] [cursor=pointer]
+              - button "Toggle Interactivity" [ref=e239] [cursor=pointer]
+            - link "React Flow attribution" [ref=e243] [cursor=pointer]:
+              - /url: https://reactflow.dev
+              - text: React Flow
+  - status "Starting the analysis engine. Preparing DuckDB and spatial tools…" [ref=e245]:
+    - generic [ref=e255]:
+      - paragraph [ref=e256]: Starting the analysis engine
+      - paragraph [ref=e257]: Preparing DuckDB and spatial tools…

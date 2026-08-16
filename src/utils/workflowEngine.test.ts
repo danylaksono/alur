@@ -649,3 +649,117 @@ describe('unloadedSourceNodes', () => {
     expect(() => buildWorkflowSQL([loaded, step, loading], edges)).toThrow(/has no table loaded/);
   });
 });
+
+describe('h3 node', () => {
+  const src = makeNode({ id: 'src', data: { label: 'Src', type: 'input', config: { tableName: 'places' } } });
+  const h3 = (config: Record<string, unknown>) =>
+    makeNode({
+      id: 'h3-1',
+      position: { x: 200, y: 0 },
+      data: { label: 'H3', type: 'h3', config },
+    });
+
+  it('turns lat/lng into an H3 cell string and flags needsH3', () => {
+    const edges: Edge[] = [{ id: 'e1', source: 'src', target: 'h3-1', type: 'smoothstep' }];
+    const result = buildWorkflowSQL([src, h3({ operation: 'h3_latlng_to_cell', latField: 'lat', lngField: 'lng', resolution: 7 })], edges);
+
+    expect(result.sql).toContain('h3_latlng_to_cell_string("lat", "lng", 7)');
+    expect(result.sql).toContain('AS "h3_cell"');
+    expect(result.needsH3).toBe(true);
+    expect(result.geomColumn).toBe('geometry');
+  });
+
+  it('wraps cell-to-parent via string/h3 conversions so no 2^53 precision is lost', () => {
+    const edges: Edge[] = [{ id: 'e1', source: 'src', target: 'h3-1', type: 'smoothstep' }];
+    const result = buildWorkflowSQL(
+      [src, h3({ operation: 'h3_cell_to_parent', cellField: 'h3_cell', resolution: 5, resultField: 'parent' })],
+      edges,
+    );
+
+    expect(result.sql).toContain('h3_h3_to_string(h3_cell_to_parent(h3_string_to_h3("h3_cell"), 5))');
+    expect(result.sql).toContain('AS "parent"');
+    expect(result.needsH3).toBe(true);
+  });
+
+  it('emits a WKT boundary for a cell column', () => {
+    const edges: Edge[] = [{ id: 'e1', source: 'src', target: 'h3-1', type: 'smoothstep' }];
+    const result = buildWorkflowSQL(
+      [src, h3({ operation: 'h3_cell_to_boundary_wkt', cellField: 'h3_cell', resultField: 'h3_wkt' })],
+      edges,
+    );
+
+    expect(result.sql).toContain('h3_cell_to_boundary_wkt(h3_string_to_h3("h3_cell"))');
+    expect(result.sql).toContain('AS "h3_wkt"');
+    expect(result.needsH3).toBe(true);
+  });
+
+  it('rejects unknown operations and missing required fields', () => {
+    const edges: Edge[] = [{ id: 'e1', source: 'src', target: 'h3-1', type: 'smoothstep' }];
+    expect(() => buildWorkflowSQL([src, h3({ operation: 'h3_nope' })], edges)).toThrow(/Unsupported H3 operation/);
+    expect(() => buildWorkflowSQL([src, h3({ operation: 'h3_cell_to_parent' })], edges)).toThrow(/incomplete.*cell column/i);
+  });
+
+  it('polyfills a geometry column into dissolved cells with a mappable boundary', () => {
+    const edges: Edge[] = [{ id: 'e1', source: 'src', target: 'h3-1', type: 'smoothstep' }];
+    const result = buildWorkflowSQL(
+      [src, h3({ mode: 'polyfill', geometryField: 'geometry', resolution: 8 })],
+      edges,
+    );
+
+    expect(result.sql).toContain('h3_polygon_wkt_to_cells_string(ST_AsText("geometry"), 8)');
+    expect(result.sql).toContain('COUNT(*) AS feature_count');
+    expect(result.sql).toContain('ST_GeomFromText(h3_cell_to_boundary_wkt(cell)) AS geometry');
+    expect(result.sql).toContain('GROUP BY 1');
+    expect(result.needsH3).toBe(true);
+    expect(result.geomColumn).toBe('geometry');
+  });
+
+  it('encodes a summed attribute onto each cell and buffers lines when asked', () => {
+    const edges: Edge[] = [{ id: 'e1', source: 'src', target: 'h3-1', type: 'smoothstep' }];
+    const result = buildWorkflowSQL(
+      [
+        src,
+        h3({
+          mode: 'polyfill',
+          geometryField: 'geometry',
+          resolution: 7,
+          aggregate: 'sum',
+          valueField: 'population',
+          resultField: 'pop_total',
+          buffer: 500,
+        }),
+      ],
+      edges,
+    );
+
+    expect(result.sql).toContain('ST_AsText(ST_Buffer("geometry", 500))');
+    expect(result.sql).toContain('SUM(__alur_h3_value) AS "pop_total"');
+    expect(result.sql).toContain('"population" AS __alur_h3_value');
+    expect(result.sql).toContain('WHERE "geometry" IS NOT NULL AND "population" IS NOT NULL');
+    expect(result.sql).toContain('COUNT(*) AS feature_count');
+  });
+
+  it('rejects an incomplete polyfill node', () => {
+    const edges: Edge[] = [{ id: 'e1', source: 'src', target: 'h3-1', type: 'smoothstep' }];
+    expect(() => buildWorkflowSQL([src, h3({ mode: 'polyfill', resolution: 9 })], edges)).toThrow(/incomplete.*geometry column/i);
+    expect(() =>
+      buildWorkflowSQL(
+        [src, h3({ mode: 'polyfill', geometryField: 'geometry', aggregate: 'avg' })],
+        edges,
+      ),
+    ).toThrow(/incomplete.*value column/i);
+  });
+
+  it('exports a pure cell table (no geometry) when includeGeometry is off', () => {
+    const edges: Edge[] = [{ id: 'e1', source: 'src', target: 'h3-1', type: 'smoothstep' }];
+    const result = buildWorkflowSQL(
+      [src, h3({ mode: 'polyfill', geometryField: 'geometry', resolution: 8, includeGeometry: false })],
+      edges,
+    );
+
+    expect(result.sql).toContain('h3_polygon_wkt_to_cells_string(ST_AsText("geometry"), 8)');
+    expect(result.sql).not.toContain('h3_cell_to_boundary_wkt');
+    expect(result.geomColumn).toBe('');
+    expect(result.needsH3).toBe(true);
+  });
+});

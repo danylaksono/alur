@@ -142,7 +142,8 @@ export type WorkflowNode = Node & {
       | "join"
       | "visualisation"
       | "output"
-      | "fragment";
+      | "fragment"
+      | "h3";
     config: any;
   };
 };

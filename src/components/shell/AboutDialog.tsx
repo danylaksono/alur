@@ -5,9 +5,42 @@ import packageJson from "../../../package.json";
 
 const AUTHOR_URL = "https://github.com/danylaksono";
 
+/**
+ * Resolved (installed) versions, read from node_modules at build time. The
+ * declared ranges in package.json drift from what npm actually installed (the
+ * duckdb-wasm range declares ^1.28.0 but 1.32.0 is what is on disk), so the
+ * About list prefers these and only falls back to the declared range below.
+ */
+const resolvedVersionFiles = import.meta.glob<string>(
+  [
+    "/node_modules/@duckdb/duckdb-wasm/package.json",
+    "/node_modules/screengrid/package.json",
+    "/node_modules/maplibre-gl/package.json",
+    "/node_modules/react/package.json",
+    "/node_modules/@xyflow/react/package.json",
+    "/node_modules/zustand/package.json",
+    "/node_modules/vite/package.json",
+    "/node_modules/tailwindcss/package.json",
+    "/node_modules/typescript/package.json",
+  ],
+  { eager: true, query: "?raw", import: "default" },
+);
+
+const resolvedVersion = (pkg: string): string => {
+  const raw = resolvedVersionFiles[`/node_modules/${pkg}/package.json`];
+  if (!raw) return "";
+  try {
+    const parsed = JSON.parse(raw) as { version?: string };
+    return typeof parsed.version === "string" ? parsed.version : "";
+  } catch {
+    return "";
+  }
+};
+
 /** Curated highlights of the runtime stack, not an exhaustive inventory. */
 const DEPENDENCIES: Array<{ label: string; pkg: string }> = [
   { label: "DuckDB WASM", pkg: "@duckdb/duckdb-wasm" },
+  { label: "Screengrid", pkg: "screengrid" },
   { label: "MapLibre GL", pkg: "maplibre-gl" },
   { label: "React", pkg: "react" },
   { label: "React Flow", pkg: "@xyflow/react" },
@@ -17,15 +50,27 @@ const DEPENDENCIES: Array<{ label: string; pkg: string }> = [
   { label: "TypeScript", pkg: "typescript" },
 ];
 
-/** Resolves a package's declared version, dropping the semver range prefix. */
+/**
+ * Resolves a package's version for display. Prefers what is actually
+ * installed; falls back to the declared range (dropping the semver prefix), or
+ * the version embedded in a vendored tarball (file:vendor/name-x.y.z.tgz).
+ */
 const dependencyVersion = (pkg: string): string => {
+  const resolved = resolvedVersion(pkg);
+  if (resolved) return resolved;
   const manifest = packageJson as unknown as {
     dependencies?: Record<string, string>;
     devDependencies?: Record<string, string>;
   };
   const version =
     manifest.dependencies?.[pkg] ?? manifest.devDependencies?.[pkg];
-  return version ? version.replace(/^[~^]/, "") : "";
+  if (!version) return "";
+  if (version.startsWith("file:")) {
+    const fileVersion = version.match(/-(\d+(?:\.\d+){1,3})\.tgz$/);
+    if (fileVersion) return fileVersion[1];
+    return "vendored";
+  }
+  return version.replace(/^[~^]/, "");
 };
 
 export const AboutDialog = () => {

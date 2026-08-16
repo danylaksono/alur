@@ -14,8 +14,8 @@ export const llmToolDefinitions = [
         id: { type: 'string', description: 'Unique identifier for the node (optional).' },
         type: {
           type: 'string',
-          enum: ['input', 'analysis', 'attribute', 'aggregate', 'allocate', 'score', 'filter', 'join', 'visualisation', 'output', 'fragment'],
-          description: 'The type of node to create. "join" joins two inputs (A=left keeps geometry, B=right attributes get an r_ prefix); connect A to input-0 and B to input-1. "aggregate" summarises numbers by group (mode="summary") or dissolves geometry (mode="spatial"). "allocate" works down rows in priority order spending a budget or capacity until a limit is reached. "score" combines several columns into one weighted score and ranks by it. "fragment" places one of the named operations this project has saved.'
+          enum: ['input', 'analysis', 'attribute', 'aggregate', 'allocate', 'score', 'filter', 'join', 'visualisation', 'output', 'fragment', 'h3'],
+          description: 'The type of node to create. "join" joins two inputs (A=left keeps geometry, B=right attributes get an r_ prefix); connect A to input-0 and B to input-1. "aggregate" summarises numbers by group (mode="summary") or dissolves geometry (mode="spatial"). "allocate" works down rows in priority order spending a budget or capacity until a limit is reached. "score" combines several columns into one weighted score and ranks by it. "fragment" places one of the named operations this project has saved. "h3" is an H3 hex-grid node using DuckDB\'s built-in h3 extension, with two modes: mode="encode" adds an H3 column derived from lat/lng or an existing cell (operations h3_latlng_to_cell, h3_cell_to_parent, h3_get_resolution, h3_cell_to_lat, h3_cell_to_lng, h3_cell_to_boundary_wkt); mode="polyfill" covers a geometry column with cells at a resolution and dissolves back to one row per cell with attributes encoded on it (count, sum or average of a numeric field), emitting a mappable boundary geometry.'
         },
         label: { type: 'string', description: 'Human-readable label for the node.' },
         position: {
@@ -31,10 +31,18 @@ export const llmToolDefinitions = [
           description: 'Configuration for the node (e.g., operation name, distance, expression, groupBy, condition).',
           properties: {
             tableName: { type: 'string', description: 'For input nodes: the name of the table to load.' },
-            operation: { type: 'string', description: 'For analysis/aggregate nodes: the function name (e.g., ST_Buffer, ST_Union_Agg).' },
+            operation: { type: 'string', description: 'For analysis/aggregate nodes: the function name (e.g., ST_Buffer, ST_Union_Agg). For h3 nodes in mode="encode": one of h3_latlng_to_cell, h3_cell_to_parent, h3_get_resolution, h3_cell_to_lat, h3_cell_to_lng, h3_cell_to_boundary_wkt.' },
             distance: { type: 'number', description: 'For ST_Buffer: the buffer distance.' },
             expression: { type: 'string', description: 'For attribute nodes: the SQL expression.' },
-            resultField: { type: 'string', description: 'For attribute nodes: the name of the new field.' },
+            resultField: { type: 'string', description: 'For attribute/analysis/h3 nodes: the name of the new field.' },
+            latField: { type: 'string', description: 'For h3 nodes using h3_latlng_to_cell: the latitude column.' },
+            lngField: { type: 'string', description: 'For h3 nodes using h3_latlng_to_cell: the longitude column.' },
+            cellField: { type: 'string', description: 'For h3 encode nodes that take a cell column (h3_cell_to_parent, h3_get_resolution, h3_cell_to_lat, h3_cell_to_lng, h3_cell_to_boundary_wkt): the H3 cell-id column.' },
+            resolution: { type: 'number', description: 'For h3 nodes: the H3 resolution (0-15, default 9).' },
+            geometryField: { type: 'string', description: 'For h3 polyfill nodes: the upstream GEOMETRY column to cover with cells.' },
+            aggregate: { type: 'string', enum: ['count', 'sum', 'avg'], description: 'For h3 polyfill nodes: how attributes are encoded onto each dissolved cell.' },
+            valueField: { type: 'string', description: 'For h3 polyfill nodes with aggregate="sum" or "avg": the numeric column to aggregate per cell.' },
+            buffer: { type: 'number', description: 'For h3 polyfill nodes: optional buffer distance (geometry units) so lines become fillable areas. 0 (default) leaves geometry unchanged.' },
             groupBy: { type: 'string', description: 'For aggregate nodes: the column to group by. Omit to collapse the whole table to one row.' },
             measures: {
               type: 'array',
@@ -50,7 +58,7 @@ export const llmToolDefinitions = [
                 required: ['fn'],
               },
             },
-            includeGeometry: { type: 'boolean', description: 'For aggregate nodes with mode="summary" and a group column: merge each group\'s geometry so the summary can still be mapped.' },
+            includeGeometry: { type: 'boolean', description: 'For aggregate nodes with mode="summary" and a group column: merge each group\'s geometry so the summary can still be mapped. For h3 polyfill nodes: whether to emit the cell boundary geometry column — default true (mappable); set false to export a pure attribute table (just H3 cell ids and encoded values) as Parquet/CSV/JSON with no geometry.' },
             scoreModel: {
               type: 'object',
               description: 'For score nodes: the weighted criteria. Each column is normalised across the whole result before weighting, so columns on different scales combine safely.',
@@ -100,8 +108,8 @@ export const llmToolDefinitions = [
             arguments: { type: 'object', description: 'For fragment nodes: a value per parameter the operation asks for, keyed by parameter id.' },
             mode: {
               type: 'string',
-              enum: ['spatial', 'attribute', 'summary', 'condition', 'top-n', 'criteria', 'flag', 'cut', 'scale'],
-              description: 'Join: "spatial" or "attribute". Aggregate: "summary" (numbers) or "spatial" (dissolve geometry). Filter: "condition", "top-n", or "criteria" (named conditions that record why each row was excluded). Allocate: "flag" keeps every row and marks where the limit hit, "cut" drops rows past it, "scale" gives the straddling row a partial share.',
+              enum: ['spatial', 'attribute', 'summary', 'condition', 'top-n', 'criteria', 'flag', 'cut', 'scale', 'encode', 'polyfill'],
+              description: 'Join: "spatial" or "attribute". Aggregate: "summary" (numbers) or "spatial" (dissolve geometry). Filter: "condition", "top-n", or "criteria" (named conditions that record why each row was excluded). Allocate: "flag" keeps every row and marks where the limit hit, "cut" drops rows past it, "scale" gives the straddling row a partial share. H3: "encode" adds an H3 column to each row, "polyfill" covers a geometry with cells and dissolves attributes onto them.',
             },
             joinType: { type: 'string', enum: ['left', 'inner'], description: 'For join nodes: left join keeps unmatched A rows.' },
             predicate: { type: 'string', enum: ['ST_Intersects', 'ST_Within', 'ST_Contains', 'ST_DWithin'], description: 'For spatial join nodes: the predicate.' },

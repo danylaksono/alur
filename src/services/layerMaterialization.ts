@@ -56,6 +56,9 @@ const buildLayer = async (
  * address — a map layer where geometry allows, a registered dataset otherwise.
  */
 export const materializeWorkflowOutput = async (options: MaterializeOptions): Promise<WorkflowMaterialisation> => {
+  // H3 nodes resolve through DuckDB's community h3 extension (loaded lazily);
+  // the SQL will fail with a missing-function error until it is present.
+  if (options.workflow.needsH3) await duckdbService.ensureH3();
   const tableName = safeName(`alur_layer_${options.layerId}`);
   await duckdbService.materializeQueryAsTable(options.workflow.resultSql, tableName);
   const featureCount = await duckdbService.getTableFeatureCount(tableName);

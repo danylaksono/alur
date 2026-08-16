@@ -2,6 +2,7 @@ import type { Edge } from '@xyflow/react';
 import type { WorkflowNode } from '../store/useStore';
 import type { LayerVisualisation } from '../types/visualisation';
 import { spatialFunctions } from './spatialFunctions';
+import { buildH3Expression, buildH3PolyfillBody, h3NodeErrors, h3OperationById, h3PolyfillErrors } from './h3Functions';
 import {
   allocationErrors,
   buildAllocationSelects,
@@ -59,6 +60,8 @@ export interface WorkflowResult {
   geomCrs: string;
   outputLayerName: string;
   visualisationConfig?: WorkflowVisualisationConfig;
+  /** Whether the workflow contains an H3 node; the extension must be loaded first. */
+  needsH3: boolean;
 }
 
 export type WorkflowVisualisationConfig = Partial<LayerVisualisation> & {
@@ -219,6 +222,8 @@ export function buildWorkflowSQL(nodes: WorkflowNode[], edges: Edge[], options?:
 
   const ctes: string[] = [];
   let lastAlias = '';
+  // Set when an H3 node is compiled, so executors know to load the extension.
+  let needsH3 = false;
   // Track geometry column and CRS per CTE
   const nodeMetadata = new Map<string, { geom: string; crs: string }>();
   const visualisationMetadata = new Map<string, WorkflowVisualisationConfig>();
@@ -343,6 +348,43 @@ export function buildWorkflowSQL(nodes: WorkflowNode[], edges: Edge[], options?:
           );
           nodeMetadata.set(alias, { geom: metaA.geom, crs: metaA.crs });
         }
+        lastAlias = alias;
+      }
+    } else if (type === 'h3') {
+      const source = parentAliases[0] || lastAlias;
+      if (!source) throw new Error(`H3 node "${node.id}" has no source.`);
+      const meta = nodeMetadata.get(source) || { geom: 'geometry', crs: 'EPSG:4326' };
+
+      if (config?.mode === 'polyfill') {
+        // Geometry → covering cells, dissolved back to one row per cell with
+        // attributes encoded on. A GEOMETRY boundary column is emitted by
+        // default so the result maps like any other layer; with
+        // includeGeometry=false the output is a pure attribute table (cell ids
+        // + encoded values) that exports to Parquet/CSV/JSON with no geometry.
+        const nodeErrors = h3PolyfillErrors(config || {});
+        if (nodeErrors.length) {
+          throw new Error(`H3 node "${node.id}" is incomplete: ${nodeErrors.join('; ')}`);
+        }
+        const includeGeometry = config?.includeGeometry !== false;
+        needsH3 = true;
+        ctes.push(`${alias} AS (\n${buildH3PolyfillBody(source, meta.geom, config || {})}\n)`);
+        nodeMetadata.set(alias, includeGeometry ? { geom: 'geometry', crs: 'EPSG:4326' } : { geom: '', crs: 'EPSG:4326' });
+        lastAlias = alias;
+      } else {
+        const operation = config?.operation || 'h3_latlng_to_cell';
+        const op = h3OperationById(operation);
+        if (!op) {
+          throw new Error(`Unsupported H3 operation "${operation}".`);
+        }
+        const nodeErrors = h3NodeErrors(op, config || {});
+        if (nodeErrors.length) {
+          throw new Error(`H3 node "${node.id}" is incomplete: ${nodeErrors.join('; ')}`);
+        }
+        const fieldName = config?.resultField || op.resultField;
+        const expression = buildH3Expression(op, config);
+        needsH3 = true;
+        ctes.push(`${alias} AS (\n  SELECT *, ${expression} AS ${qi(fieldName)} FROM ${source}\n)`);
+        nodeMetadata.set(alias, { geom: meta.geom, crs: meta.crs });
         lastAlias = alias;
       }
     } else if (type === 'join') {
@@ -568,6 +610,7 @@ export function buildWorkflowSQL(nodes: WorkflowNode[], edges: Edge[], options?:
     geomCrs: finalMeta.crs,
     outputLayerName: `workflow_${lastAlias}`,
     visualisationConfig: visualisationMetadata.get(lastAlias),
+    needsH3,
   };
 }
 
