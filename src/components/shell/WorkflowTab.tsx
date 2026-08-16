@@ -1,23 +1,32 @@
-import { useEffect, useState } from 'react';
-import { ReactFlow, ReactFlowProvider, Controls, Background, BackgroundVariant, ConnectionLineType, Panel, useReactFlow } from '@xyflow/react';
-import '@xyflow/react/dist/style.css';
-import { useStore } from '../../store/useStore';
-import { InputNode } from '../Flow/InputNode';
-import { GeometryNode } from '../Flow/GeometryNode';
-import { AnalysisNode } from '../Flow/AnalysisNode';
-import { AttributeNode } from '../Flow/AttributeNode';
-import { AggregateNode } from '../Flow/AggregateNode';
-import { AllocateNode } from '../Flow/AllocateNode';
-import { ScoreNode } from '../Flow/ScoreNode';
-import { FragmentNode } from '../Flow/FragmentNode';
-import { SaveFragmentDialog } from '../Flow/SaveFragmentDialog';
-import { FilterNode } from '../Flow/FilterNode';
-import { JoinNode } from '../Flow/JoinNode';
-import { OutputNode } from '../Flow/OutputNode';
-import { VisualisationNode } from '../Flow/VisualisationNode';
-import { H3Node } from '../Flow/H3Node';
-import { Package } from 'lucide-react';
-import { ErrorBoundary } from '../ErrorBoundary';
+import { useEffect, useState } from "react";
+import {
+  ReactFlow,
+  ReactFlowProvider,
+  Controls,
+  Background,
+  BackgroundVariant,
+  ConnectionLineType,
+  Panel,
+  useReactFlow,
+} from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
+import { useStore } from "../../store/useStore";
+import { InputNode } from "../Flow/InputNode";
+import { GeometryNode } from "../Flow/GeometryNode";
+import { AnalysisNode } from "../Flow/AnalysisNode";
+import { AttributeNode } from "../Flow/AttributeNode";
+import { AggregateNode } from "../Flow/AggregateNode";
+import { AllocateNode } from "../Flow/AllocateNode";
+import { ScoreNode } from "../Flow/ScoreNode";
+import { FragmentNode } from "../Flow/FragmentNode";
+import { SaveFragmentDialog } from "../Flow/SaveFragmentDialog";
+import { FilterNode } from "../Flow/FilterNode";
+import { JoinNode } from "../Flow/JoinNode";
+import { OutputNode } from "../Flow/OutputNode";
+import { VisualisationNode } from "../Flow/VisualisationNode";
+import { H3Node } from "../Flow/H3Node";
+import { Package } from "lucide-react";
+import { ErrorBoundary } from "../ErrorBoundary";
 
 /** One grid step. Drives both the visible dots and node snapping. */
 const GRID_SPACING = 24;
@@ -44,7 +53,10 @@ const FitRequestListener = () => {
   const { fitView } = useReactFlow();
   useEffect(() => {
     if (!fitRequest) return;
-    const timer = window.setTimeout(() => fitView({ duration: 300, padding: 0.2, maxZoom: 1 }), 50);
+    const timer = window.setTimeout(
+      () => fitView({ duration: 300, padding: 0.2, maxZoom: 1 }),
+      50,
+    );
     return () => window.clearTimeout(timer);
   }, [fitRequest, fitView]);
   return null;
@@ -63,7 +75,9 @@ export const WorkflowTab = () => {
   // A saved operation has to be a run of steps, so the offer only appears once
   // there is more than one thing selected — and never for a data source, which
   // would bake one file into a supposedly reusable operation.
-  const selectedIds = nodes.filter((node) => node.selected && node.data.type !== 'input').map((node) => node.id);
+  const selectedIds = nodes
+    .filter((node) => node.selected && node.data.type !== "input")
+    .map((node) => node.id);
 
   return (
     <ReactFlowProvider>
@@ -104,8 +118,20 @@ export const WorkflowTab = () => {
             deleteKeyCode={null}
             className="h-full bg-background"
           >
-            <Background id="workflow-grid-lines" variant={BackgroundVariant.Lines} gap={GRID_SPACING * 5} lineWidth={1} color="#e2e8f0" />
-            <Background id="workflow-grid-dots" variant={BackgroundVariant.Dots} gap={GRID_SPACING} size={1.4} color="#cbd5e1" />
+            <Background
+              id="workflow-grid-lines"
+              variant={BackgroundVariant.Lines}
+              gap={GRID_SPACING * 5}
+              lineWidth={1}
+              color="#e2e8f0"
+            />
+            <Background
+              id="workflow-grid-dots"
+              variant={BackgroundVariant.Dots}
+              gap={GRID_SPACING}
+              size={1.4}
+              color="#cbd5e1"
+            />
             <Controls />
             <FitRequestListener />
             {selectedIds.length > 1 && (
@@ -123,7 +149,12 @@ export const WorkflowTab = () => {
           </ReactFlow>
         </ErrorBoundary>
       </div>
-      {savingFragment && <SaveFragmentDialog selectedIds={savingFragment} onClose={() => setSavingFragment(null)} />}
+      {savingFragment && (
+        <SaveFragmentDialog
+          selectedIds={savingFragment}
+          onClose={() => setSavingFragment(null)}
+        />
+      )}
     </ReactFlowProvider>
   );
 };

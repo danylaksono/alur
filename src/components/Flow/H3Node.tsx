@@ -40,17 +40,24 @@ export const H3Node = ({ data, id, selected }: any) => {
   const config = data.config || {};
   const mode = config.mode || "encode";
 
-  const updateConfig = (payload: any) => updateNode(id, { ...config, ...payload });
+  const updateConfig = (payload: any) =>
+    updateNode(id, { ...config, ...payload });
 
   const incomingEdge = edges.find((edge) => edge.target === id);
-  const upstreamSchema = incomingEdge?.source ? nodeSchemas[incomingEdge.source] : null;
+  const upstreamSchema = incomingEdge?.source
+    ? nodeSchemas[incomingEdge.source]
+    : null;
   const columns = useMemo(
     () =>
       (upstreamSchema || [])
-        .map((col: any) => ({ name: col.name || col.column_name, type: String(col.type || "") }))
+        .map((col: any) => ({
+          name: col.name || col.column_name,
+          type: String(col.type || ""),
+        }))
         .filter(
           (col: { name: string; type: string }) =>
-            !EXCLUDED_COLUMNS.has(col.name.toLowerCase()) && !col.name.toLowerCase().startsWith("__alur_"),
+            !EXCLUDED_COLUMNS.has(col.name.toLowerCase()) &&
+            !col.name.toLowerCase().startsWith("__alur_"),
         ),
     [upstreamSchema],
   );
@@ -58,7 +65,11 @@ export const H3Node = ({ data, id, selected }: any) => {
   const geometryColumns = useMemo(
     () =>
       columns
-        .filter((col) => col.type.toLowerCase().includes("geometry") || col.type.toLowerCase().includes("wkb"))
+        .filter(
+          (col) =>
+            col.type.toLowerCase().includes("geometry") ||
+            col.type.toLowerCase().includes("wkb"),
+        )
         .map((col) => col.name),
     [columns],
   );
@@ -68,7 +79,8 @@ export const H3Node = ({ data, id, selected }: any) => {
 
   const encodeErrors = useMemo(() => h3NodeErrors(op, config), [op, config]);
   const polyfillErrors = useMemo(() => h3PolyfillErrors(config), [config]);
-  const errors = mode === "polyfill" ? polyfillErrors : encodeErrors;  const operationOptions = h3Operations.map((item) => ({
+  const errors = mode === "polyfill" ? polyfillErrors : encodeErrors;
+  const operationOptions = h3Operations.map((item) => ({
     value: item.id,
     label: item.label,
     description: item.summary,
@@ -82,10 +94,16 @@ export const H3Node = ({ data, id, selected }: any) => {
   ) => (
     <div>
       <label className={cn(fieldLabelClass, "mb-1")}>{label}</label>
-      <select className={selectClass} value={value} onChange={(event) => onChange(event.target.value)}>
+      <select
+        className={selectClass}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      >
         <option value="">Choose column…</option>
         {pool.map((name) => (
-          <option key={name} value={name}>{name}</option>
+          <option key={name} value={name}>
+            {name}
+          </option>
         ))}
       </select>
     </div>
@@ -129,12 +147,17 @@ export const H3Node = ({ data, id, selected }: any) => {
           <>
             <div className="font-semibold text-slate-800">H3 Polyfill</div>
             <div>
-              Cover each polygon with H3 cells, then dissolve back to one row per cell with its
-              attributes encoded on (count, sum or average). Lines can be buffered first.
+              Cover each polygon with H3 cells, then dissolve back to one row
+              per cell with its attributes encoded on (count, sum or average).
+              Lines can be buffered first.
             </div>
             <div className="text-[11px] text-slate-500">
-              Adds: <span className="font-mono">{config.resultField || "cell_value"}</span> +{" "}
-              <span className="font-mono">feature_count</span> + <span className="font-mono">geometry</span>
+              Adds:{" "}
+              <span className="font-mono">
+                {config.resultField || "cell_value"}
+              </span>{" "}
+              + <span className="font-mono">feature_count</span> +{" "}
+              <span className="font-mono">geometry</span>
             </div>
           </>
         ) : (
@@ -142,7 +165,11 @@ export const H3Node = ({ data, id, selected }: any) => {
             <div className="font-semibold text-slate-800">{op.label}</div>
             <div>{op.summary}</div>
             <div className="text-[11px] text-slate-500">
-              Adds: <span className="font-mono">{config.resultField || op.resultField}</span> ({op.resultHint})
+              Adds:{" "}
+              <span className="font-mono">
+                {config.resultField || op.resultField}
+              </span>{" "}
+              ({op.resultHint})
             </div>
           </>
         )
@@ -165,44 +192,61 @@ export const H3Node = ({ data, id, selected }: any) => {
               min={0}
               max={15}
               value={config.resolution ?? 9}
-              onChange={(event) => updateConfig({ resolution: Number(event.target.value) })}
+              onChange={(event) =>
+                updateConfig({ resolution: Number(event.target.value) })
+              }
               className={inputClass}
             />
           </div>
           <div>
-            <label className={cn(fieldLabelClass, "mb-1")}>Encode attributes</label>
+            <label className={cn(fieldLabelClass, "mb-1")}>
+              Encode attributes
+            </label>
             <select
               className={selectClass}
               value={config.aggregate || "count"}
-              onChange={(event) => updateConfig({ aggregate: event.target.value })}
+              onChange={(event) =>
+                updateConfig({ aggregate: event.target.value })
+              }
             >
               {h3PolyfillAggregates.map((item) => (
-                <option key={item.value} value={item.value}>{item.label}</option>
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
               ))}
             </select>
           </div>
           {(config.aggregate === "sum" || config.aggregate === "avg") &&
-            fieldSelect("Value column", config.valueField || "", (v) => updateConfig({ valueField: v }))}
+            fieldSelect("Value column", config.valueField || "", (v) =>
+              updateConfig({ valueField: v }),
+            )}
           <div>
             <label className={cn(fieldLabelClass, "mb-1")}>Result column</label>
             <input
               type="text"
               value={config.resultField || "cell_value"}
               placeholder="cell_value"
-              onChange={(event) => updateConfig({ resultField: event.target.value })}
+              onChange={(event) =>
+                updateConfig({ resultField: event.target.value })
+              }
               className={inputClass}
             />
           </div>
           <div>
             <label className={cn(fieldLabelClass, "mb-1")}>
-              Buffer distance <span className="font-normal text-slate-400">(geometry units, 0 = off)</span>
+              Buffer distance{" "}
+              <span className="font-normal text-slate-400">
+                (geometry units, 0 = off)
+              </span>
             </label>
             <input
               type="number"
               min={0}
               step="any"
               value={config.buffer ?? 0}
-              onChange={(event) => updateConfig({ buffer: Number(event.target.value) })}
+              onChange={(event) =>
+                updateConfig({ buffer: Number(event.target.value) })
+              }
               className={inputClass}
             />
           </div>
@@ -210,12 +254,16 @@ export const H3Node = ({ data, id, selected }: any) => {
             <input
               type="checkbox"
               checked={config.includeGeometry !== false}
-              onChange={(event) => updateConfig({ includeGeometry: event.target.checked })}
+              onChange={(event) =>
+                updateConfig({ includeGeometry: event.target.checked })
+              }
               className="h-3.5 w-3.5 rounded border-slate-300 text-cyan-600 accent-cyan-600"
             />
             <span className="text-[11px] text-slate-600">
               Include cell geometry{" "}
-              <span className="font-normal text-slate-400">(off = pure table for Parquet/CSV export)</span>
+              <span className="font-normal text-slate-400">
+                (off = pure table for Parquet/CSV export)
+              </span>
             </span>
           </label>
         </>
@@ -226,14 +274,25 @@ export const H3Node = ({ data, id, selected }: any) => {
             <TypeaheadSelect
               value={operation}
               options={operationOptions}
-              onChange={(nextOperation) => updateConfig({ operation: nextOperation })}
+              onChange={(nextOperation) =>
+                updateConfig({ operation: nextOperation })
+              }
               placeholder="Search H3 operations…"
             />
           </div>
 
-          {op.inputs.includes("cell") && fieldSelect("Cell column", config.cellField || "", (v) => updateConfig({ cellField: v }))}
-          {op.inputs.includes("lat") && fieldSelect("Latitude column", config.latField || "", (v) => updateConfig({ latField: v }))}
-          {op.inputs.includes("lng") && fieldSelect("Longitude column", config.lngField || "", (v) => updateConfig({ lngField: v }))}
+          {op.inputs.includes("cell") &&
+            fieldSelect("Cell column", config.cellField || "", (v) =>
+              updateConfig({ cellField: v }),
+            )}
+          {op.inputs.includes("lat") &&
+            fieldSelect("Latitude column", config.latField || "", (v) =>
+              updateConfig({ latField: v }),
+            )}
+          {op.inputs.includes("lng") &&
+            fieldSelect("Longitude column", config.lngField || "", (v) =>
+              updateConfig({ lngField: v }),
+            )}
 
           {op.needsResolution && (
             <div>
@@ -243,7 +302,9 @@ export const H3Node = ({ data, id, selected }: any) => {
                 min={0}
                 max={15}
                 value={config.resolution ?? 9}
-                onChange={(event) => updateConfig({ resolution: Number(event.target.value) })}
+                onChange={(event) =>
+                  updateConfig({ resolution: Number(event.target.value) })
+                }
                 className={inputClass}
               />
             </div>
@@ -255,7 +316,9 @@ export const H3Node = ({ data, id, selected }: any) => {
               type="text"
               value={config.resultField || op.resultField}
               placeholder={op.resultField}
-              onChange={(event) => updateConfig({ resultField: event.target.value })}
+              onChange={(event) =>
+                updateConfig({ resultField: event.target.value })
+              }
               className={inputClass}
             />
           </div>
@@ -263,11 +326,21 @@ export const H3Node = ({ data, id, selected }: any) => {
       )}
 
       {errors.map((error) => (
-        <p key={error} className="text-[10px] text-rose-600">{error}</p>
+        <p key={error} className="text-[10px] text-rose-600">
+          {error}
+        </p>
       ))}
 
-      <Handle type="target" position={Position.Left} className={nodeHandleClass("cyan")} />
-      <Handle type="source" position={Position.Right} className={nodeHandleClass("cyan")} />
+      <Handle
+        type="target"
+        position={Position.Left}
+        className={nodeHandleClass("cyan")}
+      />
+      <Handle
+        type="source"
+        position={Position.Right}
+        className={nodeHandleClass("cyan")}
+      />
     </FlowNodeShell>
   );
 };

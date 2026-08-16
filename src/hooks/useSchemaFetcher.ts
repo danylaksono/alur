@@ -1,8 +1,8 @@
-import { useEffect } from 'react';
-import { useStore } from '../store/useStore';
-import { buildWorkflowSQL, cteAlias } from '../utils/workflowEngine';
-import { indicativeParameters } from '../utils/workflowParameters';
-import { duckdbService } from '../services/duckdb';
+import { useEffect } from "react";
+import { useStore } from "../store/useStore";
+import { buildWorkflowSQL, cteAlias } from "../utils/workflowEngine";
+import { indicativeParameters } from "../utils/workflowParameters";
+import { duckdbService } from "../services/duckdb";
 
 export function useSchemaFetcher() {
   const nodes = useStore((s) => s.nodes);
@@ -17,7 +17,10 @@ export function useSchemaFetcher() {
       if (!duckdbReady || nodes.length === 0) return;
 
       try {
-        const { withClause, needsH3 } = buildWorkflowSQL(nodes, edges, { fragments, parameters: indicativeParameters(variants) });
+        const { withClause, needsH3 } = buildWorkflowSQL(nodes, edges, {
+          fragments,
+          parameters: indicativeParameters(variants),
+        });
         // H3 nodes resolve through DuckDB's community h3 extension; make sure
         // it is loaded before any per-node schema query touches them.
         if (needsH3) await duckdbService.ensureH3();

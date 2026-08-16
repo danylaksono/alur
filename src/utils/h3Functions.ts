@@ -25,7 +25,8 @@ export const h3Operations: H3OperationMetadata[] = [
   {
     id: "h3_latlng_to_cell",
     label: "Lat/Lng → H3 cell",
-    summary: "Assign an H3 cell to each row from latitude and longitude columns.",
+    summary:
+      "Assign an H3 cell to each row from latitude and longitude columns.",
     inputs: ["lat", "lng"],
     needsResolution: true,
     resultHint: "H3 cell id (string)",
@@ -82,8 +83,9 @@ export const h3OperationById = (id: string): H3OperationMetadata | undefined =>
   h3Operations.find((op) => op.id === id);
 
 /** Whether a workflow graph contains any H3 node (needs the extension loaded). */
-export const workflowUsesH3 = (nodes: Array<{ data?: { type?: string } }>): boolean =>
-  nodes.some((node) => node.data?.type === "h3");
+export const workflowUsesH3 = (
+  nodes: Array<{ data?: { type?: string } }>,
+): boolean => nodes.some((node) => node.data?.type === "h3");
 
 const qi = (name: unknown) => `"${String(name).replace(/"/g, '""')}"`;
 
@@ -100,7 +102,9 @@ export const buildH3Expression = (
     case "h3_latlng_to_cell":
       return `h3_latlng_to_cell_string(${qi(config.latField)}, ${qi(config.lngField)}, ${resolution})`;
     case "h3_cell_to_parent":
-      return cellOut(`h3_cell_to_parent(${cell(config.cellField)}, ${resolution})`);
+      return cellOut(
+        `h3_cell_to_parent(${cell(config.cellField)}, ${resolution})`,
+      );
     case "h3_get_resolution":
       return `h3_get_resolution(${cell(config.cellField)})`;
     case "h3_cell_to_lat":
@@ -126,10 +130,14 @@ export const h3NodeErrors = (
 
   if (op.inputs.includes("lat")) needs("latField", "Choose a latitude column");
   if (op.inputs.includes("lng")) needs("lngField", "Choose a longitude column");
-  if (op.inputs.includes("cell")) needs("cellField", "Choose an H3 cell column");
+  if (op.inputs.includes("cell"))
+    needs("cellField", "Choose an H3 cell column");
 
   const resolution = Number(config.resolution ?? 9);
-  if (op.needsResolution && (!Number.isInteger(resolution) || resolution < 0 || resolution > 15)) {
+  if (
+    op.needsResolution &&
+    (!Number.isInteger(resolution) || resolution < 0 || resolution > 15)
+  ) {
     errors.push("Resolution must be a whole number from 0 to 15");
   }
 
@@ -145,10 +153,22 @@ export const h3NodeErrors = (
 /** How attributes are encoded onto the dissolved cells. */
 export type H3PolyfillAggregate = "count" | "sum" | "avg";
 
-export const h3PolyfillAggregates: Array<{ value: H3PolyfillAggregate; label: string; hint: string }> = [
+export const h3PolyfillAggregates: Array<{
+  value: H3PolyfillAggregate;
+  label: string;
+  hint: string;
+}> = [
   { value: "count", label: "Count features", hint: "Features per cell" },
-  { value: "sum", label: "Sum value", hint: "Total of a numeric field per cell" },
-  { value: "avg", label: "Average value", hint: "Mean of a numeric field per cell" },
+  {
+    value: "sum",
+    label: "Sum value",
+    hint: "Total of a numeric field per cell",
+  },
+  {
+    value: "avg",
+    label: "Average value",
+    hint: "Mean of a numeric field per cell",
+  },
 ];
 
 export interface H3PolyfillConfig {
@@ -241,7 +261,9 @@ export const buildH3PolyfillBody = (
 
   const columns = ["    cell", ...aggregates.map((agg) => `    ${agg}`)];
   if (includeGeometry) {
-    columns.push("    ST_GeomFromText(h3_cell_to_boundary_wkt(cell)) AS geometry");
+    columns.push(
+      "    ST_GeomFromText(h3_cell_to_boundary_wkt(cell)) AS geometry",
+    );
   }
 
   return [

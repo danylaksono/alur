@@ -1,8 +1,14 @@
-import type { Edge } from '@xyflow/react';
-import type { WorkflowNode } from '../store/useStore';
-import type { LayerVisualisation } from '../types/visualisation';
-import { spatialFunctions } from './spatialFunctions';
-import { buildH3Expression, buildH3PolyfillBody, h3NodeErrors, h3OperationById, h3PolyfillErrors } from './h3Functions';
+import type { Edge } from "@xyflow/react";
+import type { WorkflowNode } from "../store/useStore";
+import type { LayerVisualisation } from "../types/visualisation";
+import { spatialFunctions } from "./spatialFunctions";
+import {
+  buildH3Expression,
+  buildH3PolyfillBody,
+  h3NodeErrors,
+  h3OperationById,
+  h3PolyfillErrors,
+} from "./h3Functions";
 import {
   allocationErrors,
   buildAllocationSelects,
@@ -11,18 +17,22 @@ import {
   summaryMeasureErrors,
   type AllocationConfig,
   type SummaryMeasure,
-} from './aggregationSql';
-import { buildContributionSelects, buildScoreExpression, scoreModelErrors } from './scoreModel';
+} from "./aggregationSql";
+import {
+  buildContributionSelects,
+  buildScoreExpression,
+  scoreModelErrors,
+} from "./scoreModel";
 import {
   buildExclusionSelects,
   buildKeepExpression,
   filterPredicateErrors,
   type FilterOutcome,
   type FilterPredicate,
-} from './filterPredicates';
-import { expandFragments, type WorkflowFragment } from './workflowFragments';
-import { resolveNodeParameters } from './workflowParameters';
-import type { ScoreModelSpec } from '../types/visualAnalytics';
+} from "./filterPredicates";
+import { expandFragments, type WorkflowFragment } from "./workflowFragments";
+import { resolveNodeParameters } from "./workflowParameters";
+import type { ScoreModelSpec } from "../types/visualAnalytics";
 
 export type WorkflowBuildOptions = {
   limit?: number;
@@ -65,62 +75,67 @@ export interface WorkflowResult {
 }
 
 export type WorkflowVisualisationConfig = Partial<LayerVisualisation> & {
-  kind?: LayerVisualisation['kind'];
+  kind?: LayerVisualisation["kind"];
   field?: string;
   paletteId?: string;
 };
 
 const GEOMETRY_RETURNING_FUNCTIONS = new Set([
-  'ST_Affine',
-  'ST_Boundary',
-  'ST_Buffer',
-  'ST_BuildArea',
-  'ST_Centroid',
-  'ST_Collect',
-  'ST_CollectionExtract',
-  'ST_ConcaveHull',
-  'ST_ConvexHull',
-  'ST_Difference',
-  'ST_EndPoint',
-  'ST_Envelope',
-  'ST_Force2D',
-  'ST_Force3D',
-  'ST_GeomFromGeoJSON',
-  'ST_GeomFromText',
-  'ST_GeomFromWKB',
-  'ST_Intersection',
-  'ST_LineMerge',
-  'ST_MakeEnvelope',
-  'ST_MakeLine',
-  'ST_MakePolygon',
-  'ST_Multi',
-  'ST_Normalize',
-  'ST_PointN',
-  'ST_ReducePrecision',
-  'ST_RemoveRepeatedPoints',
-  'ST_Reverse',
-  'ST_Simplify',
-  'ST_SimplifyPreserveTopology',
-  'ST_StartPoint',
-  'ST_Transform',
-  'ST_Union',
+  "ST_Affine",
+  "ST_Boundary",
+  "ST_Buffer",
+  "ST_BuildArea",
+  "ST_Centroid",
+  "ST_Collect",
+  "ST_CollectionExtract",
+  "ST_ConcaveHull",
+  "ST_ConvexHull",
+  "ST_Difference",
+  "ST_EndPoint",
+  "ST_Envelope",
+  "ST_Force2D",
+  "ST_Force3D",
+  "ST_GeomFromGeoJSON",
+  "ST_GeomFromText",
+  "ST_GeomFromWKB",
+  "ST_Intersection",
+  "ST_LineMerge",
+  "ST_MakeEnvelope",
+  "ST_MakeLine",
+  "ST_MakePolygon",
+  "ST_Multi",
+  "ST_Normalize",
+  "ST_PointN",
+  "ST_ReducePrecision",
+  "ST_RemoveRepeatedPoints",
+  "ST_Reverse",
+  "ST_Simplify",
+  "ST_SimplifyPreserveTopology",
+  "ST_StartPoint",
+  "ST_Transform",
+  "ST_Union",
 ]);
 
-export const JOIN_PREDICATES = new Set(['ST_Intersects', 'ST_Within', 'ST_Contains', 'ST_DWithin']);
+export const JOIN_PREDICATES = new Set([
+  "ST_Intersects",
+  "ST_Within",
+  "ST_Contains",
+  "ST_DWithin",
+]);
 
 const BOOLEAN_SPATIAL_PREDICATES = new Set([
-  'ST_Contains',
-  'ST_ContainsProperly',
-  'ST_CoveredBy',
-  'ST_Covers',
-  'ST_Crosses',
-  'ST_Disjoint',
-  'ST_DWithin',
-  'ST_Equals',
-  'ST_Intersects',
-  'ST_Overlaps',
-  'ST_Touches',
-  'ST_Within',
+  "ST_Contains",
+  "ST_ContainsProperly",
+  "ST_CoveredBy",
+  "ST_Covers",
+  "ST_Crosses",
+  "ST_Disjoint",
+  "ST_DWithin",
+  "ST_Equals",
+  "ST_Intersects",
+  "ST_Overlaps",
+  "ST_Touches",
+  "ST_Within",
 ]);
 
 // ─── helpers ──────────────────────────────────────────────────────────
@@ -140,7 +155,9 @@ function topoSort(nodes: WorkflowNode[], edges: Edge[]): WorkflowNode[] {
     inDeg.set(e.target, (inDeg.get(e.target) ?? 0) + 1);
   });
 
-  const queue = nodes.filter((n) => (inDeg.get(n.id) ?? 0) === 0).map((n) => n.id);
+  const queue = nodes
+    .filter((n) => (inDeg.get(n.id) ?? 0) === 0)
+    .map((n) => n.id);
   const sorted: string[] = [];
 
   while (queue.length) {
@@ -164,11 +181,11 @@ function qi(name: string): string {
 
 /** Create a safe CTE alias from a node id. */
 export function cteAlias(nodeId: string): string {
-  return nodeId.replace(/[^a-zA-Z0-9_]/g, '_');
+  return nodeId.replace(/[^a-zA-Z0-9_]/g, "_");
 }
 
 function resultFieldName(operation: string): string {
-  return `${operation.replace(/^ST_/, '').toLowerCase()}_result`;
+  return `${operation.replace(/^ST_/, "").toLowerCase()}_result`;
 }
 
 function isGeometryReturning(operation: string): boolean {
@@ -193,14 +210,21 @@ function isBooleanPredicate(operation: string): boolean {
  * network and a failed one never loads at all.
  */
 export const unloadedSourceNodes = (nodes: WorkflowNode[]) =>
-  nodes.filter((node) =>
-    (node.data.type === 'input' || node.data.type === 'geometry') && !node.data.config?.tableName);
+  nodes.filter(
+    (node) =>
+      (node.data.type === "input" || node.data.type === "geometry") &&
+      !node.data.config?.tableName,
+  );
 
 // ─── main builder ─────────────────────────────────────────────────────
 
-export function buildWorkflowSQL(nodes: WorkflowNode[], edges: Edge[], options?: WorkflowBuildOptions): WorkflowResult {
+export function buildWorkflowSQL(
+  nodes: WorkflowNode[],
+  edges: Edge[],
+  options?: WorkflowBuildOptions,
+): WorkflowResult {
   if (!nodes.length) {
-    throw new Error('No nodes in the workflow.');
+    throw new Error("No nodes in the workflow.");
   }
 
   const resultLimit = options?.limit ?? 5000;
@@ -221,7 +245,7 @@ export function buildWorkflowSQL(nodes: WorkflowNode[], edges: Edge[], options?:
   });
 
   const ctes: string[] = [];
-  let lastAlias = '';
+  let lastAlias = "";
   // Set when an H3 node is compiled, so executors know to load the extension.
   let needsH3 = false;
   // Track geometry column and CRS per CTE
@@ -234,30 +258,34 @@ export function buildWorkflowSQL(nodes: WorkflowNode[], edges: Edge[], options?:
     nodeIdByAlias.set(alias, node.id);
     const { type, config } = node.data;
     const parentEdges = [...(parentsMap.get(node.id) || [])].sort((a, b) =>
-      String(a.targetHandle || '').localeCompare(String(b.targetHandle || ''))
+      String(a.targetHandle || "").localeCompare(String(b.targetHandle || "")),
     );
-    const parentAliases = parentEdges.map(edge => cteAlias(edge.source));
+    const parentAliases = parentEdges.map((edge) => cteAlias(edge.source));
 
-    if (type === 'input' || type === 'geometry') {
+    if (type === "input" || type === "geometry") {
       const tableName = config?.tableName;
       if (!tableName) {
         // A drawn layer exists only in the node until it is committed, so the
         // message points at the step that would make it queryable.
-        throw new Error(type === 'geometry'
-          ? `Drawn layer "${node.id}" has not been created yet. Use "Create dataset" on the node to make it queryable.`
-          : `Input node "${node.id}" has no table loaded.`);
+        throw new Error(
+          type === "geometry"
+            ? `Drawn layer "${node.id}" has not been created yet. Use "Create dataset" on the node to make it queryable.`
+            : `Input node "${node.id}" has no table loaded.`,
+        );
       }
       ctes.push(`${alias} AS (\n  SELECT * FROM ${qi(tableName)}\n)`);
       lastAlias = alias;
-      nodeMetadata.set(alias, { geom: 'geometry', crs: 'EPSG:4326' });
-    } else if (type === 'analysis') {
-      const operation = config?.operation || 'ST_Buffer';
+      nodeMetadata.set(alias, { geom: "geometry", crs: "EPSG:4326" });
+    } else if (type === "analysis") {
+      const operation = config?.operation || "ST_Buffer";
       const fn = spatialFunctions.find((f) => f.name === operation);
       if (!fn) {
         throw new Error(`Unsupported spatial operation "${operation}".`);
       }
-      if (fn.category === 'Table' || fn.category === 'Macro') {
-        throw new Error(`Operation "${operation}" is a ${fn.category.toLowerCase()} function and cannot be used as a row-by-row analysis node.`);
+      if (fn.category === "Table" || fn.category === "Macro") {
+        throw new Error(
+          `Operation "${operation}" is a ${fn.category.toLowerCase()} function and cannot be used as a row-by-row analysis node.`,
+        );
       }
       const inputCount = fn?.requiredInputCount ?? 1;
 
@@ -265,13 +293,15 @@ export function buildWorkflowSQL(nodes: WorkflowNode[], edges: Edge[], options?:
         const args: string[] = [];
 
         // Named parameters from node config (generic system)
-        const extraParams = config?.params as Record<string, unknown> | undefined;
+        const extraParams = config?.params as
+          | Record<string, unknown>
+          | undefined;
         if (extraParams) {
           for (const [_key, v] of Object.entries(extraParams)) {
-            if (v === undefined || v === null || v === '') continue;
-            if (typeof v === 'number' || typeof v === 'boolean') {
+            if (v === undefined || v === null || v === "") continue;
+            if (typeof v === "number" || typeof v === "boolean") {
               args.push(String(v));
-            } else if (typeof v === 'string') {
+            } else if (typeof v === "string") {
               // Check if it's a numeric string
               const num = Number(v);
               if (!Number.isNaN(num)) {
@@ -283,33 +313,37 @@ export function buildWorkflowSQL(nodes: WorkflowNode[], edges: Edge[], options?:
           }
         }
 
-        return args.length > 0 ? `, ${args.join(', ')}` : '';
+        return args.length > 0 ? `, ${args.join(", ")}` : "";
       };
 
       if (inputCount === 1) {
         const source = parentAliases[0] || lastAlias;
-        if (!source) throw new Error(`Analysis node "${node.id}" has no source.`);
-        const meta = nodeMetadata.get(source) || { geom: 'geometry', crs: 'EPSG:4326' };
-        
-        let sql = '';
-        let newGeom = 'geom_result';
+        if (!source)
+          throw new Error(`Analysis node "${node.id}" has no source.`);
+        const meta = nodeMetadata.get(source) || {
+          geom: "geometry",
+          crs: "EPSG:4326",
+        };
+
+        let sql = "";
+        let newGeom = "geom_result";
         let newCrs = meta.crs;
 
-        if (operation === 'ST_Transform') {
+        if (operation === "ST_Transform") {
           const srcCrs = config?.sourceCrs || meta.crs;
-          const tgtCrs = config?.targetCrs || 'EPSG:3857';
+          const tgtCrs = config?.targetCrs || "EPSG:3857";
           sql = `SELECT *, ST_Transform(${qi(meta.geom)}, '${srcCrs}', '${tgtCrs}') AS geom_transformed FROM ${source}`;
-          newGeom = 'geom_transformed';
+          newGeom = "geom_transformed";
           newCrs = tgtCrs;
-        } else if (operation === 'ST_Buffer') {
+        } else if (operation === "ST_Buffer") {
           const distance = config?.distance ?? config?.params?.distance ?? 100;
           sql = `SELECT *, ST_Buffer(${qi(meta.geom)}, ${distance}) AS geom_buffered FROM ${source}`;
-          newGeom = 'geom_buffered';
+          newGeom = "geom_buffered";
         } else {
           const funcArgs = `${qi(meta.geom)}${buildExtraArgs()}`;
           if (isGeometryReturning(operation)) {
             sql = `SELECT *, ${operation}(${funcArgs}) AS geom_result FROM ${source}`;
-            newGeom = 'geom_result';
+            newGeom = "geom_result";
           } else {
             const fieldName = config?.resultField || resultFieldName(operation);
             sql = `SELECT *, ${operation}(${funcArgs}) AS ${qi(fieldName)} FROM ${source}`;
@@ -323,7 +357,9 @@ export function buildWorkflowSQL(nodes: WorkflowNode[], edges: Edge[], options?:
       } else {
         // Multi-input functions (e.g., ST_Intersection, ST_Difference)
         if (parentAliases.length < 2) {
-          throw new Error(`Operation "${operation}" requires 2 input connections.`);
+          throw new Error(
+            `Operation "${operation}" requires 2 input connections.`,
+          );
         }
         const sourceA = parentAliases[0];
         const sourceB = parentAliases[1];
@@ -334,9 +370,12 @@ export function buildWorkflowSQL(nodes: WorkflowNode[], edges: Edge[], options?:
         const rightGeom = `b.${qi(metaB.geom)}`;
         if (isGeometryReturning(operation)) {
           ctes.push(
-            `${alias} AS (\n  SELECT a.*, ${operation}(${leftGeom}, ${rightGeom}) AS geom_multi_result\n  FROM ${sourceA} a, ${sourceB} b\n  WHERE ST_Intersects(${leftGeom}, ${rightGeom})\n)`
+            `${alias} AS (\n  SELECT a.*, ${operation}(${leftGeom}, ${rightGeom}) AS geom_multi_result\n  FROM ${sourceA} a, ${sourceB} b\n  WHERE ST_Intersects(${leftGeom}, ${rightGeom})\n)`,
           );
-          nodeMetadata.set(alias, { geom: 'geom_multi_result', crs: metaA.crs });
+          nodeMetadata.set(alias, {
+            geom: "geom_multi_result",
+            crs: metaA.crs,
+          });
         } else {
           const fieldName = config?.resultField || resultFieldName(operation);
           const predicate = `${operation}(${leftGeom}, ${rightGeom})`;
@@ -344,18 +383,21 @@ export function buildWorkflowSQL(nodes: WorkflowNode[], edges: Edge[], options?:
             ? `\n  WHERE ${predicate}`
             : `\n  WHERE ST_Intersects(${leftGeom}, ${rightGeom})`;
           ctes.push(
-            `${alias} AS (\n  SELECT a.*, ${predicate} AS ${qi(fieldName)}\n  FROM ${sourceA} a, ${sourceB} b${whereClause}\n)`
+            `${alias} AS (\n  SELECT a.*, ${predicate} AS ${qi(fieldName)}\n  FROM ${sourceA} a, ${sourceB} b${whereClause}\n)`,
           );
           nodeMetadata.set(alias, { geom: metaA.geom, crs: metaA.crs });
         }
         lastAlias = alias;
       }
-    } else if (type === 'h3') {
+    } else if (type === "h3") {
       const source = parentAliases[0] || lastAlias;
       if (!source) throw new Error(`H3 node "${node.id}" has no source.`);
-      const meta = nodeMetadata.get(source) || { geom: 'geometry', crs: 'EPSG:4326' };
+      const meta = nodeMetadata.get(source) || {
+        geom: "geometry",
+        crs: "EPSG:4326",
+      };
 
-      if (config?.mode === 'polyfill') {
+      if (config?.mode === "polyfill") {
         // Geometry → covering cells, dissolved back to one row per cell with
         // attributes encoded on. A GEOMETRY boundary column is emitted by
         // default so the result maps like any other layer; with
@@ -363,240 +405,313 @@ export function buildWorkflowSQL(nodes: WorkflowNode[], edges: Edge[], options?:
         // + encoded values) that exports to Parquet/CSV/JSON with no geometry.
         const nodeErrors = h3PolyfillErrors(config || {});
         if (nodeErrors.length) {
-          throw new Error(`H3 node "${node.id}" is incomplete: ${nodeErrors.join('; ')}`);
+          throw new Error(
+            `H3 node "${node.id}" is incomplete: ${nodeErrors.join("; ")}`,
+          );
         }
         const includeGeometry = config?.includeGeometry !== false;
         needsH3 = true;
-        ctes.push(`${alias} AS (\n${buildH3PolyfillBody(source, meta.geom, config || {})}\n)`);
-        nodeMetadata.set(alias, includeGeometry ? { geom: 'geometry', crs: 'EPSG:4326' } : { geom: '', crs: 'EPSG:4326' });
+        ctes.push(
+          `${alias} AS (\n${buildH3PolyfillBody(source, meta.geom, config || {})}\n)`,
+        );
+        nodeMetadata.set(
+          alias,
+          includeGeometry
+            ? { geom: "geometry", crs: "EPSG:4326" }
+            : { geom: "", crs: "EPSG:4326" },
+        );
         lastAlias = alias;
       } else {
-        const operation = config?.operation || 'h3_latlng_to_cell';
+        const operation = config?.operation || "h3_latlng_to_cell";
         const op = h3OperationById(operation);
         if (!op) {
           throw new Error(`Unsupported H3 operation "${operation}".`);
         }
         const nodeErrors = h3NodeErrors(op, config || {});
         if (nodeErrors.length) {
-          throw new Error(`H3 node "${node.id}" is incomplete: ${nodeErrors.join('; ')}`);
+          throw new Error(
+            `H3 node "${node.id}" is incomplete: ${nodeErrors.join("; ")}`,
+          );
         }
         const fieldName = config?.resultField || op.resultField;
         const expression = buildH3Expression(op, config);
         needsH3 = true;
-        ctes.push(`${alias} AS (\n  SELECT *, ${expression} AS ${qi(fieldName)} FROM ${source}\n)`);
+        ctes.push(
+          `${alias} AS (\n  SELECT *, ${expression} AS ${qi(fieldName)} FROM ${source}\n)`,
+        );
         nodeMetadata.set(alias, { geom: meta.geom, crs: meta.crs });
         lastAlias = alias;
       }
-    } else if (type === 'join') {
+    } else if (type === "join") {
       if (parentAliases.length < 2) {
-        throw new Error(`Join node "${node.id}" requires 2 input connections (A = left, B = right).`);
+        throw new Error(
+          `Join node "${node.id}" requires 2 input connections (A = left, B = right).`,
+        );
       }
       const sourceA = parentAliases[0];
       const sourceB = parentAliases[1];
       const metaA = nodeMetadata.get(sourceA)!;
       const metaB = nodeMetadata.get(sourceB)!;
-      const joinKeyword = config?.joinType === 'inner' ? 'JOIN' : 'LEFT JOIN';
-      const mode = config?.mode || 'spatial';
+      const joinKeyword = config?.joinType === "inner" ? "JOIN" : "LEFT JOIN";
+      const mode = config?.mode || "spatial";
 
       // Every right-side column gets an r_ prefix (DuckDB COLUMNS regex rename)
       // so B's attributes survive the join without colliding with A's.
       const renamedRight = `(SELECT COLUMNS('(.*)') AS 'r_\\1' FROM ${sourceB})`;
       const rightGeom = `r.${qi(`r_${metaB.geom}`)}`;
 
-      let onClause = '';
-      if (mode === 'attribute') {
+      let onClause = "";
+      if (mode === "attribute") {
         const leftKey = config?.leftKey;
         const rightKey = config?.rightKey;
         if (!leftKey || !rightKey) {
-          throw new Error(`Join node "${node.id}" needs both key fields for an attribute join.`);
+          throw new Error(
+            `Join node "${node.id}" needs both key fields for an attribute join.`,
+          );
         }
         onClause = `a.${qi(leftKey)} = r.${qi(`r_${rightKey}`)}`;
       } else {
-        const predicate = config?.predicate || 'ST_Intersects';
+        const predicate = config?.predicate || "ST_Intersects";
         if (!JOIN_PREDICATES.has(predicate)) {
           throw new Error(`Unsupported join predicate "${predicate}".`);
         }
-        onClause = predicate === 'ST_DWithin'
-          ? `ST_DWithin(a.${qi(metaA.geom)}, ${rightGeom}, ${Number(config?.distance) || 100})`
-          : `${predicate}(a.${qi(metaA.geom)}, ${rightGeom})`;
+        onClause =
+          predicate === "ST_DWithin"
+            ? `ST_DWithin(a.${qi(metaA.geom)}, ${rightGeom}, ${Number(config?.distance) || 100})`
+            : `${predicate}(a.${qi(metaA.geom)}, ${rightGeom})`;
       }
 
       // Keep A's geometry; drop B's renamed geometry from the projection.
       ctes.push(
-        `${alias} AS (\n  SELECT a.*, r.* EXCLUDE (${qi(`r_${metaB.geom}`)})\n  FROM ${sourceA} a\n  ${joinKeyword} ${renamedRight} r\n    ON ${onClause}\n)`
+        `${alias} AS (\n  SELECT a.*, r.* EXCLUDE (${qi(`r_${metaB.geom}`)})\n  FROM ${sourceA} a\n  ${joinKeyword} ${renamedRight} r\n    ON ${onClause}\n)`,
       );
       nodeMetadata.set(alias, metaA);
       lastAlias = alias;
-    } else if (type === 'aggregate') {
+    } else if (type === "aggregate") {
       const source = parentAliases[0] || lastAlias;
-      if (!source) throw new Error(`Aggregate node "${node.id}" has no source.`);
+      if (!source)
+        throw new Error(`Aggregate node "${node.id}" has no source.`);
       const meta = nodeMetadata.get(source)!;
-      const mode = config?.mode === 'summary' ? 'summary' : 'spatial';
+      const mode = config?.mode === "summary" ? "summary" : "spatial";
 
-      if (mode === 'summary') {
-        const groupFields: string[] = (Array.isArray(config?.groupBy) ? config.groupBy : [config?.groupBy])
-          .filter((field: unknown): field is string => typeof field === 'string' && field.length > 0);
-        const measures: SummaryMeasure[] = Array.isArray(config?.measures) ? config.measures : [];
+      if (mode === "summary") {
+        const groupFields: string[] = (
+          Array.isArray(config?.groupBy) ? config.groupBy : [config?.groupBy]
+        ).filter(
+          (field: unknown): field is string =>
+            typeof field === "string" && field.length > 0,
+        );
+        const measures: SummaryMeasure[] = Array.isArray(config?.measures)
+          ? config.measures
+          : [];
         const errors = summaryMeasureErrors(measures);
-        if (errors.length) throw new Error(`Aggregate node "${node.id}": ${errors[0]}`);
+        if (errors.length)
+          throw new Error(`Aggregate node "${node.id}": ${errors[0]}`);
 
-        const measureSelects = measures.map(buildMeasureSelect).filter((select): select is string => Boolean(select));
+        const measureSelects = measures
+          .map(buildMeasureSelect)
+          .filter((select): select is string => Boolean(select));
         // Unioning the group geometry keeps the summary mappable. Without it
         // the result is a plain table, which is a legitimate outcome — it just
         // cannot be drawn.
-        const keepsGeometry = Boolean(config?.includeGeometry && meta.geom && groupFields.length);
+        const keepsGeometry = Boolean(
+          config?.includeGeometry && meta.geom && groupFields.length,
+        );
         const selects = [
           ...groupFields.map((field) => qi(field)),
           ...measureSelects,
-          ...(keepsGeometry ? [`ST_Union_Agg(${qi(meta.geom)}) AS geom_agg`] : []),
+          ...(keepsGeometry
+            ? [`ST_Union_Agg(${qi(meta.geom)}) AS geom_agg`]
+            : []),
         ];
-        const groupByClause = groupFields.length ? `\n  GROUP BY ${groupFields.map(qi).join(', ')}` : '';
+        const groupByClause = groupFields.length
+          ? `\n  GROUP BY ${groupFields.map(qi).join(", ")}`
+          : "";
 
-        ctes.push(`${alias} AS (\n  SELECT ${selects.join(', ')}\n  FROM ${source}${groupByClause}\n)`);
-        nodeMetadata.set(alias, { geom: keepsGeometry ? 'geom_agg' : '', crs: meta.crs });
+        ctes.push(
+          `${alias} AS (\n  SELECT ${selects.join(", ")}\n  FROM ${source}${groupByClause}\n)`,
+        );
+        nodeMetadata.set(alias, {
+          geom: keepsGeometry ? "geom_agg" : "",
+          crs: meta.crs,
+        });
         lastAlias = alias;
       } else {
-        const operation = config?.operation || 'ST_Union_Agg';
-        const groupBy = typeof config?.groupBy === 'string' ? config.groupBy : '';
+        const operation = config?.operation || "ST_Union_Agg";
+        const groupBy =
+          typeof config?.groupBy === "string" ? config.groupBy : "";
 
         const selectClause = groupBy
           ? `${qi(groupBy)}, ${operation}(${qi(meta.geom)}) AS geom_agg`
           : `${operation}(${qi(meta.geom)}) AS geom_agg`;
 
-        const groupByClause = groupBy ? ` GROUP BY ${qi(groupBy)}` : '';
+        const groupByClause = groupBy ? ` GROUP BY ${qi(groupBy)}` : "";
 
         ctes.push(
-          `${alias} AS (\n  SELECT ${selectClause}\n  FROM ${source}${groupByClause}\n)`
+          `${alias} AS (\n  SELECT ${selectClause}\n  FROM ${source}${groupByClause}\n)`,
         );
-        nodeMetadata.set(alias, { geom: 'geom_agg', crs: meta.crs });
+        nodeMetadata.set(alias, { geom: "geom_agg", crs: meta.crs });
         lastAlias = alias;
       }
-    } else if (type === 'score') {
+    } else if (type === "score") {
       const source = parentAliases[0] || lastAlias;
       if (!source) throw new Error(`Score node "${node.id}" has no source.`);
       const meta = nodeMetadata.get(source)!;
-      const spec: ScoreModelSpec = config?.scoreModel || { criteria: [], missingValueTreatment: 'zero' };
+      const spec: ScoreModelSpec = config?.scoreModel || {
+        criteria: [],
+        missingValueTreatment: "zero",
+      };
       const errors = scoreModelErrors(spec);
-      if (errors.length) throw new Error(`Score node "${node.id}": ${errors[0]}`);
+      if (errors.length)
+        throw new Error(`Score node "${node.id}": ${errors[0]}`);
 
-      const resultField = config?.resultField || 'alur_score';
+      const resultField = config?.resultField || "alur_score";
       const rankField = `${resultField}_rank`;
       // The mean-substitution policy averages over the upstream CTE, so the
       // compiler needs to know which alias that is.
       const scoreOptions = { relation: source };
-      const contributions = config?.includeContributions === false ? [] : buildContributionSelects(spec, resultField, scoreOptions);
+      const contributions =
+        config?.includeContributions === false
+          ? []
+          : buildContributionSelects(spec, resultField, scoreOptions);
       const scored = [
         `${buildScoreExpression(spec, scoreOptions)} AS ${qi(resultField)}`,
-        ...contributions.map((item) => `${item.expression} AS ${qi(item.alias)}`),
+        ...contributions.map(
+          (item) => `${item.expression} AS ${qi(item.alias)}`,
+        ),
       ];
 
       // Ranking has to read the score, and a window function cannot reference
       // an alias defined in its own SELECT, so scoring and ranking are two
       // passes. Ties share a rank rather than being separated on row order.
       ctes.push(
-        `${alias} AS (\n  SELECT *, RANK() OVER (ORDER BY ${qi(resultField)} DESC NULLS LAST) AS ${qi(rankField)}\n  FROM (\n    SELECT *, ${scored.join(', ')}\n    FROM ${source}\n  )\n)`
+        `${alias} AS (\n  SELECT *, RANK() OVER (ORDER BY ${qi(resultField)} DESC NULLS LAST) AS ${qi(rankField)}\n  FROM (\n    SELECT *, ${scored.join(", ")}\n    FROM ${source}\n  )\n)`,
       );
       nodeMetadata.set(alias, meta);
       lastAlias = alias;
-    } else if (type === 'allocate') {
+    } else if (type === "allocate") {
       const source = parentAliases[0] || lastAlias;
-      if (!source) throw new Error(`Allocation node "${node.id}" has no source.`);
+      if (!source)
+        throw new Error(`Allocation node "${node.id}" has no source.`);
       const meta = nodeMetadata.get(source)!;
       const errors = allocationErrors(config || {});
-      if (errors.length) throw new Error(`Allocation node "${node.id}": ${errors[0]}`);
+      if (errors.length)
+        throw new Error(`Allocation node "${node.id}": ${errors[0]}`);
 
       const allocation = config as AllocationConfig;
       const { columns, selects } = buildAllocationSelects(allocation);
-      const inner = `SELECT *, ${selects.join(', ')}\n    FROM ${source}`;
+      const inner = `SELECT *, ${selects.join(", ")}\n    FROM ${source}`;
 
       // A cut-off has to filter on the window result, which cannot be
       // referenced from the same SELECT, so it wraps rather than qualifying.
-      ctes.push(allocation.mode === 'cut'
-        ? `${alias} AS (\n  SELECT *\n  FROM (\n    ${inner}\n  )\n  WHERE ${qi(columns.status)} = 'within'\n)`
-        : `${alias} AS (\n  ${inner}\n)`);
+      ctes.push(
+        allocation.mode === "cut"
+          ? `${alias} AS (\n  SELECT *\n  FROM (\n    ${inner}\n  )\n  WHERE ${qi(columns.status)} = 'within'\n)`
+          : `${alias} AS (\n  ${inner}\n)`,
+      );
       nodeMetadata.set(alias, meta);
       lastAlias = alias;
-    } else if (type === 'filter') {
+    } else if (type === "filter") {
       const source = parentAliases[0] || lastAlias;
       if (!source) throw new Error(`Filter node "${node.id}" has no source.`);
       const meta = nodeMetadata.get(source)!;
-      const condition = config?.condition || '1=1';
+      const condition = config?.condition || "1=1";
       const selectionIds = Array.isArray(config?.selectionIds)
         ? config.selectionIds.map(String).filter(Boolean)
         : [];
-      if (config?.mode === 'top-n') {
-        if (!config?.field) throw new Error(`Filter node "${node.id}" needs a column to rank by.`);
+      if (config?.mode === "top-n") {
+        if (!config?.field)
+          throw new Error(
+            `Filter node "${node.id}" needs a column to rank by.`,
+          );
         const count = Number(config?.count);
-        if (!Number.isFinite(count) || count < 1) throw new Error(`Filter node "${node.id}" needs how many rows to keep.`);
+        if (!Number.isFinite(count) || count < 1)
+          throw new Error(
+            `Filter node "${node.id}" needs how many rows to keep.`,
+          );
         ctes.push(
-          `${alias} AS (\n  SELECT * FROM ${source}\n  QUALIFY ${buildTopNQualify(config.field, count, config?.direction === 'asc' ? 'asc' : 'desc')}\n)`
+          `${alias} AS (\n  SELECT * FROM ${source}\n  QUALIFY ${buildTopNQualify(config.field, count, config?.direction === "asc" ? "asc" : "desc")}\n)`,
         );
-      } else if (config?.mode === 'criteria') {
-        const predicates: FilterPredicate[] = Array.isArray(config?.predicates) ? config.predicates : [];
+      } else if (config?.mode === "criteria") {
+        const predicates: FilterPredicate[] = Array.isArray(config?.predicates)
+          ? config.predicates
+          : [];
         const errors = filterPredicateErrors(predicates);
-        if (errors.length) throw new Error(`Filter node "${node.id}": ${errors[0]}`);
+        if (errors.length)
+          throw new Error(`Filter node "${node.id}": ${errors[0]}`);
 
-        const outcome: FilterOutcome = config?.outcome === 'tag' ? 'tag' : 'drop';
+        const outcome: FilterOutcome =
+          config?.outcome === "tag" ? "tag" : "drop";
         const keep = buildKeepExpression(predicates);
-        const exclusion = buildExclusionSelects(predicates, config?.exclusionField || undefined)!;
+        const exclusion = buildExclusionSelects(
+          predicates,
+          config?.exclusionField || undefined,
+        )!;
         // Dropping and recording are independent: a soft condition annotates a
         // row that survives, so the reason columns are written either way and
         // only the WHERE clause depends on the outcome.
-        const where = outcome === 'drop' && keep ? `\n    WHERE ${keep}` : '';
+        const where = outcome === "drop" && keep ? `\n    WHERE ${keep}` : "";
 
         ctes.push(
-          `${alias} AS (\n  SELECT * EXCLUDE (${qi(exclusion.intermediate)}), ${exclusion.outer.join(', ')}\n  FROM (\n    SELECT *, ${exclusion.inner.join(', ')}\n    FROM ${source}${where}\n  )\n)`
+          `${alias} AS (\n  SELECT * EXCLUDE (${qi(exclusion.intermediate)}), ${exclusion.outer.join(", ")}\n  FROM (\n    SELECT *, ${exclusion.inner.join(", ")}\n    FROM ${source}${where}\n  )\n)`,
         );
       } else if (selectionIds.length) {
-        const selectedValues = selectionIds.map((id: string) => `'${id.replace(/'/g, "''")}'`).join(', ');
-        const geometryPredicate = meta.geom ? ` WHERE ${qi(meta.geom)} IS NOT NULL` : '';
+        const selectedValues = selectionIds
+          .map((id: string) => `'${id.replace(/'/g, "''")}'`)
+          .join(", ");
+        const geometryPredicate = meta.geom
+          ? ` WHERE ${qi(meta.geom)} IS NOT NULL`
+          : "";
         ctes.push(
-          `${alias} AS (\n  SELECT * EXCLUDE (__alur_selection_row)\n  FROM (\n    SELECT *, ROW_NUMBER() OVER ()::BIGINT AS __alur_selection_row\n    FROM ${source}${geometryPredicate}\n  )\n  WHERE CAST(__alur_selection_row AS VARCHAR) IN (${selectedValues})\n)`
+          `${alias} AS (\n  SELECT * EXCLUDE (__alur_selection_row)\n  FROM (\n    SELECT *, ROW_NUMBER() OVER ()::BIGINT AS __alur_selection_row\n    FROM ${source}${geometryPredicate}\n  )\n  WHERE CAST(__alur_selection_row AS VARCHAR) IN (${selectedValues})\n)`,
         );
       } else {
         ctes.push(
-          `${alias} AS (\n  SELECT * FROM ${source} WHERE ${condition}\n)`
+          `${alias} AS (\n  SELECT * FROM ${source} WHERE ${condition}\n)`,
         );
       }
       nodeMetadata.set(alias, meta);
       lastAlias = alias;
-    } else if (type === 'attribute') {
+    } else if (type === "attribute") {
       const source = parentAliases[0] || lastAlias;
-      if (!source) throw new Error(`Attribute node "${node.id}" has no source.`);
+      if (!source)
+        throw new Error(`Attribute node "${node.id}" has no source.`);
       const meta = nodeMetadata.get(source)!;
-      const expression = config?.expression || '1';
-      const resultField = config?.resultField || 'new_value';
+      const expression = config?.expression || "1";
+      const resultField = config?.resultField || "new_value";
       ctes.push(
-        `${alias} AS (\n  SELECT *, ${expression} AS ${qi(resultField)}\n  FROM ${source}\n)`
+        `${alias} AS (\n  SELECT *, ${expression} AS ${qi(resultField)}\n  FROM ${source}\n)`,
       );
       nodeMetadata.set(alias, meta);
       lastAlias = alias;
-    } else if (type === 'visualisation') {
+    } else if (type === "visualisation") {
       const source = parentAliases[0] || lastAlias;
-      if (!source) throw new Error(`Visualisation node "${node.id}" has no source.`);
+      if (!source)
+        throw new Error(`Visualisation node "${node.id}" has no source.`);
       const meta = nodeMetadata.get(source)!;
       ctes.push(`${alias} AS (\n  SELECT * FROM ${source}\n)`);
       nodeMetadata.set(alias, meta);
       visualisationMetadata.set(alias, config || {});
       lastAlias = alias;
-    } else if (type === 'output') {
+    } else if (type === "output") {
       if (parentAliases.length > 0) {
         const source = parentAliases[0];
         ctes.push(`${alias} AS (\n  SELECT * FROM ${source}\n)`);
         lastAlias = alias;
         nodeMetadata.set(alias, nodeMetadata.get(source)!);
         const sourceVisualisation = visualisationMetadata.get(source);
-        if (sourceVisualisation) visualisationMetadata.set(alias, sourceVisualisation);
+        if (sourceVisualisation)
+          visualisationMetadata.set(alias, sourceVisualisation);
       }
     }
   }
 
   if (!lastAlias) {
-    throw new Error('Could not determine the final step in the workflow.');
+    throw new Error("Could not determine the final step in the workflow.");
   }
 
   const finalMeta = nodeMetadata.get(lastAlias)!;
-  const withClause = `WITH ${ctes.join(',\n')}`;
+  const withClause = `WITH ${ctes.join(",\n")}`;
   const resultSql = `${withClause}\nSELECT *\nFROM ${lastAlias}`;
   const sql = `${resultSql}\nLIMIT ${resultLimit};`;
 
@@ -605,7 +720,7 @@ export function buildWorkflowSQL(nodes: WorkflowNode[], edges: Edge[], options?:
     resultSql,
     withClause,
     lastAlias,
-    terminalNodeId: nodeIdByAlias.get(lastAlias) || '',
+    terminalNodeId: nodeIdByAlias.get(lastAlias) || "",
     geomColumn: finalMeta.geom,
     geomCrs: finalMeta.crs,
     outputLayerName: `workflow_${lastAlias}`,
@@ -618,8 +733,13 @@ export function buildWorkflowSQL(nodes: WorkflowNode[], edges: Edge[], options?:
  * Build SQL that executes the workflow up to (and including) a specific target node.
  * Useful for step-through / per-node execution.
  */
-export function buildUpToSQL(nodes: WorkflowNode[], edges: Edge[], targetNodeId: string, options?: WorkflowBuildOptions): WorkflowResult {
-  if (!nodes.length) throw new Error('No nodes in the workflow.');
+export function buildUpToSQL(
+  nodes: WorkflowNode[],
+  edges: Edge[],
+  targetNodeId: string,
+  options?: WorkflowBuildOptions,
+): WorkflowResult {
+  if (!nodes.length) throw new Error("No nodes in the workflow.");
   if (!nodes.some((node) => node.id === targetNodeId)) {
     throw new Error(`Target node "${targetNodeId}" does not exist.`);
   }
@@ -647,7 +767,15 @@ export function buildUpToSQL(nodes: WorkflowNode[], edges: Edge[], targetNodeId:
   walk(targetNodeId);
 
   const relevantNodes = nodes.filter((n) => ancestors.has(n.id));
-  const relevantEdgeIds = new Set(edges.filter((e) => relevantNodes.some((n) => n.id === e.source) && relevantNodes.some((n) => n.id === e.target)).map((e) => e.id));
+  const relevantEdgeIds = new Set(
+    edges
+      .filter(
+        (e) =>
+          relevantNodes.some((n) => n.id === e.source) &&
+          relevantNodes.some((n) => n.id === e.target),
+      )
+      .map((e) => e.id),
+  );
   const relevantEdges = edges.filter((e) => relevantEdgeIds.has(e.id));
 
   return buildWorkflowSQL(relevantNodes, relevantEdges, options);

@@ -1,4 +1,4 @@
-import { EXPORT_FORMATS } from './geoExport';
+import { EXPORT_FORMATS } from "./geoExport";
 
 // Kept in step with the export node's own format list, so the model can never
 // offer a format the node cannot write.
@@ -6,326 +6,683 @@ const exportFormatIds = EXPORT_FORMATS.map((format) => format.id);
 
 export const llmToolDefinitions = [
   {
-    name: 'add_node',
-    description: 'Add a new node to the visual analysis workflow graph.',
+    name: "add_node",
+    description: "Add a new node to the visual analysis workflow graph.",
     parameters: {
-      type: 'object',
+      type: "object",
       properties: {
-        id: { type: 'string', description: 'Unique identifier for the node (optional).' },
-        type: {
-          type: 'string',
-          enum: ['input', 'analysis', 'attribute', 'aggregate', 'allocate', 'score', 'filter', 'join', 'visualisation', 'output', 'fragment', 'h3'],
-          description: 'The type of node to create. "join" joins two inputs (A=left keeps geometry, B=right attributes get an r_ prefix); connect A to input-0 and B to input-1. "aggregate" summarises numbers by group (mode="summary") or dissolves geometry (mode="spatial"). "allocate" works down rows in priority order spending a budget or capacity until a limit is reached. "score" combines several columns into one weighted score and ranks by it. "fragment" places one of the named operations this project has saved. "h3" is an H3 hex-grid node using DuckDB\'s built-in h3 extension, with two modes: mode="encode" adds an H3 column derived from lat/lng or an existing cell (operations h3_latlng_to_cell, h3_cell_to_parent, h3_get_resolution, h3_cell_to_lat, h3_cell_to_lng, h3_cell_to_boundary_wkt); mode="polyfill" covers a geometry column with cells at a resolution and dissolves back to one row per cell with attributes encoded on it (count, sum or average of a numeric field), emitting a mappable boundary geometry.'
+        id: {
+          type: "string",
+          description: "Unique identifier for the node (optional).",
         },
-        label: { type: 'string', description: 'Human-readable label for the node.' },
+        type: {
+          type: "string",
+          enum: [
+            "input",
+            "analysis",
+            "attribute",
+            "aggregate",
+            "allocate",
+            "score",
+            "filter",
+            "join",
+            "visualisation",
+            "output",
+            "fragment",
+            "h3",
+          ],
+          description:
+            'The type of node to create. "join" joins two inputs (A=left keeps geometry, B=right attributes get an r_ prefix); connect A to input-0 and B to input-1. "aggregate" summarises numbers by group (mode="summary") or dissolves geometry (mode="spatial"). "allocate" works down rows in priority order spending a budget or capacity until a limit is reached. "score" combines several columns into one weighted score and ranks by it. "fragment" places one of the named operations this project has saved. "h3" is an H3 hex-grid node using DuckDB\'s built-in h3 extension, with two modes: mode="encode" adds an H3 column derived from lat/lng or an existing cell (operations h3_latlng_to_cell, h3_cell_to_parent, h3_get_resolution, h3_cell_to_lat, h3_cell_to_lng, h3_cell_to_boundary_wkt); mode="polyfill" covers a geometry column with cells at a resolution and dissolves back to one row per cell with attributes encoded on it (count, sum or average of a numeric field), emitting a mappable boundary geometry.',
+        },
+        label: {
+          type: "string",
+          description: "Human-readable label for the node.",
+        },
         position: {
-          type: 'object',
+          type: "object",
           properties: {
-            x: { type: 'number' },
-            y: { type: 'number' }
+            x: { type: "number" },
+            y: { type: "number" },
           },
-          description: 'The canvas position for the node.'
+          description: "The canvas position for the node.",
         },
         config: {
-          type: 'object',
-          description: 'Configuration for the node (e.g., operation name, distance, expression, groupBy, condition).',
+          type: "object",
+          description:
+            "Configuration for the node (e.g., operation name, distance, expression, groupBy, condition).",
           properties: {
-            tableName: { type: 'string', description: 'For input nodes: the name of the table to load.' },
-            operation: { type: 'string', description: 'For analysis/aggregate nodes: the function name (e.g., ST_Buffer, ST_Union_Agg). For h3 nodes in mode="encode": one of h3_latlng_to_cell, h3_cell_to_parent, h3_get_resolution, h3_cell_to_lat, h3_cell_to_lng, h3_cell_to_boundary_wkt.' },
-            distance: { type: 'number', description: 'For ST_Buffer: the buffer distance.' },
-            expression: { type: 'string', description: 'For attribute nodes: the SQL expression.' },
-            resultField: { type: 'string', description: 'For attribute/analysis/h3 nodes: the name of the new field.' },
-            latField: { type: 'string', description: 'For h3 nodes using h3_latlng_to_cell: the latitude column.' },
-            lngField: { type: 'string', description: 'For h3 nodes using h3_latlng_to_cell: the longitude column.' },
-            cellField: { type: 'string', description: 'For h3 encode nodes that take a cell column (h3_cell_to_parent, h3_get_resolution, h3_cell_to_lat, h3_cell_to_lng, h3_cell_to_boundary_wkt): the H3 cell-id column.' },
-            resolution: { type: 'number', description: 'For h3 nodes: the H3 resolution (0-15, default 9).' },
-            geometryField: { type: 'string', description: 'For h3 polyfill nodes: the upstream GEOMETRY column to cover with cells.' },
-            aggregate: { type: 'string', enum: ['count', 'sum', 'avg'], description: 'For h3 polyfill nodes: how attributes are encoded onto each dissolved cell.' },
-            valueField: { type: 'string', description: 'For h3 polyfill nodes with aggregate="sum" or "avg": the numeric column to aggregate per cell.' },
-            buffer: { type: 'number', description: 'For h3 polyfill nodes: optional buffer distance (geometry units) so lines become fillable areas. 0 (default) leaves geometry unchanged.' },
-            groupBy: { type: 'string', description: 'For aggregate nodes: the column to group by. Omit to collapse the whole table to one row.' },
-            measures: {
-              type: 'array',
-              description: 'For aggregate nodes with mode="summary": what to compute per group.',
-              items: {
-                type: 'object',
-                properties: {
-                  id: { type: 'string' },
-                  fn: { type: 'string', enum: ['count', 'count_distinct', 'sum', 'avg', 'median', 'min', 'max'] },
-                  field: { type: 'string', description: 'The column to aggregate. Not needed for "count", which counts rows.' },
-                  alias: { type: 'string', description: 'Output column name. Derived from the function and column when omitted.' },
-                },
-                required: ['fn'],
-              },
+            tableName: {
+              type: "string",
+              description: "For input nodes: the name of the table to load.",
             },
-            includeGeometry: { type: 'boolean', description: 'For aggregate nodes with mode="summary" and a group column: merge each group\'s geometry so the summary can still be mapped. For h3 polyfill nodes: whether to emit the cell boundary geometry column — default true (mappable); set false to export a pure attribute table (just H3 cell ids and encoded values) as Parquet/CSV/JSON with no geometry.' },
-            scoreModel: {
-              type: 'object',
-              description: 'For score nodes: the weighted criteria. Each column is normalised across the whole result before weighting, so columns on different scales combine safely.',
-              properties: {
-                criteria: {
-                  type: 'array',
-                  items: {
-                    type: 'object',
-                    properties: {
-                      field: { type: 'string', description: 'The numeric column.' },
-                      weight: { type: 'number', description: 'Relative importance. Weights are shares of their total, so they need not sum to 1.' },
-                      direction: { type: 'string', enum: ['higher', 'lower'], description: 'Whether a higher or lower value is better.' },
-                      normalisation: { type: 'string', enum: ['min-max', 'z-score', 'rank'], description: 'How the column is put on a common scale.' },
-                    },
-                    required: ['field', 'weight', 'direction', 'normalisation'],
+            operation: {
+              type: "string",
+              description:
+                'For analysis/aggregate nodes: the function name (e.g., ST_Buffer, ST_Union_Agg). For h3 nodes in mode="encode": one of h3_latlng_to_cell, h3_cell_to_parent, h3_get_resolution, h3_cell_to_lat, h3_cell_to_lng, h3_cell_to_boundary_wkt.',
+            },
+            distance: {
+              type: "number",
+              description: "For ST_Buffer: the buffer distance.",
+            },
+            expression: {
+              type: "string",
+              description: "For attribute nodes: the SQL expression.",
+            },
+            resultField: {
+              type: "string",
+              description:
+                "For attribute/analysis/h3 nodes: the name of the new field.",
+            },
+            latField: {
+              type: "string",
+              description:
+                "For h3 nodes using h3_latlng_to_cell: the latitude column.",
+            },
+            lngField: {
+              type: "string",
+              description:
+                "For h3 nodes using h3_latlng_to_cell: the longitude column.",
+            },
+            cellField: {
+              type: "string",
+              description:
+                "For h3 encode nodes that take a cell column (h3_cell_to_parent, h3_get_resolution, h3_cell_to_lat, h3_cell_to_lng, h3_cell_to_boundary_wkt): the H3 cell-id column.",
+            },
+            resolution: {
+              type: "number",
+              description: "For h3 nodes: the H3 resolution (0-15, default 9).",
+            },
+            geometryField: {
+              type: "string",
+              description:
+                "For h3 polyfill nodes: the upstream GEOMETRY column to cover with cells.",
+            },
+            aggregate: {
+              type: "string",
+              enum: ["count", "sum", "avg"],
+              description:
+                "For h3 polyfill nodes: how attributes are encoded onto each dissolved cell.",
+            },
+            valueField: {
+              type: "string",
+              description:
+                'For h3 polyfill nodes with aggregate="sum" or "avg": the numeric column to aggregate per cell.',
+            },
+            buffer: {
+              type: "number",
+              description:
+                "For h3 polyfill nodes: optional buffer distance (geometry units) so lines become fillable areas. 0 (default) leaves geometry unchanged.",
+            },
+            groupBy: {
+              type: "string",
+              description:
+                "For aggregate nodes: the column to group by. Omit to collapse the whole table to one row.",
+            },
+            measures: {
+              type: "array",
+              description:
+                'For aggregate nodes with mode="summary": what to compute per group.',
+              items: {
+                type: "object",
+                properties: {
+                  id: { type: "string" },
+                  fn: {
+                    type: "string",
+                    enum: [
+                      "count",
+                      "count_distinct",
+                      "sum",
+                      "avg",
+                      "median",
+                      "min",
+                      "max",
+                    ],
+                  },
+                  field: {
+                    type: "string",
+                    description:
+                      'The column to aggregate. Not needed for "count", which counts rows.',
+                  },
+                  alias: {
+                    type: "string",
+                    description:
+                      "Output column name. Derived from the function and column when omitted.",
                   },
                 },
-                missingValueTreatment: { type: 'string', enum: ['zero', 'mean', 'exclude'], description: 'What a missing value contributes. "exclude" leaves the whole row unscored.' },
+                required: ["fn"],
               },
-              required: ['criteria', 'missingValueTreatment'],
             },
-            includeContributions: { type: 'boolean', description: 'For score nodes: keep a column per criterion showing what it contributed. Defaults to true.' },
-            orderBy: { type: 'string', description: 'For allocate nodes: the column deciding who is served first (usually a score).' },
-            amountField: { type: 'string', description: 'For allocate nodes: the column being consumed, such as cost or capacity.' },
-            limit: { type: 'number', description: 'For allocate nodes: how much there is to go round.' },
-            partitionBy: { type: 'string', description: 'For allocate nodes: give each value of this column its own limit instead of sharing one.' },
-            count: { type: 'number', description: 'For filter nodes with mode="top-n": how many rows to keep. Ties are kept together.' },
-            direction: { type: 'string', enum: ['desc', 'asc'], description: 'For allocate and top-n filter nodes: desc serves the highest values first.' },
-            condition: { type: 'string', description: 'For filter nodes with mode="condition": the SQL WHERE condition (e.g. need > 10).' },
-            predicates: {
-              type: 'array',
-              description: 'For filter nodes with mode="criteria": named conditions. Each row keeps a record of which ones it fails, so exclusions can be explained instead of the rows simply disappearing.',
-              items: {
-                type: 'object',
-                properties: {
-                  id: { type: 'string' },
-                  label: { type: 'string', description: 'What this condition means in plain words, e.g. "Large enough site". Used as the recorded exclusion reason.' },
-                  expression: { type: 'string', description: 'The SQL condition, e.g. area_m2 >= 500.' },
-                  severity: { type: 'string', enum: ['hard', 'soft'], description: '"hard" can remove the row; "soft" only marks it, so near-misses stay visible.' },
+            includeGeometry: {
+              type: "boolean",
+              description:
+                'For aggregate nodes with mode="summary" and a group column: merge each group\'s geometry so the summary can still be mapped. For h3 polyfill nodes: whether to emit the cell boundary geometry column — default true (mappable); set false to export a pure attribute table (just H3 cell ids and encoded values) as Parquet/CSV/JSON with no geometry.',
+            },
+            scoreModel: {
+              type: "object",
+              description:
+                "For score nodes: the weighted criteria. Each column is normalised across the whole result before weighting, so columns on different scales combine safely.",
+              properties: {
+                criteria: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      field: {
+                        type: "string",
+                        description: "The numeric column.",
+                      },
+                      weight: {
+                        type: "number",
+                        description:
+                          "Relative importance. Weights are shares of their total, so they need not sum to 1.",
+                      },
+                      direction: {
+                        type: "string",
+                        enum: ["higher", "lower"],
+                        description:
+                          "Whether a higher or lower value is better.",
+                      },
+                      normalisation: {
+                        type: "string",
+                        enum: ["min-max", "z-score", "rank"],
+                        description: "How the column is put on a common scale.",
+                      },
+                    },
+                    required: ["field", "weight", "direction", "normalisation"],
+                  },
                 },
-                required: ['expression'],
+                missingValueTreatment: {
+                  type: "string",
+                  enum: ["zero", "mean", "exclude"],
+                  description:
+                    'What a missing value contributes. "exclude" leaves the whole row unscored.',
+                },
+              },
+              required: ["criteria", "missingValueTreatment"],
+            },
+            includeContributions: {
+              type: "boolean",
+              description:
+                "For score nodes: keep a column per criterion showing what it contributed. Defaults to true.",
+            },
+            orderBy: {
+              type: "string",
+              description:
+                "For allocate nodes: the column deciding who is served first (usually a score).",
+            },
+            amountField: {
+              type: "string",
+              description:
+                "For allocate nodes: the column being consumed, such as cost or capacity.",
+            },
+            limit: {
+              type: "number",
+              description: "For allocate nodes: how much there is to go round.",
+            },
+            partitionBy: {
+              type: "string",
+              description:
+                "For allocate nodes: give each value of this column its own limit instead of sharing one.",
+            },
+            count: {
+              type: "number",
+              description:
+                'For filter nodes with mode="top-n": how many rows to keep. Ties are kept together.',
+            },
+            direction: {
+              type: "string",
+              enum: ["desc", "asc"],
+              description:
+                "For allocate and top-n filter nodes: desc serves the highest values first.",
+            },
+            condition: {
+              type: "string",
+              description:
+                'For filter nodes with mode="condition": the SQL WHERE condition (e.g. need > 10).',
+            },
+            predicates: {
+              type: "array",
+              description:
+                'For filter nodes with mode="criteria": named conditions. Each row keeps a record of which ones it fails, so exclusions can be explained instead of the rows simply disappearing.',
+              items: {
+                type: "object",
+                properties: {
+                  id: { type: "string" },
+                  label: {
+                    type: "string",
+                    description:
+                      'What this condition means in plain words, e.g. "Large enough site". Used as the recorded exclusion reason.',
+                  },
+                  expression: {
+                    type: "string",
+                    description: "The SQL condition, e.g. area_m2 >= 500.",
+                  },
+                  severity: {
+                    type: "string",
+                    enum: ["hard", "soft"],
+                    description:
+                      '"hard" can remove the row; "soft" only marks it, so near-misses stay visible.',
+                  },
+                },
+                required: ["expression"],
               },
             },
-            outcome: { type: 'string', enum: ['drop', 'tag'], description: 'For filter nodes with mode="criteria": "drop" removes rows failing a hard condition, "tag" keeps every row and only records the failures. Defaults to drop.' },
-            exclusionField: { type: 'string', description: 'For filter nodes with mode="criteria": base name for the recorded columns. Defaults to alur_excluded.' },
-            fragmentId: { type: 'string', description: 'For fragment nodes: the id of the saved operation to place. Only ids listed in the conversation context exist.' },
-            arguments: { type: 'object', description: 'For fragment nodes: a value per parameter the operation asks for, keyed by parameter id.' },
-            mode: {
-              type: 'string',
-              enum: ['spatial', 'attribute', 'summary', 'condition', 'top-n', 'criteria', 'flag', 'cut', 'scale', 'encode', 'polyfill'],
-              description: 'Join: "spatial" or "attribute". Aggregate: "summary" (numbers) or "spatial" (dissolve geometry). Filter: "condition", "top-n", or "criteria" (named conditions that record why each row was excluded). Allocate: "flag" keeps every row and marks where the limit hit, "cut" drops rows past it, "scale" gives the straddling row a partial share. H3: "encode" adds an H3 column to each row, "polyfill" covers a geometry with cells and dissolves attributes onto them.',
+            outcome: {
+              type: "string",
+              enum: ["drop", "tag"],
+              description:
+                'For filter nodes with mode="criteria": "drop" removes rows failing a hard condition, "tag" keeps every row and only records the failures. Defaults to drop.',
             },
-            joinType: { type: 'string', enum: ['left', 'inner'], description: 'For join nodes: left join keeps unmatched A rows.' },
-            predicate: { type: 'string', enum: ['ST_Intersects', 'ST_Within', 'ST_Contains', 'ST_DWithin'], description: 'For spatial join nodes: the predicate.' },
-            leftKey: { type: 'string', description: 'For attribute join nodes: key column on input A.' },
-            rightKey: { type: 'string', description: 'For attribute join nodes: key column on input B.' },
-            kind: { type: 'string', enum: ['choropleth', 'categorical', 'graduated_symbol', 'heatmap', 'label', 'dot_density'], description: 'For visualisation nodes: style type.' },
-            field: { type: 'string', description: 'For visualisation nodes: field to style by.' },
-            method: { type: 'string', enum: ['quantile', 'equal_interval'], description: 'For choropleth visualisation nodes: classification method.' },
-            classCount: { type: 'number', description: 'For choropleth visualisation nodes: number of classes.' },
-            paletteId: { type: 'string', enum: ['teal', 'magma', 'forest', 'civic'], description: 'For visualisation nodes: palette id.' },
-            outputMode: { type: 'string', enum: ['visualize', 'export'], description: 'For output nodes: visualize to map or export to a file.' },
-            exportFormat: { type: 'string', enum: exportFormatIds, description: 'For export output nodes: file format. kml, kmz and gpx need longitude/latitude coordinates; csv, json and parquet drop geometry.' },
-            maxFeatures: { type: 'number', description: 'For output nodes: maximum features to preview or export.' }
-          }
-        }
-      },
-      required: ['type']
-    }
-  },
-  {
-    name: 'connect_nodes',
-    description: 'Create a connection (edge) between two nodes. For multi-input nodes, specify target_handle as "input-0" (Source A) or "input-1" (Source B).',
-    parameters: {
-      type: 'object',
-      properties: {
-        source_id: { type: 'string', description: 'The ID of the source node.' },
-        target_id: { type: 'string', description: 'The ID of the target node.' },
-        target_handle: { type: 'string', description: 'The specific input handle ID (e.g., "input-0", "input-1").' }
-      },
-      required: ['source_id', 'target_id']
-    }
-  },
-  {
-    name: 'update_node',
-    description: 'Update the configuration of an existing node.',
-    parameters: {
-      type: 'object',
-      properties: {
-        id: { type: 'string', description: 'The ID of the node to update.' },
-        config: { type: 'object', description: 'The new configuration object.' }
-      },
-      required: ['id', 'config']
-    }
-  },
-  {
-    name: 'delete_node',
-    description: 'Remove a node from the workflow graph.',
-    parameters: {
-      type: 'object',
-      properties: {
-        id: { type: 'string', description: 'The ID of the node to delete.' }
-      },
-      required: ['id']
-    }
-  },
-  {
-    name: 'copy_node',
-    description: 'Duplicate an existing node.',
-    parameters: {
-      type: 'object',
-      properties: {
-        id: { type: 'string', description: 'The ID of the node to duplicate.' },
-        new_id: { type: 'string', description: 'The ID for the new node (optional).' },
-        position: {
-          type: 'object',
-          properties: {
-            x: { type: 'number' },
-            y: { type: 'number' }
+            exclusionField: {
+              type: "string",
+              description:
+                'For filter nodes with mode="criteria": base name for the recorded columns. Defaults to alur_excluded.',
+            },
+            fragmentId: {
+              type: "string",
+              description:
+                "For fragment nodes: the id of the saved operation to place. Only ids listed in the conversation context exist.",
+            },
+            arguments: {
+              type: "object",
+              description:
+                "For fragment nodes: a value per parameter the operation asks for, keyed by parameter id.",
+            },
+            mode: {
+              type: "string",
+              enum: [
+                "spatial",
+                "attribute",
+                "summary",
+                "condition",
+                "top-n",
+                "criteria",
+                "flag",
+                "cut",
+                "scale",
+                "encode",
+                "polyfill",
+              ],
+              description:
+                'Join: "spatial" or "attribute". Aggregate: "summary" (numbers) or "spatial" (dissolve geometry). Filter: "condition", "top-n", or "criteria" (named conditions that record why each row was excluded). Allocate: "flag" keeps every row and marks where the limit hit, "cut" drops rows past it, "scale" gives the straddling row a partial share. H3: "encode" adds an H3 column to each row, "polyfill" covers a geometry with cells and dissolves attributes onto them.',
+            },
+            joinType: {
+              type: "string",
+              enum: ["left", "inner"],
+              description: "For join nodes: left join keeps unmatched A rows.",
+            },
+            predicate: {
+              type: "string",
+              enum: ["ST_Intersects", "ST_Within", "ST_Contains", "ST_DWithin"],
+              description: "For spatial join nodes: the predicate.",
+            },
+            leftKey: {
+              type: "string",
+              description: "For attribute join nodes: key column on input A.",
+            },
+            rightKey: {
+              type: "string",
+              description: "For attribute join nodes: key column on input B.",
+            },
+            kind: {
+              type: "string",
+              enum: [
+                "choropleth",
+                "categorical",
+                "graduated_symbol",
+                "heatmap",
+                "label",
+                "dot_density",
+              ],
+              description: "For visualisation nodes: style type.",
+            },
+            field: {
+              type: "string",
+              description: "For visualisation nodes: field to style by.",
+            },
+            method: {
+              type: "string",
+              enum: ["quantile", "equal_interval"],
+              description:
+                "For choropleth visualisation nodes: classification method.",
+            },
+            classCount: {
+              type: "number",
+              description:
+                "For choropleth visualisation nodes: number of classes.",
+            },
+            paletteId: {
+              type: "string",
+              enum: ["teal", "magma", "forest", "civic"],
+              description: "For visualisation nodes: palette id.",
+            },
+            outputMode: {
+              type: "string",
+              enum: ["visualize", "export"],
+              description:
+                "For output nodes: visualize to map or export to a file.",
+            },
+            exportFormat: {
+              type: "string",
+              enum: exportFormatIds,
+              description:
+                "For export output nodes: file format. kml, kmz and gpx need longitude/latitude coordinates; csv, json and parquet drop geometry.",
+            },
+            maxFeatures: {
+              type: "number",
+              description:
+                "For output nodes: maximum features to preview or export.",
+            },
           },
-          description: 'Position for the new node (optional).'
-        }
+        },
       },
-      required: ['id']
-    }
+      required: ["type"],
+    },
   },
   {
-    name: 'run_spatial_query',
-    description: 'Execute a DuckDB SQL query, including spatial SQL when required.',
+    name: "connect_nodes",
+    description:
+      'Create a connection (edge) between two nodes. For multi-input nodes, specify target_handle as "input-0" (Source A) or "input-1" (Source B).',
     parameters: {
-      type: 'object',
+      type: "object",
       properties: {
-        sql: { type: 'string', description: 'The DuckDB Spatial SQL query to run.' },
-        resultFormat: { 
-          type: 'string', 
-          enum: ['table', 'geojson', 'text'], 
-          description: 'Preferred format for the output.' 
-        }
+        source_id: {
+          type: "string",
+          description: "The ID of the source node.",
+        },
+        target_id: {
+          type: "string",
+          description: "The ID of the target node.",
+        },
+        target_handle: {
+          type: "string",
+          description:
+            'The specific input handle ID (e.g., "input-0", "input-1").',
+        },
       },
-      required: ['sql']
-    }
+      required: ["source_id", "target_id"],
+    },
   },
   {
-    name: 'add_visualisation_node',
-    description: 'Add a workflow visualisation node that passes data through and attaches a reusable map style recipe for downstream output nodes.',
+    name: "update_node",
+    description: "Update the configuration of an existing node.",
     parameters: {
-      type: 'object',
+      type: "object",
       properties: {
-        id: { type: 'string', description: 'Unique identifier for the node (optional).' },
-        label: { type: 'string', description: 'Human-readable node label.' },
-        source_id: { type: 'string', description: 'Optional source node ID to connect from.' },
-        target_id: { type: 'string', description: 'Optional target output node ID to connect to.' },
+        id: { type: "string", description: "The ID of the node to update." },
+        config: {
+          type: "object",
+          description: "The new configuration object.",
+        },
+      },
+      required: ["id", "config"],
+    },
+  },
+  {
+    name: "delete_node",
+    description: "Remove a node from the workflow graph.",
+    parameters: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "The ID of the node to delete." },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "copy_node",
+    description: "Duplicate an existing node.",
+    parameters: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "The ID of the node to duplicate." },
+        new_id: {
+          type: "string",
+          description: "The ID for the new node (optional).",
+        },
         position: {
-          type: 'object',
+          type: "object",
           properties: {
-            x: { type: 'number' },
-            y: { type: 'number' }
-          }
+            x: { type: "number" },
+            y: { type: "number" },
+          },
+          description: "Position for the new node (optional).",
+        },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "run_spatial_query",
+    description:
+      "Execute a DuckDB SQL query, including spatial SQL when required.",
+    parameters: {
+      type: "object",
+      properties: {
+        sql: {
+          type: "string",
+          description: "The DuckDB Spatial SQL query to run.",
+        },
+        resultFormat: {
+          type: "string",
+          enum: ["table", "geojson", "text"],
+          description: "Preferred format for the output.",
+        },
+      },
+      required: ["sql"],
+    },
+  },
+  {
+    name: "add_visualisation_node",
+    description:
+      "Add a workflow visualisation node that passes data through and attaches a reusable map style recipe for downstream output nodes.",
+    parameters: {
+      type: "object",
+      properties: {
+        id: {
+          type: "string",
+          description: "Unique identifier for the node (optional).",
+        },
+        label: { type: "string", description: "Human-readable node label." },
+        source_id: {
+          type: "string",
+          description: "Optional source node ID to connect from.",
+        },
+        target_id: {
+          type: "string",
+          description: "Optional target output node ID to connect to.",
+        },
+        position: {
+          type: "object",
+          properties: {
+            x: { type: "number" },
+            y: { type: "number" },
+          },
         },
         kind: {
-          type: 'string',
-          enum: ['choropleth', 'categorical', 'graduated_symbol', 'heatmap', 'label', 'dot_density'],
-          description: 'Visualisation type.'
+          type: "string",
+          enum: [
+            "choropleth",
+            "categorical",
+            "graduated_symbol",
+            "heatmap",
+            "label",
+            "dot_density",
+          ],
+          description: "Visualisation type.",
         },
-        field: { type: 'string', description: 'Attribute field used for styling.' },
+        field: {
+          type: "string",
+          description: "Attribute field used for styling.",
+        },
         method: {
-          type: 'string',
-          enum: ['quantile', 'equal_interval'],
-          description: 'Classification method for choropleths.'
+          type: "string",
+          enum: ["quantile", "equal_interval"],
+          description: "Classification method for choropleths.",
         },
-        classCount: { type: 'number', description: 'Class count for choropleths.' },
+        classCount: {
+          type: "number",
+          description: "Class count for choropleths.",
+        },
         paletteId: {
-          type: 'string',
-          enum: ['teal', 'magma', 'forest', 'civic'],
-          description: 'Palette id.'
-        }
+          type: "string",
+          enum: ["teal", "magma", "forest", "civic"],
+          description: "Palette id.",
+        },
       },
-      required: ['kind']
-    }
+      required: ["kind"],
+    },
   },
   {
-    name: 'style_layer',
-    description: 'Apply a MapLibre-backed visual style to an existing map layer, such as a choropleth or category map.',
+    name: "style_layer",
+    description:
+      "Apply a MapLibre-backed visual style to an existing map layer, such as a choropleth or category map.",
     parameters: {
-      type: 'object',
+      type: "object",
       properties: {
-        layerId: { type: 'string', description: 'The layer ID to style. If omitted, the selected layer is used.' },
+        layerId: {
+          type: "string",
+          description:
+            "The layer ID to style. If omitted, the selected layer is used.",
+        },
         kind: {
-          type: 'string',
-          enum: ['choropleth', 'categorical', 'graduated_symbol', 'heatmap', 'label', 'dot_density'],
-          description: 'The visualisation type to apply.'
+          type: "string",
+          enum: [
+            "choropleth",
+            "categorical",
+            "graduated_symbol",
+            "heatmap",
+            "label",
+            "dot_density",
+          ],
+          description: "The visualisation type to apply.",
         },
-        field: { type: 'string', description: 'The attribute field used for classification or categories.' },
+        field: {
+          type: "string",
+          description:
+            "The attribute field used for classification or categories.",
+        },
         method: {
-          type: 'string',
-          enum: ['quantile', 'equal_interval'],
-          description: 'Classification method for numeric choropleths.'
+          type: "string",
+          enum: ["quantile", "equal_interval"],
+          description: "Classification method for numeric choropleths.",
         },
-        classCount: { type: 'number', description: 'Number of classes for numeric choropleths.' },
+        classCount: {
+          type: "number",
+          description: "Number of classes for numeric choropleths.",
+        },
         palette: {
-          type: 'string',
-          enum: ['teal', 'magma', 'forest', 'civic'],
-          description: 'Sequential palette for numeric choropleths.'
+          type: "string",
+          enum: ["teal", "magma", "forest", "civic"],
+          description: "Sequential palette for numeric choropleths.",
         },
-        topN: { type: 'number', description: 'Number of top categories to colour before using Other.' }
+        topN: {
+          type: "number",
+          description: "Number of top categories to colour before using Other.",
+        },
       },
-      required: ['field']
-    }
+      required: ["field"],
+    },
   },
   {
-    name: 'filter_layer_rows',
-    description: 'Filter the selected layer and its attribute table by a categorical value or numeric range. Filters remain synchronized between table, charts, and map.',
+    name: "filter_layer_rows",
+    description:
+      "Filter the selected layer and its attribute table by a categorical value or numeric range. Filters remain synchronized between table, charts, and map.",
     parameters: {
-      type: 'object',
+      type: "object",
       properties: {
-        layerId: { type: 'string', description: 'Target layer ID. If omitted, use the selected layer.' },
-        field: { type: 'string', description: 'Field to filter.' },
-        kind: { type: 'string', enum: ['category', 'range'], description: 'Filter kind.' },
-        values: { type: 'array', items: { type: 'string' }, description: 'Accepted values for a category filter.' },
-        min: { type: 'number', description: 'Inclusive numeric minimum.' },
-        max: { type: 'number', description: 'Inclusive numeric maximum.' },
-        mode: { type: 'string', enum: ['add', 'replace'], description: 'Add to current filters or replace them. Defaults to add.' }
+        layerId: {
+          type: "string",
+          description: "Target layer ID. If omitted, use the selected layer.",
+        },
+        field: { type: "string", description: "Field to filter." },
+        kind: {
+          type: "string",
+          enum: ["category", "range"],
+          description: "Filter kind.",
+        },
+        values: {
+          type: "array",
+          items: { type: "string" },
+          description: "Accepted values for a category filter.",
+        },
+        min: { type: "number", description: "Inclusive numeric minimum." },
+        max: { type: "number", description: "Inclusive numeric maximum." },
+        mode: {
+          type: "string",
+          enum: ["add", "replace"],
+          description:
+            "Add to current filters or replace them. Defaults to add.",
+        },
       },
-      required: ['field', 'kind']
-    }
+      required: ["field", "kind"],
+    },
   },
   {
-    name: 'select_layer_features',
-    description: 'Select one or more map/table rows by their feature IDs. Supports replacing, adding, or removing from the current multi-selection.',
+    name: "select_layer_features",
+    description:
+      "Select one or more map/table rows by their feature IDs. Supports replacing, adding, or removing from the current multi-selection.",
     parameters: {
-      type: 'object',
+      type: "object",
       properties: {
-        layerId: { type: 'string', description: 'Target layer ID. If omitted, use the selected layer.' },
-        featureIds: { type: 'array', items: { type: 'string' }, description: 'Feature IDs to select.' },
-        mode: { type: 'string', enum: ['replace', 'add', 'remove'], description: 'Selection update mode. Defaults to replace.' }
+        layerId: {
+          type: "string",
+          description: "Target layer ID. If omitted, use the selected layer.",
+        },
+        featureIds: {
+          type: "array",
+          items: { type: "string" },
+          description: "Feature IDs to select.",
+        },
+        mode: {
+          type: "string",
+          enum: ["replace", "add", "remove"],
+          description: "Selection update mode. Defaults to replace.",
+        },
       },
-      required: ['featureIds']
-    }
+      required: ["featureIds"],
+    },
   },
   {
-    name: 'clear_layer_filters',
-    description: 'Clear all active filters from a map layer and its attribute table.',
+    name: "clear_layer_filters",
+    description:
+      "Clear all active filters from a map layer and its attribute table.",
     parameters: {
-      type: 'object',
+      type: "object",
       properties: {
-        layerId: { type: 'string', description: 'Target layer ID. If omitted, use the selected layer.' }
-      }
-    }
+        layerId: {
+          type: "string",
+          description: "Target layer ID. If omitted, use the selected layer.",
+        },
+      },
+    },
   },
   {
-    name: 'clear_layer_selection',
-    description: 'Clear selected rows/features from a map layer and its attribute table.',
+    name: "clear_layer_selection",
+    description:
+      "Clear selected rows/features from a map layer and its attribute table.",
     parameters: {
-      type: 'object',
+      type: "object",
       properties: {
-        layerId: { type: 'string', description: 'Target layer ID. If omitted, use the selected layer.' }
-      }
-    }
+        layerId: {
+          type: "string",
+          description: "Target layer ID. If omitted, use the selected layer.",
+        },
+      },
+    },
   },
   {
-    name: 'zoom_to_selection',
-    description: 'Zoom the map to the currently selected table rows/features for a layer.',
+    name: "zoom_to_selection",
+    description:
+      "Zoom the map to the currently selected table rows/features for a layer.",
     parameters: {
-      type: 'object',
+      type: "object",
       properties: {
-        layerId: { type: 'string', description: 'Target layer ID. If omitted, use the selected layer.' }
-      }
-    }
-  }
+        layerId: {
+          type: "string",
+          description: "Target layer ID. If omitted, use the selected layer.",
+        },
+      },
+    },
+  },
 ];
