@@ -1447,4 +1447,28 @@ describe("h3 node", () => {
     expect(result.geomColumn).toBe("");
     expect(result.needsH3).toBe(true);
   });
+
+  it("turns a cell column into a mappable geometry via the encode op", () => {
+    const edges: Edge[] = [
+      { id: "e1", source: "src", target: "h3-1", type: "smoothstep" },
+    ];
+    const result = buildWorkflowSQL(
+      [
+        src,
+        h3({
+          operation: "h3_cell_to_boundary_geometry",
+          cellField: "h3_cell",
+          resultField: "h3_geom",
+        }),
+      ],
+      edges,
+    );
+
+    expect(result.sql).toContain(
+      'ST_GeomFromText(h3_cell_to_boundary_wkt(h3_string_to_h3("h3_cell"))) AS "h3_geom"',
+    );
+    expect(result.geomColumn).toBe("h3_geom");
+    expect(result.geomCrs).toBe("EPSG:4326");
+    expect(result.needsH3).toBe(true);
+  });
 });

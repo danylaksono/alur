@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { detectIngestionFormat, ingestClipboardText, parseJsonDataset, tableNameForFile } from './dataIngestion';
+import {
+  detectIngestionFormat,
+  h3CellColumnScore,
+  ingestClipboardText,
+  looksLikeH3Cell,
+  parseJsonDataset,
+  tableNameForFile,
+} from './dataIngestion';
 
 describe('data ingestion detection and JSON normalisation', () => {
   it('detects every supported format without trusting case', () => {
@@ -27,6 +34,20 @@ describe('data ingestion detection and JSON normalisation', () => {
   it('rejects scalar JSON and makes stable SQL-safe table names', () => {
     expect(() => parseJsonDataset('[1,2]')).toThrow(/array of objects/);
     expect(tableNameForFile('2026 places.geojson')).toBe('t_2026_places');
+  });
+
+  it('recognises canonical H3 cell ids and scores candidate column names', () => {
+    expect(looksLikeH3Cell('878d8cb16ffffff')).toBe(true);
+    expect(looksLikeH3Cell('8f089b1a2bb520a')).toBe(true);
+    expect(looksLikeH3Cell('878d8cb16fffff')).toBe(false); // too short
+    expect(looksLikeH3Cell('not-a-cell')).toBe(false);
+    expect(looksLikeH3Cell(123)).toBe(false);
+    expect(looksLikeH3Cell('878d8cb16ffffffz')).toBe(false); // not hex
+
+    expect(h3CellColumnScore('h3_cell')).toBeGreaterThan(h3CellColumnScore('id'));
+    expect(h3CellColumnScore('hex_id')).toBeGreaterThan(h3CellColumnScore('name'));
+    expect(h3CellColumnScore('cell')).toBeGreaterThan(h3CellColumnScore('value'));
+    expect(h3CellColumnScore('value')).toBe(1);
   });
 
   it('rejects unstructured clipboard text before creating a source', async () => {

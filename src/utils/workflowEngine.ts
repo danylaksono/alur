@@ -439,7 +439,11 @@ export function buildWorkflowSQL(
         ctes.push(
           `${alias} AS (\n  SELECT *, ${expression} AS ${qi(fieldName)} FROM ${source}\n)`,
         );
-        nodeMetadata.set(alias, { geom: meta.geom, crs: meta.crs });
+        // Geometry-returning ops (e.g. cell → boundary geometry) become the
+        // node's geometry column, so cell ids can map directly.
+        nodeMetadata.set(alias, op.geometryReturning
+          ? { geom: fieldName, crs: "EPSG:4326" }
+          : { geom: meta.geom, crs: meta.crs });
         lastAlias = alias;
       }
     } else if (type === "join") {

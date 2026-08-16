@@ -31,6 +31,90 @@ export const detectIngestionFormat = (fileName: string, mimeType = ''): Ingestio
 
 export const isIngestableFile = (fileName: string) => detectIngestionFormat(fileName) !== null;
 
+// --- H3 cell detection ------------------------------------------------------
+
+/** Canonical H3 cell ids in their string form are 15–16 hex digits. */
+export const H3_CELL_ID_PATTERN = /^[0-9a-f]{15,16}$/i;
+
+/** Whether a single value is plausibly an H3 cell id. */
+export const looksLikeH3Cell = (value: unknown): boolean =>
+  typeof value === 'string' && H3_CELL_ID_PATTERN.test(value);
+
+/** Ranks a column name as a candidate H3 cell column (name hint or generic). */
+export const h3CellColumnScore = (name: string): number =>
+  /h3|hex|cell|cell_id|hexagon|index/i.test(name) ? 2 : 1;
+
+/**
+ * When a loaded table holds only H3 cell ids (a deliberately geometry-free
+ * parquet, for size), derive each cell's boundary as a GEOMETRY column in a
+ * view so the existing layer pipeline can draw it. The original file is
+ * untouched and the cell column stays in the table, so downstream H3 nodes can
+ * still operate on it.
+ */
+export const maybeDeriveH3Geometry = async (tableName: string): Promise<{ view: string; cellColumn: string } | null> => {
+  try {
+    const schema = (await duckdbService.getTableSchema(tableName)).toArray().map((row: any) =>
+      typeof row.toJSON === 'function' ? row.toJSON() : row,
+    );
+    const stringCols = schema.filter((col: any) => /varchar|char|text|string/i.test(String(col.type || '')));
+    if (!stringCols.length) return null;
+
+    const ordered = [...stringCols].sort(
+      (a, b) => h3CellColumnScore(String(b.name)) - h3CellColumnScore(String(a.name)),
+    );
+
+    for (const col of ordered.slice(0, 3)) {
+      const name = String(col.name);
+      const q = qi(name);
+      const probe = await duckdbService.query(
+        `SELECT COUNT(*) AS total, COUNT_IF(LOWER(${q}) ~ '^[0-9a-f]{15,16}$') AS matched ` +
+        `FROM (SELECT ${q} FROM ${qi(tableName)} WHERE ${q} IS NOT NULL LIMIT 1000) t`,
+      );
+      const probeRow = probe.toArray()[0];
+      const row = typeof probeRow?.toJSON === 'function' ? probeRow.toJSON() : probeRow;
+      const total = Number(row?.total ?? 0);
+      const matched = Number(row?.matched ?? 0);
+      if (total === 0 || matched !== total) continue;
+
+      // The regex is a strong signal; h3_string_to_h3 is the authority. Confirm
+      // a sample actually parses before building a view we are going to tile.
+      const loaded = await duckdbService.ensureH3();
+      if (!loaded) return null;
+      const confirm = await duckdbService.query(
+        `SELECT COUNT_IF(TRY(h3_string_to_h3(${q})) IS NULL) AS invalid ` +
+        `FROM (SELECT ${q} FROM ${qi(tableName)} WHERE ${q} IS NOT NULL LIMIT 100) t`,
+      );
+      const confirmRow = confirm.toArray()[0];
+      const confirmJson = typeof confirmRow?.toJSON === 'function' ? confirmRow.toJSON() : confirmRow;
+      if (Number(confirmJson?.invalid ?? 1) > 0) continue;
+
+      const view = await deriveH3GeometryView(tableName, name);
+      return { view, cellColumn: name };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
+
+const deriveH3GeometryView = async (tableName: string, cellColumn: string): Promise<string> => {
+  const schema = (await duckdbService.getTableSchema(tableName)).toArray().map((row: any) =>
+    typeof row.toJSON === 'function' ? row.toJSON() : row,
+  );
+  const carried = schema
+    .map((col: any) => String(col.name || ''))
+    .filter((name: string) => !['geometry', 'geom', 'wkb_geometry'].includes(name.toLowerCase()))
+    .map(qi)
+    .join(', ');
+  const view = `${tableName}__h3geom`;
+  await duckdbService.query(
+    `CREATE OR REPLACE VIEW ${qi(view)} AS ` +
+    `SELECT ${carried}, ST_GeomFromText(h3_cell_to_boundary_wkt(h3_string_to_h3(${qi(cellColumn)}))) AS geometry ` +
+    `FROM ${qi(tableName)};`,
+  );
+  return view;
+};
+
 const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
 const featureRow = (feature: Record<string, unknown>) => {
@@ -108,7 +192,7 @@ const registerJsonDataset = async (tableName: string, parsed: ParsedJsonDataset)
  */
 export const finaliseIngestedTable = async ({
   nodeId,
-  tableName,
+  tableName: initialTableName,
   displayName,
   fingerprint,
   updateStage,
@@ -124,9 +208,23 @@ export const finaliseIngestedTable = async ({
   invalidGeometryCount?: number;
 }): Promise<{ tableName: string; layerId: string | null }> => {
   const { addToast } = useStore.getState();
+  let tableName = initialTableName;
+  let derivedH3: { view: string; cellColumn: string } | null = null;
 
   updateStage('Inspecting geometry and coordinate system…', 45);
-  const source = await duckdbService.prepareLayerSource(tableName, { kind: 'duckdb-table' });
+  let source = await duckdbService.prepareLayerSource(tableName, { kind: 'duckdb-table' });
+
+  if (!source) {
+    // An H3-only table (cell ids, no geometry — a deliberately trimmed file)
+    // can still be drawn: derive the hexagon boundary geometry and re-inspect.
+    derivedH3 = await maybeDeriveH3Geometry(tableName);
+    if (derivedH3) {
+      tableName = derivedH3.view;
+      updateStage('Deriving H3 cell boundaries…', 55);
+      source = await duckdbService.prepareLayerSource(tableName, { kind: 'duckdb-table' });
+    }
+  }
+
   const totalRows = await duckdbService.getTableFeatureCount(tableName);
 
   if (!source) {
@@ -162,11 +260,14 @@ export const finaliseIngestedTable = async ({
   focusLayer(tableName);
   useStore.getState().updateLoadingOperation(operationId, { detail: 'Drawing features on the map…', progress: 92, waitForLayerId: tableName });
   const skipped = Math.max(0, totalRows - renderedFeatureCount);
+  const h3Note = derivedH3
+    ? ` Detected H3 cell column "${derivedH3.cellColumn}" — derived hexagon boundaries for display; the file itself is unchanged.`
+    : '';
   addToast({
     type: skipped ? 'warning' : 'success',
-    message: skipped
+    message: `${skipped
       ? `Loaded ${renderedFeatureCount.toLocaleString()} map features from ${displayName}; preserved ${skipped.toLocaleString()} rows without valid geometry in the table.`
-      : `Loaded ${renderedFeatureCount.toLocaleString()} features from ${displayName}.`,
+      : `Loaded ${renderedFeatureCount.toLocaleString()} features from ${displayName}.`}${h3Note}`,
   });
   return { tableName, layerId: tableName };
 };

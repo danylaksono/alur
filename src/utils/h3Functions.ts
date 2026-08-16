@@ -19,6 +19,8 @@ export interface H3OperationMetadata {
   needsResolution: boolean;
   resultHint: string;
   resultField: string;
+  /** The result is a GEOMETRY column; downstream layers use it as their geometry. */
+  geometryReturning?: boolean;
 }
 
 export const h3Operations: H3OperationMetadata[] = [
@@ -77,6 +79,16 @@ export const h3Operations: H3OperationMetadata[] = [
     resultHint: "WKT polygon",
     resultField: "h3_boundary_wkt",
   },
+  {
+    id: "h3_cell_to_boundary_geometry",
+    label: "Cell → boundary geometry",
+    summary: "Cell outline as a real geometry column, so H3 cells become a mappable layer.",
+    inputs: ["cell"],
+    needsResolution: false,
+    resultHint: "Polygon geometry",
+    resultField: "h3_geometry",
+    geometryReturning: true,
+  },
 ];
 
 export const h3OperationById = (id: string): H3OperationMetadata | undefined =>
@@ -113,6 +125,8 @@ export const buildH3Expression = (
       return `h3_cell_to_lng(${cell(config.cellField)})`;
     case "h3_cell_to_boundary_wkt":
       return `h3_cell_to_boundary_wkt(${cell(config.cellField)})`;
+    case "h3_cell_to_boundary_geometry":
+      return `ST_GeomFromText(h3_cell_to_boundary_wkt(${cell(config.cellField)}))`;
     default:
       return "";
   }

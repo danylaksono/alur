@@ -55,6 +55,11 @@ describe("h3Functions · encode expressions", () => {
         cellField: "cell",
       }),
     ).toBe('h3_cell_to_boundary_wkt(h3_string_to_h3("cell"))');
+    expect(
+      buildH3Expression(h3OperationById("h3_cell_to_boundary_geometry")!, {
+        cellField: "cell",
+      }),
+    ).toBe('ST_GeomFromText(h3_cell_to_boundary_wkt(h3_string_to_h3("cell")))');
   });
 
   it("quotes identifiers defensively", () => {
