@@ -224,6 +224,8 @@ export type UIState = {
   mapCamera: { longitude: number; latitude: number; zoom: number; bearing: number; pitch: number };
   workspaceMode: 'explore' | 'compare' | 'explain' | 'board';
   isPresentationMode: boolean;
+  /** Set once the first-run empty-state popup is closed; survives reloads. */
+  dismissedEmptyState: boolean;
 };
 
 export type SettingsState = {
@@ -318,6 +320,7 @@ export interface AppState {
   setSettingsOpen: (open: boolean) => void;
   setAboutOpen: (open: boolean) => void;
   setCommandPaletteOpen: (open: boolean) => void;
+  dismissEmptyState: () => void;
   setDatasetOverviewLayerId: (layerId: string | null) => void;
   setRecoverySave: (status: UIState['recoverySave']) => void;
   setMapCamera: (camera: UIState['mapCamera']) => void;
@@ -507,6 +510,7 @@ const initialUIState: UIState = {
   mapCamera: { longitude: 0, latitude: 20, zoom: 1.5, bearing: 0, pitch: 0 },
   workspaceMode: 'explore',
   isPresentationMode: false,
+  dismissedEmptyState: false,
 };
 
 /**
@@ -567,7 +571,7 @@ const clampPanelWidth = (width: number, context?: SizingContext) => {
 export type LayoutPreferences = Pick<
   UIState,
   | 'activeRailTab' | 'isPanelCollapsed' | 'isRailExpanded' | 'drawerMode' | 'activeDrawerTab'
-  | 'drawerHeight' | 'drawerWidth' | 'panelWidth' | 'dockSide' | 'layoutPreset'
+  | 'drawerHeight' | 'drawerWidth' | 'panelWidth' | 'dockSide' | 'layoutPreset' | 'dismissedEmptyState'
 >;
 
 const RAIL_TAB_VALUES: RailTab[] = [...PANEL_DESTINATIONS];
@@ -599,6 +603,7 @@ export const pickLayoutPreferences = (ui?: Partial<UIState>): Partial<LayoutPref
   if (typeof ui.panelWidth === 'number' && Number.isFinite(ui.panelWidth)) {
     preferences.panelWidth = clampPanelWidth(ui.panelWidth);
   }
+  if (typeof ui.dismissedEmptyState === 'boolean') preferences.dismissedEmptyState = ui.dismissedEmptyState;
   return preferences;
 };
 
@@ -882,6 +887,9 @@ export const useStore = create<AppState>()(persist((set, get) => ({
   })),
   setCommandPaletteOpen: (open) => set((state) => ({
     ui: { ...state.ui, isCommandPaletteOpen: open },
+  })),
+  dismissEmptyState: () => set((state) => ({
+    ui: { ...state.ui, dismissedEmptyState: true },
   })),
   setDatasetOverviewLayerId: (layerId) => set((state) => ({
     selectedLayerId: layerId || state.selectedLayerId,

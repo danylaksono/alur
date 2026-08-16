@@ -1,18 +1,21 @@
 import { useRef, type ChangeEvent } from 'react';
-import { FilePlus2, MousePointerClick } from 'lucide-react';
+import { FilePlus2, MousePointerClick, X } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { ingestFile } from '../../services/dataIngestion';
 
 /**
  * First-run overlay shown over the empty map. Non-interactive backdrop so map
- * panning still works around the card.
+ * panning still works around the card. Dismissal is remembered for this
+ * browser, so it does not come back on every reload.
  */
 export const MapEmptyState = () => {
   const hasWork = useStore((s) => s.nodes.length > 0 || s.mapLayers.length > 0);
+  const dismissed = useStore((s) => s.ui.dismissedEmptyState);
+  const dismissEmptyState = useStore((s) => s.dismissEmptyState);
   const duckdbReady = useStore((s) => s.duckdbReady);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  if (hasWork) return null;
+  if (hasWork || dismissed) return null;
 
   const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -23,8 +26,17 @@ export const MapEmptyState = () => {
   };
 
   return (
-    <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
-      <div className="pointer-events-auto flex max-w-sm flex-col items-center gap-3 rounded-xl border border-slate-200 bg-white/95 p-6 text-center shadow-lg backdrop-blur">
+    <div className="pointer-events-none absolute inset-0 z-10 flex overflow-y-auto p-4">
+      <div className="pointer-events-auto relative m-auto flex max-w-sm flex-col items-center gap-3 rounded-xl border border-slate-200 bg-white/95 p-6 text-center shadow-lg backdrop-blur">
+        <button
+          type="button"
+          onClick={dismissEmptyState}
+          title="Dismiss"
+          aria-label="Dismiss welcome prompt"
+          className="absolute right-2.5 top-2.5 rounded-md p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
         <div className="rounded-full bg-primary/10 p-3">
           <MousePointerClick className="h-5 w-5 text-primary" />
         </div>

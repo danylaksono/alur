@@ -188,7 +188,12 @@ export const Header = () => {
     <header className="z-50 flex h-14 shrink-0 items-center justify-between border-b border-slate-200/80 bg-white px-2 shadow-[0_1px_0_rgba(15,23,42,0.02)] md:px-4">
       <div className="flex min-w-0 items-center gap-2" role="group" aria-label="ALUR interactive visual analytics">
         <img src="/alur-mark.svg" alt="" className="h-8 w-8 shrink-0" />
-        <h1 className="hidden text-[13px] font-extrabold leading-none tracking-[0.16em] text-slate-900 sm:block">ALUR</h1>
+        <h1 className="hidden items-center gap-1.5 text-[13px] font-extrabold leading-none tracking-[0.16em] text-slate-900 sm:flex">
+          ALUR
+          <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[8px] font-extrabold leading-none tracking-[0.12em] text-primary" aria-label="ALUR is in beta">
+            BETA
+          </span>
+        </h1>
 
         <span className="hidden h-5 w-px shrink-0 bg-slate-200 sm:block" aria-hidden="true" />
 
