@@ -2,13 +2,13 @@ import { Handle, Position } from '@xyflow/react';
 import { Download, Eye, FileArchive, Settings2 } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { buildUpToSQL } from '../../utils/workflowEngine';
-import { duckdbService } from '../../services/duckdb';
 import { FlowNodeShell, inputClass, nodeHandleClass, selectClass } from './FlowNodeShell';
 import { materializeWorkflowOutput } from '../../services/layerMaterialization';
 import { registerWorkflowResult } from '../../services/workflowRun';
+import { downloadExport } from '../../services/geoExportService';
+import { exportFormatGroups, exportFormatSpec } from '../../utils/geoExport';
 
 type OutputMode = 'visualize' | 'export';
-type ExportFormat = 'geojson' | 'csv' | 'json' | 'parquet';
 
 export const OutputNode = ({ data, id, selected }: any) => {
   const setSelectedNodeId = useStore((s) => s.setSelectedNodeId);
@@ -17,7 +17,7 @@ export const OutputNode = ({ data, id, selected }: any) => {
 
   const maxFeatures = data.config?.maxFeatures ?? 5000;
   const outputMode: OutputMode = data.config?.outputMode ?? 'visualize';
-  const exportFormat: ExportFormat = data.config?.exportFormat ?? 'geojson';
+  const formatSpec = exportFormatSpec(data.config?.exportFormat);
   const isExportMode = outputMode === 'export';
 
   const updateConfig = (payload: Record<string, unknown>) => updateNode(id, { ...data.config, ...payload });
@@ -49,44 +49,25 @@ export const OutputNode = ({ data, id, selected }: any) => {
     }
   };
 
-  const downloadBlob = (blob: Blob, fileName: string) => {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = fileName;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
   const handleExport = async () => {
     const { nodes, edges, fragments } = useStore.getState();
     try {
       const workflow = buildUpToSQL(nodes, edges, id, { limit: maxFeatures, fragments });
+      const result = await downloadExport({
+        sql: workflow.resultSql,
+        format: formatSpec.id,
+        baseName: data.label || `output-${id}`,
+      });
 
-      if (exportFormat === 'geojson') {
-        const tableName = `alur_export_${id.replace(/[^a-zA-Z0-9_]/g, '_')}_${Date.now()}`;
-        await duckdbService.materializeQueryAsTable(workflow.resultSql, tableName);
-        const geojson = await duckdbService.getGeoJSONFromTable(tableName, 100000);
-        if (!geojson || geojson.features.length === 0) {
-          addChatMessage('system', '⚠️ Export node produced no features.');
-          return;
-        }
-        downloadBlob(
-          new Blob([JSON.stringify(geojson, null, 2)], { type: 'application/geo+json' }),
-          `output-${id}.geojson`
-        );
-        addChatMessage('system', `📦 Exported ${geojson.features.length.toLocaleString()} features as GeoJSON.`);
+      if (result.featureCount === 0) {
+        addChatMessage('system', '⚠️ Export node produced no features.');
         return;
       }
-
-      const { buffer, fileName } = await duckdbService.exportTable(workflow.resultSql, exportFormat);
-      const mimeType = exportFormat === 'csv'
-        ? 'text/csv'
-        : exportFormat === 'json'
-        ? 'application/json'
-        : 'application/octet-stream';
-      downloadBlob(new Blob([buffer as BlobPart], { type: mimeType }), fileName);
-      addChatMessage('system', `📦 Exported output as ${exportFormat.toUpperCase()}.`);
+      const count = result.featureCount === null ? '' : `${result.featureCount.toLocaleString()} features `;
+      addChatMessage('system', [
+        `📦 Exported ${count}as ${formatSpec.label} (${result.fileName}).`,
+        ...result.warnings.map((warning) => `⚠️ ${warning}`),
+      ].join('\n'));
     } catch (err: any) {
       addChatMessage('system', `❌ Export failed: ${err.message}`);
     }
@@ -99,7 +80,7 @@ export const OutputNode = ({ data, id, selected }: any) => {
       tone="emerald"
       icon={isExportMode ? FileArchive : Eye}
       label={isExportMode ? 'Export Output' : 'Map Output'}
-      title={isExportMode ? exportFormat.toUpperCase() : 'Visualize results'}
+      title={isExportMode ? formatSpec.label : 'Visualize results'}
     >
       <div>
         <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
@@ -130,14 +111,22 @@ export const OutputNode = ({ data, id, selected }: any) => {
           </label>
           <select
             className={selectClass}
-            value={exportFormat}
+            value={formatSpec.id}
             onChange={(e) => updateConfig({ exportFormat: e.target.value })}
           >
-            <option value="geojson">GeoJSON</option>
-            <option value="csv">CSV</option>
-            <option value="json">JSON</option>
-            <option value="parquet">Parquet</option>
+            {exportFormatGroups().map(({ group, formats }) => (
+              <optgroup key={group} label={group}>
+                {formats.map((format) => (
+                  <option key={format.id} value={format.id}>{format.label}</option>
+                ))}
+              </optgroup>
+            ))}
           </select>
+          {formatSpec.requiresWgs84 && (
+            <p className="mt-1 text-[10px] leading-tight text-slate-500">
+              Needs longitude/latitude coordinates (EPSG:4326).
+            </p>
+          )}
         </div>
       ) : (
         <div className="mt-2 flex items-center gap-2">

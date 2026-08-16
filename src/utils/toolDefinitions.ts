@@ -1,3 +1,9 @@
+import { EXPORT_FORMATS } from './geoExport';
+
+// Kept in step with the export node's own format list, so the model can never
+// offer a format the node cannot write.
+const exportFormatIds = EXPORT_FORMATS.map((format) => format.id);
+
 export const llmToolDefinitions = [
   {
     name: 'add_node',
@@ -107,7 +113,7 @@ export const llmToolDefinitions = [
             classCount: { type: 'number', description: 'For choropleth visualisation nodes: number of classes.' },
             paletteId: { type: 'string', enum: ['teal', 'magma', 'forest', 'civic'], description: 'For visualisation nodes: palette id.' },
             outputMode: { type: 'string', enum: ['visualize', 'export'], description: 'For output nodes: visualize to map or export to a file.' },
-            exportFormat: { type: 'string', enum: ['geojson', 'csv', 'json', 'parquet'], description: 'For export output nodes: file format.' },
+            exportFormat: { type: 'string', enum: exportFormatIds, description: 'For export output nodes: file format. kml, kmz and gpx need longitude/latitude coordinates; csv, json and parquet drop geometry.' },
             maxFeatures: { type: 'number', description: 'For output nodes: maximum features to preview or export.' }
           }
         }
