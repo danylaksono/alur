@@ -1,25 +1,25 @@
-export type GeometryKind = 'point' | 'line' | 'polygon';
+export type GeometryKind = "point" | "line" | "polygon";
 
 export type ClassificationMethod =
-  | 'equal_interval'
-  | 'quantile'
-  | 'manual'
-  | 'categorical_top_n';
+  | "equal_interval"
+  | "quantile"
+  | "manual"
+  | "categorical_top_n";
 
 export type VisualisationKind =
-  | 'simple'
-  | 'choropleth'
-  | 'categorical'
-  | 'graduated_symbol'
-  | 'heatmap'
-  | 'label'
-  | 'dot_density'
-  | 'extrusion'
-  | 'graduated_line'
-  | 'hexbin'
-  | 'bivariate'
-  | 'glyph_grid'
-  | 'h3grid';
+  | "simple"
+  | "choropleth"
+  | "categorical"
+  | "graduated_symbol"
+  | "heatmap"
+  | "label"
+  | "dot_density"
+  | "extrusion"
+  | "graduated_line"
+  | "hexbin"
+  | "bivariate"
+  | "glyph_grid"
+  | "h3grid";
 
 export type LegendItem = {
   label: string;
@@ -50,16 +50,19 @@ export type LegendSpec = {
 };
 
 export type SimpleVisualisation = {
-  kind: 'simple';
+  kind: "simple";
   color: string;
   opacity: number;
   outlineColor?: string;
 };
 
 export type ChoroplethVisualisation = {
-  kind: 'choropleth';
+  kind: "choropleth";
   field: string;
-  method: Extract<ClassificationMethod, 'equal_interval' | 'quantile' | 'manual'>;
+  method: Extract<
+    ClassificationMethod,
+    "equal_interval" | "quantile" | "manual"
+  >;
   classCount: number;
   breaks: number[];
   palette: string[];
@@ -70,9 +73,9 @@ export type ChoroplethVisualisation = {
 };
 
 export type CategoricalVisualisation = {
-  kind: 'categorical';
+  kind: "categorical";
   field: string;
-  method: 'categorical_top_n';
+  method: "categorical_top_n";
   categories: Array<{ value: string; color: string; count?: number }>;
   otherColor: string;
   nullColor: string;
@@ -81,9 +84,12 @@ export type CategoricalVisualisation = {
 };
 
 export type GraduatedSymbolVisualisation = {
-  kind: 'graduated_symbol';
+  kind: "graduated_symbol";
   field: string;
-  method: Extract<ClassificationMethod, 'equal_interval' | 'quantile' | 'manual'>;
+  method: Extract<
+    ClassificationMethod,
+    "equal_interval" | "quantile" | "manual"
+  >;
   minValue: number;
   maxValue: number;
   minRadius: number;
@@ -93,7 +99,7 @@ export type GraduatedSymbolVisualisation = {
 };
 
 export type HeatmapVisualisation = {
-  kind: 'heatmap';
+  kind: "heatmap";
   field?: string;
   palette: string[];
   radius: number;
@@ -102,7 +108,7 @@ export type HeatmapVisualisation = {
 };
 
 export type LabelVisualisation = {
-  kind: 'label';
+  kind: "label";
   field: string;
   fontSize: number;
   color: string;
@@ -112,7 +118,7 @@ export type LabelVisualisation = {
 };
 
 export type DotDensityVisualisation = {
-  kind: 'dot_density';
+  kind: "dot_density";
   field: string;
   dotValue: number;
   color: string;
@@ -121,9 +127,12 @@ export type DotDensityVisualisation = {
 };
 
 export type ExtrusionVisualisation = {
-  kind: 'extrusion';
+  kind: "extrusion";
   field: string;
-  method: Extract<ClassificationMethod, 'equal_interval' | 'quantile' | 'manual'>;
+  method: Extract<
+    ClassificationMethod,
+    "equal_interval" | "quantile" | "manual"
+  >;
   classCount: number;
   breaks: number[];
   palette: string[];
@@ -133,7 +142,7 @@ export type ExtrusionVisualisation = {
 };
 
 export type GraduatedLineVisualisation = {
-  kind: 'graduated_line';
+  kind: "graduated_line";
   field: string;
   minValue: number;
   maxValue: number;
@@ -143,10 +152,10 @@ export type GraduatedLineVisualisation = {
   opacity: number;
 };
 
-export type HexbinAggregate = 'count' | 'sum' | 'avg';
+export type HexbinAggregate = "count" | "sum" | "avg";
 
 export type HexbinVisualisation = {
-  kind: 'hexbin';
+  kind: "hexbin";
   /** Field to aggregate; unused when aggregate is 'count'. */
   field?: string;
   aggregate: HexbinAggregate;
@@ -155,7 +164,7 @@ export type HexbinVisualisation = {
 };
 
 export type BivariateVisualisation = {
-  kind: 'bivariate';
+  kind: "bivariate";
   fieldX: string;
   fieldY: string;
   /** 2 inner breaks per axis (3 classes each). */
@@ -169,7 +178,13 @@ export type BivariateVisualisation = {
   outlineWidth: number;
 };
 
-export type GlyphGridGlyph = 'density' | 'circle' | 'pie' | 'donut' | 'bars' | 'radial';
+export type GlyphGridGlyph =
+  | "density"
+  | "circle"
+  | "pie"
+  | "donut"
+  | "bars"
+  | "radial";
 
 /**
  * Screen-space gridded glyph map rendered by the screengrid plugin.
@@ -177,15 +192,15 @@ export type GlyphGridGlyph = 'density' | 'circle' | 'pie' | 'donut' | 'bars' | '
  * exportable MapLibre style JSON.
  */
 export type GlyphGridVisualisation = {
-  kind: 'glyph_grid';
-  mode: 'grid' | 'hex';
+  kind: "glyph_grid";
+  mode: "grid" | "hex";
   /** Cell size in screen pixels. */
   cellSize: number;
   glyph: GlyphGridGlyph;
   /** Numeric fields summed per cell; drive multivariate glyph segments. */
   fields: string[];
   /** Cell weight for density/circle glyphs: row count or fields[0] sum/mean. */
-  aggregate: 'count' | 'sum' | 'avg';
+  aggregate: "count" | "sum" | "avg";
   palette: string[];
   opacity: number;
 };
@@ -196,7 +211,7 @@ export type GlyphGridVisualisation = {
  * so it is not part of the exportable MapLibre style JSON.
  */
 export type H3GridVisualisation = {
-  kind: 'h3grid';
+  kind: "h3grid";
   /** Column holding H3 cell ids in their string form. */
   cellColumn: string;
   /** Numeric column driving the colour ramp (and optional elevation). */

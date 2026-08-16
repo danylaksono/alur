@@ -1,12 +1,15 @@
-import type { LayerVisualisation } from '../types/visualisation';
-import type { VisualFilter } from '../types/visualAnalytics';
+import type { LayerVisualisation } from "../types/visualisation";
+import type { VisualFilter } from "../types/visualAnalytics";
 
 const visualisationFields = (visualisation?: LayerVisualisation): string[] => {
-  if (!visualisation || visualisation.kind === 'simple') return [];
-  if (visualisation.kind === 'bivariate') return [visualisation.fieldX, visualisation.fieldY];
-  if (visualisation.kind === 'glyph_grid') return visualisation.fields;
-  if (visualisation.kind === 'h3grid') return visualisation.valueField ? [visualisation.valueField] : [];
-  if ('field' in visualisation && visualisation.field) return [visualisation.field];
+  if (!visualisation || visualisation.kind === "simple") return [];
+  if (visualisation.kind === "bivariate")
+    return [visualisation.fieldX, visualisation.fieldY];
+  if (visualisation.kind === "glyph_grid") return visualisation.fields;
+  if (visualisation.kind === "h3grid")
+    return visualisation.valueField ? [visualisation.valueField] : [];
+  if ("field" in visualisation && visualisation.field)
+    return [visualisation.field];
   return [];
 };
 
@@ -21,10 +24,12 @@ export const requiredMapTileProperties = (
   filters: VisualFilter[],
 ) => {
   const available = new Set(availableProperties);
-  return [...new Set([
-    ...visualisationFields(visualisation),
-    ...filters.map((filter) => filter.field),
-  ])]
+  return [
+    ...new Set([
+      ...visualisationFields(visualisation),
+      ...filters.map((filter) => filter.field),
+    ]),
+  ]
     .filter((field) => available.has(field))
     .sort((a, b) => a.localeCompare(b));
 };

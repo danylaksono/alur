@@ -1,41 +1,57 @@
-import { useEffect, useRef, useState } from 'react';
-import * as maplibregl from 'maplibre-gl';
-import 'maplibre-gl/dist/maplibre-gl.css';
-import { useStore } from '../../store/useStore';
-import { getBasemap } from '../../utils/basemaps';
-import { compileLayerStyle, geometryKindForLayer } from '../../utils/mapStyleCompiler';
-import { featureIdFromMapFeature } from '../../utils/featureIdentity';
-import { FEATURE_ID_PROPERTY } from '../../types/visualAnalytics';
-import { LegendControl } from './LegendControl';
-import { LocationSearchControl } from './LocationSearchControl';
-import type { GeocodingResult } from '../../services/geocodingService';
-import { mvtTileUrl, registerMvtProtocol, registerMvtTileSource, unregisterMvtTileSource } from '../../services/mvtTileService';
-import { boundsForLayer, mvtSourceForLayer } from '../../utils/layerSource';
-import { compileVisualFiltersWhereClause } from '../../utils/visualFilterSql';
-import { previewCollection, type DrawnLayer } from '../../utils/drawnFeatures';
-import { ScreenGridLayerGL } from 'screengrid';
+import { useEffect, useRef, useState } from "react";
+import * as maplibregl from "maplibre-gl";
+import "maplibre-gl/dist/maplibre-gl.css";
+import { useStore } from "../../store/useStore";
+import { getBasemap } from "../../utils/basemaps";
+import {
+  compileLayerStyle,
+  geometryKindForLayer,
+} from "../../utils/mapStyleCompiler";
+import { featureIdFromMapFeature } from "../../utils/featureIdentity";
+import { FEATURE_ID_PROPERTY } from "../../types/visualAnalytics";
+import { LegendControl } from "./LegendControl";
+import { LocationSearchControl } from "./LocationSearchControl";
+import type { GeocodingResult } from "../../services/geocodingService";
+import {
+  mvtTileUrl,
+  registerMvtProtocol,
+  registerMvtTileSource,
+  unregisterMvtTileSource,
+} from "../../services/mvtTileService";
+import { boundsForLayer, mvtSourceForLayer } from "../../utils/layerSource";
+import { compileVisualFiltersWhereClause } from "../../utils/visualFilterSql";
+import { previewCollection, type DrawnLayer } from "../../utils/drawnFeatures";
+import { ScreenGridLayerGL } from "screengrid";
 import {
   buildGlyphGridLayerOptions,
   glyphCellFeatureIds,
   glyphPointDataKey,
   queryLayerGlyphPoints,
   type GlyphPoint,
-} from '../../services/glyphGridService';
-import type { GlyphGridVisualisation } from '../../types/visualisation';
-import type { H3GridVisualisation } from '../../types/visualisation';
+} from "../../services/glyphGridService";
+import type { GlyphGridVisualisation } from "../../types/visualisation";
+import type { H3GridVisualisation } from "../../types/visualisation";
 import {
   buildH3GridLayerProps,
   loadDeckGeo,
   loadDeckMapbox,
   queryH3GridRows,
   type H3GridDatum,
-} from '../../services/h3DeckService';
-import { requiredMapTileProperties } from '../../utils/mapTileProperties';
-import { queryLayerFeatureDetails } from '../../services/visualAnalyticsService';
-import { MapInteractionToolbar } from './MapInteractionToolbar';
-import { registerMap } from '../../services/mapRegistry';
-import { combineFeatureSelection, featureIdsFromRenderedFeatures, screenSelectionBox, type SelectionOperation } from '../../utils/mapSelection';
-import { applyCohortComparisonPaint, compileMapFilter } from '../../utils/mapFilterCompiler';
+} from "../../services/h3DeckService";
+import { requiredMapTileProperties } from "../../utils/mapTileProperties";
+import { queryLayerFeatureDetails } from "../../services/visualAnalyticsService";
+import { MapInteractionToolbar } from "./MapInteractionToolbar";
+import { registerMap } from "../../services/mapRegistry";
+import {
+  combineFeatureSelection,
+  featureIdsFromRenderedFeatures,
+  screenSelectionBox,
+  type SelectionOperation,
+} from "../../utils/mapSelection";
+import {
+  applyCohortComparisonPaint,
+  compileMapFilter,
+} from "../../utils/mapFilterCompiler";
 
 function getLayerBounds(geojson: GeoJSON.FeatureCollection) {
   const coords: [number, number][] = [];
@@ -43,7 +59,8 @@ function getLayerBounds(geojson: GeoJSON.FeatureCollection) {
   const isValidLat = (v: number) => v >= -90 && v <= 90;
   const normalize = (pt: any): [number, number] | null => {
     if (!Array.isArray(pt) || pt.length < 2) return null;
-    const lon = Number(pt[0]), lat = Number(pt[1]);
+    const lon = Number(pt[0]),
+      lat = Number(pt[1]);
     if (Number.isNaN(lon) || Number.isNaN(lat)) return null;
     if (isValidLon(lon) && isValidLat(lat)) return [lon, lat];
     if (isValidLon(lat) && isValidLat(lon)) return [lat, lon];
@@ -52,63 +69,110 @@ function getLayerBounds(geojson: GeoJSON.FeatureCollection) {
   const collect = (g: GeoJSON.Geometry | null) => {
     if (!g) return;
     switch (g.type) {
-      case 'Point': { const n = normalize(g.coordinates); if (n) coords.push(n); break; }
-      case 'LineString': case 'MultiPoint': (g.coordinates as any[]).forEach((p) => { const n = normalize(p); if (n) coords.push(n); }); break;
-      case 'Polygon': case 'MultiLineString': (g.coordinates as any[]).flat(1).forEach((p) => { const n = normalize(p); if (n) coords.push(n); }); break;
-      case 'MultiPolygon': (g.coordinates as any[]).flat(2).forEach((p) => { const n = normalize(p); if (n) coords.push(n); }); break;
-      case 'GeometryCollection': g.geometries.forEach(collect); break;
+      case "Point": {
+        const n = normalize(g.coordinates);
+        if (n) coords.push(n);
+        break;
+      }
+      case "LineString":
+      case "MultiPoint":
+        (g.coordinates as any[]).forEach((p) => {
+          const n = normalize(p);
+          if (n) coords.push(n);
+        });
+        break;
+      case "Polygon":
+      case "MultiLineString":
+        (g.coordinates as any[]).flat(1).forEach((p) => {
+          const n = normalize(p);
+          if (n) coords.push(n);
+        });
+        break;
+      case "MultiPolygon":
+        (g.coordinates as any[]).flat(2).forEach((p) => {
+          const n = normalize(p);
+          if (n) coords.push(n);
+        });
+        break;
+      case "GeometryCollection":
+        g.geometries.forEach(collect);
+        break;
     }
   };
   geojson.features.forEach((f) => collect(f.geometry));
   if (!coords.length) return null;
-  let minLon = Infinity, maxLon = -Infinity, minLat = Infinity, maxLat = -Infinity;
+  let minLon = Infinity,
+    maxLon = -Infinity,
+    minLat = Infinity,
+    maxLat = -Infinity;
   for (const [lon, lat] of coords) {
     if (lon < minLon) minLon = lon;
     if (lon > maxLon) maxLon = lon;
     if (lat < minLat) minLat = lat;
     if (lat > maxLat) maxLat = lat;
   }
-  if (!isValidLon(minLon) || !isValidLat(minLat) || !isValidLon(maxLon) || !isValidLat(maxLat)) return null;
-  return [[minLon, minLat], [maxLon, maxLat]] as [[number, number], [number, number]];
+  if (
+    !isValidLon(minLon) ||
+    !isValidLat(minLat) ||
+    !isValidLon(maxLon) ||
+    !isValidLat(maxLat)
+  )
+    return null;
+  return [
+    [minLon, minLat],
+    [maxLon, maxLat],
+  ] as [[number, number], [number, number]];
 }
 
 function formatPopupValue(value: unknown): string {
-  if (value === null || value === undefined) return '—';
-  if (typeof value === 'number') return value.toLocaleString();
-  if (typeof value === 'object') return JSON.stringify(value).slice(0, 100);
+  if (value === null || value === undefined) return "—";
+  if (typeof value === "number") return value.toLocaleString();
+  if (typeof value === "object") return JSON.stringify(value).slice(0, 100);
   return String(value).slice(0, 80);
 }
 
 /** One source for every drawn layer: only one is ever being edited. */
-const DRAW_SOURCE_ID = '__alur_draw';
+const DRAW_SOURCE_ID = "__alur_draw";
 
-const escapeHtml = (value: string) => value
-  .replace(/&/g, '&amp;')
-  .replace(/</g, '&lt;')
-  .replace(/>/g, '&gt;')
-  .replace(/"/g, '&quot;')
-  .replace(/'/g, '&#039;');
+const escapeHtml = (value: string) =>
+  value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 
-const popupHtml = (layerName: string, properties: Record<string, unknown> | null, loading = false) => {
+const popupHtml = (
+  layerName: string,
+  properties: Record<string, unknown> | null,
+  loading = false,
+) => {
   const title = `<div style="font:10px/1.4 sans-serif;font-weight:700;color:#0f766e;margin-bottom:4px">${escapeHtml(layerName)}</div>`;
   if (loading) {
     return `${title}<div style="font:11px/1.5 sans-serif;color:#64748b">Loading feature details…</div>`;
   }
   const entries = Object.entries(properties || {}).slice(0, 8);
-  const rows = entries.map(([key, value]) =>
-    `<div style="display:flex;justify-content:space-between;gap:8px;font:11px/1.5 monospace">
+  const rows = entries
+    .map(
+      ([key, value]) =>
+        `<div style="display:flex;justify-content:space-between;gap:8px;font:11px/1.5 monospace">
       <span style="font-weight:600;color:#475569">${escapeHtml(key)}</span>
       <span style="color:#1e293b;text-align:right;max-width:160px;overflow:hidden;text-overflow:ellipsis">${escapeHtml(formatPopupValue(value))}</span>
     </div>`,
-  ).join('');
+    )
+    .join("");
   const remainder = Object.keys(properties || {}).length - entries.length;
-  return `${title}${rows}${remainder > 0
-    ? `<div style="font:10px monospace;color:#94a3b8;margin-top:4px">+ ${remainder} more fields</div>`
-    : ''}`;
+  return `${title}${rows}${
+    remainder > 0
+      ? `<div style="font:10px monospace;color:#94a3b8;margin-top:4px">+ ${remainder} more fields</div>`
+      : ""
+  }`;
 };
 
 const optionalLayerProps = (props: Record<string, unknown>) =>
-  Object.fromEntries(Object.entries(props).filter(([, value]) => value !== undefined));
+  Object.fromEntries(
+    Object.entries(props).filter(([, value]) => value !== undefined),
+  );
 
 export const MapView = () => {
   const mapContainer = useRef<HTMLDivElement>(null);
@@ -119,15 +183,43 @@ export const MapView = () => {
   const renderedLayerIds = useRef<Set<string>>(new Set());
   const renderedSourceVersions = useRef<Map<string, string>>(new Map());
   const nodeLayerMap = useRef<Map<string, string>>(new Map());
-  const previousFeatureState = useRef<Map<string, { hoveredFeatureId?: string; highlightedFeatureIds: Set<string>; selectedFeatureIds: Set<string> }>>(new Map());
+  const previousFeatureState = useRef<
+    Map<
+      string,
+      {
+        hoveredFeatureId?: string;
+        highlightedFeatureIds: Set<string>;
+        selectedFeatureIds: Set<string>;
+      }
+    >
+  >(new Map());
   const styleReady = useRef(false);
-  const glyphLayers = useRef<Map<string, { layer: ScreenGridLayerGL<GlyphPoint, number, number[]>; key: string }>>(new Map());
-  const glyphPointCache = useRef<Map<string, { key: string; promise: Promise<GlyphPoint[]> }>>(new Map());
+  const glyphLayers = useRef<
+    Map<
+      string,
+      { layer: ScreenGridLayerGL<GlyphPoint, number, number[]>; key: string }
+    >
+  >(new Map());
+  const glyphPointCache = useRef<
+    Map<string, { key: string; promise: Promise<GlyphPoint[]> }>
+  >(new Map());
   const deckOverlayRef = useRef<any>(null);
   const deckPopupRef = useRef<maplibregl.Popup | null>(null);
-  const selectionDrag = useRef<{ start: { x: number; y: number }; operation: SelectionOperation } | null>(null);
-  type LayerEventName = 'click' | 'mousemove' | 'mouseleave';
-  const layerEventHandlers = useRef<Map<string, Array<{ event: LayerEventName; mapLayerId: string; fn: (...args: any[]) => void }>>>(new Map());
+  const selectionDrag = useRef<{
+    start: { x: number; y: number };
+    operation: SelectionOperation;
+  } | null>(null);
+  type LayerEventName = "click" | "mousemove" | "mouseleave";
+  const layerEventHandlers = useRef<
+    Map<
+      string,
+      Array<{
+        event: LayerEventName;
+        mapLayerId: string;
+        fn: (...args: any[]) => void;
+      }>
+    >
+  >(new Map());
 
   const selectedBasemapId = useStore((s) => s.selectedBasemapId);
   const mapLayers = useStore((s) => s.mapLayers);
@@ -150,8 +242,10 @@ export const MapView = () => {
   const cancelDrawing = useStore((s) => s.cancelDrawing);
   const undoDrawingVertex = useStore((s) => s.undoDrawingVertex);
   const [selectionMode, setSelectionMode] = useState(false);
-  const [selectionBox, setSelectionBox] = useState<[[number, number], [number, number]] | null>(null);
-  const [coordinates, setCoordinates] = useState('');
+  const [selectionBox, setSelectionBox] = useState<
+    [[number, number], [number, number]] | null
+  >(null);
+  const [coordinates, setCoordinates] = useState("");
   const visibleLegends = mapLayers
     .filter((layer) => layer.visible && layer.legend)
     .map((layer) => ({
@@ -160,7 +254,12 @@ export const MapView = () => {
       legend: layer.legend!,
     }));
   const layerFilterKey = JSON.stringify(
-    Object.fromEntries(mapLayers.map((layer) => [layer.id, visualAnalytics.datasets[layer.id]?.filters || []])),
+    Object.fromEntries(
+      mapLayers.map((layer) => [
+        layer.id,
+        visualAnalytics.datasets[layer.id]?.filters || [],
+      ]),
+    ),
   );
 
   // Init map once
@@ -180,10 +279,15 @@ export const MapView = () => {
       // blank. Costs some driver-level optimisation on every frame.
       preserveDrawingBuffer: true,
     });
-    m.addControl(new maplibregl.ScaleControl({ unit: 'metric', maxWidth: 120 }), 'bottom-right');
+    m.addControl(
+      new maplibregl.ScaleControl({ unit: "metric", maxWidth: 120 }),
+      "bottom-right",
+    );
     // Fires on the initial style load and after every setStyle — unlike
     // isStyleLoaded(), it is not perturbed by ongoing tile loads.
-    m.on('style.load', () => { styleReady.current = true; });
+    m.on("style.load", () => {
+      styleReady.current = true;
+    });
     map.current = m;
     registerMap(m);
     if (import.meta.env.DEV) {
@@ -194,7 +298,7 @@ export const MapView = () => {
     popup.current = new maplibregl.Popup({
       closeButton: true,
       closeOnClick: false,
-      maxWidth: '300px',
+      maxWidth: "300px",
     });
 
     const resizeObserver = new ResizeObserver(() => {
@@ -205,12 +309,14 @@ export const MapView = () => {
     const updateCoordinates = (event: maplibregl.MapMouseEvent) => {
       cancelAnimationFrame(coordinateFrame);
       coordinateFrame = requestAnimationFrame(() => {
-        setCoordinates(`${event.lngLat.lng.toFixed(5)}, ${event.lngLat.lat.toFixed(5)}`);
+        setCoordinates(
+          `${event.lngLat.lng.toFixed(5)}, ${event.lngLat.lat.toFixed(5)}`,
+        );
       });
     };
-    const clearCoordinates = () => setCoordinates('');
-    m.on('mousemove', updateCoordinates);
-    m.on('mouseout', clearCoordinates);
+    const clearCoordinates = () => setCoordinates("");
+    m.on("mousemove", updateCoordinates);
+    m.on("mouseout", clearCoordinates);
     const storeCamera = () => {
       const center = m.getCenter();
       useStore.getState().setMapCamera({
@@ -221,20 +327,29 @@ export const MapView = () => {
         pitch: m.getPitch(),
       });
     };
-    m.on('moveend', storeCamera);
+    m.on("moveend", storeCamera);
 
     // Per-layer restyle indicator: mark while a layer's source loads tiles,
     // clear everything once the map settles. setLayerRestyling suppresses
     // no-op writes, so these chatty events don't spam the store.
-    m.on('sourcedataloading', (e: maplibregl.MapSourceDataEvent) => {
+    m.on("sourcedataloading", (e: maplibregl.MapSourceDataEvent) => {
       const sourceId = (e as { sourceId?: string }).sourceId;
-      if (sourceId?.startsWith('input-source-')) {
-        useStore.getState().setLayerRestyling(sourceId.slice('input-source-'.length), true);
+      if (sourceId?.startsWith("input-source-")) {
+        useStore
+          .getState()
+          .setLayerRestyling(sourceId.slice("input-source-".length), true);
       }
     });
-    m.on('idle', () => {
-      const { restylingLayerIds, setLayerRestyling, loadingOperations, finishLoadingOperation } = useStore.getState();
-      Object.keys(restylingLayerIds).forEach((layerId) => setLayerRestyling(layerId, false));
+    m.on("idle", () => {
+      const {
+        restylingLayerIds,
+        setLayerRestyling,
+        loadingOperations,
+        finishLoadingOperation,
+      } = useStore.getState();
+      Object.keys(restylingLayerIds).forEach((layerId) =>
+        setLayerRestyling(layerId, false),
+      );
       Object.values(loadingOperations).forEach((operation) => {
         if (!operation.waitForLayerId) return;
         const sourceId = `input-source-${operation.waitForLayerId}`;
@@ -247,9 +362,9 @@ export const MapView = () => {
     return () => {
       resizeObserver.disconnect();
       cancelAnimationFrame(coordinateFrame);
-      m.off('mousemove', updateCoordinates);
-      m.off('mouseout', clearCoordinates);
-      m.off('moveend', storeCamera);
+      m.off("mousemove", updateCoordinates);
+      m.off("mouseout", clearCoordinates);
+      m.off("moveend", storeCamera);
       locationMarker.current?.remove();
       locationMarker.current = null;
       deckPopupRef.current?.remove();
@@ -268,12 +383,13 @@ export const MapView = () => {
     if (!m) return;
     const center = m.getCenter();
     if (
-      Math.abs(center.lng - mapCamera.longitude) < 1e-7
-      && Math.abs(center.lat - mapCamera.latitude) < 1e-7
-      && Math.abs(m.getZoom() - mapCamera.zoom) < 1e-7
-      && Math.abs(m.getBearing() - mapCamera.bearing) < 1e-7
-      && Math.abs(m.getPitch() - mapCamera.pitch) < 1e-7
-    ) return;
+      Math.abs(center.lng - mapCamera.longitude) < 1e-7 &&
+      Math.abs(center.lat - mapCamera.latitude) < 1e-7 &&
+      Math.abs(m.getZoom() - mapCamera.zoom) < 1e-7 &&
+      Math.abs(m.getBearing() - mapCamera.bearing) < 1e-7 &&
+      Math.abs(m.getPitch() - mapCamera.pitch) < 1e-7
+    )
+      return;
     m.jumpTo({
       center: [mapCamera.longitude, mapCamera.latitude],
       zoom: mapCamera.zoom,
@@ -289,14 +405,14 @@ export const MapView = () => {
     if (!selectionMode) {
       selectionDrag.current = null;
       setSelectionBox(null);
-      canvas.style.cursor = '';
+      canvas.style.cursor = "";
       if (!m.dragPan.isEnabled()) m.dragPan.enable();
       return;
     }
 
     popup.current?.remove();
     m.dragPan.disable();
-    canvas.style.cursor = 'crosshair';
+    canvas.style.cursor = "crosshair";
 
     const pointForEvent = (event: PointerEvent) => {
       const rect = canvas.getBoundingClientRect();
@@ -312,7 +428,11 @@ export const MapView = () => {
       const start = pointForEvent(event);
       selectionDrag.current = {
         start,
-        operation: event.altKey ? 'subtract' : event.shiftKey ? 'add' : 'replace',
+        operation: event.altKey
+          ? "subtract"
+          : event.shiftKey
+            ? "add"
+            : "replace",
       };
       canvas.setPointerCapture(event.pointerId);
       setSelectionBox(screenSelectionBox(start, start));
@@ -330,47 +450,61 @@ export const MapView = () => {
       const end = pointForEvent(event);
       const box = screenSelectionBox(drag.start, end);
       setSelectionBox(null);
-      if (Math.abs(box[1][0] - box[0][0]) < 3 || Math.abs(box[1][1] - box[0][1]) < 3) return;
+      if (
+        Math.abs(box[1][0] - box[0][0]) < 3 ||
+        Math.abs(box[1][1] - box[0][1]) < 3
+      )
+        return;
 
       const state = useStore.getState();
-      const layer = state.mapLayers.find((candidate) => candidate.id === state.selectedLayerId)
-        || state.mapLayers.find((candidate) => candidate.visible);
+      const layer =
+        state.mapLayers.find(
+          (candidate) => candidate.id === state.selectedLayerId,
+        ) || state.mapLayers.find((candidate) => candidate.visible);
       if (!layer) return;
       const mapLayerId = `input-layer-${layer.id}`;
       if (!m.getLayer(mapLayerId)) return;
       const features = m.queryRenderedFeatures(box, { layers: [mapLayerId] });
       const incoming = featureIdsFromRenderedFeatures(features);
       if (incoming.length > 25_000) {
-        addToast({ type: 'warning', message: 'That box contains more than 25,000 visible features. Zoom in and select a smaller area.' });
+        addToast({
+          type: "warning",
+          message:
+            "That box contains more than 25,000 visible features. Zoom in and select a smaller area.",
+        });
         return;
       }
-      const current = state.visualAnalytics.datasets[layer.id]?.selectedFeatureIds || [];
-      setFeatureSelection(layer.id, combineFeatureSelection(current, incoming, drag.operation));
+      const current =
+        state.visualAnalytics.datasets[layer.id]?.selectedFeatureIds || [];
+      setFeatureSelection(
+        layer.id,
+        combineFeatureSelection(current, incoming, drag.operation),
+      );
       selectLayer(layer.id);
       addToast({
-        type: 'info',
+        type: "info",
         message: incoming.length
-          ? `${incoming.length.toLocaleString()} visible features ${drag.operation === 'replace' ? 'selected' : drag.operation === 'add' ? 'added' : 'removed'}.`
-          : 'No selectable visible features were found in that box.',
+          ? `${incoming.length.toLocaleString()} visible features ${drag.operation === "replace" ? "selected" : drag.operation === "add" ? "added" : "removed"}.`
+          : "No selectable visible features were found in that box.",
       });
     };
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setSelectionMode(false);
+      if (event.key === "Escape") setSelectionMode(false);
     };
 
-    canvas.addEventListener('pointerdown', onPointerDown, true);
-    canvas.addEventListener('pointermove', onPointerMove, true);
-    canvas.addEventListener('pointerup', finishSelection, true);
-    canvas.addEventListener('pointercancel', finishSelection, true);
-    window.addEventListener('keydown', onKeyDown);
+    canvas.addEventListener("pointerdown", onPointerDown, true);
+    canvas.addEventListener("pointermove", onPointerMove, true);
+    canvas.addEventListener("pointerup", finishSelection, true);
+    canvas.addEventListener("pointercancel", finishSelection, true);
+    window.addEventListener("keydown", onKeyDown);
     return () => {
-      canvas.removeEventListener('pointerdown', onPointerDown, true);
-      canvas.removeEventListener('pointermove', onPointerMove, true);
-      canvas.removeEventListener('pointerup', finishSelection, true);
-      canvas.removeEventListener('pointercancel', finishSelection, true);
-      window.removeEventListener('keydown', onKeyDown);
+      canvas.removeEventListener("pointerdown", onPointerDown, true);
+      canvas.removeEventListener("pointermove", onPointerMove, true);
+      canvas.removeEventListener("pointerup", finishSelection, true);
+      canvas.removeEventListener("pointercancel", finishSelection, true);
+      window.removeEventListener("keydown", onKeyDown);
       selectionDrag.current = null;
-      canvas.style.cursor = '';
+      canvas.style.cursor = "";
       if (!m.dragPan.isEnabled()) m.dragPan.enable();
     };
   }, [selectionMode, addToast, selectLayer, setFeatureSelection]);
@@ -387,7 +521,7 @@ export const MapView = () => {
     const m = map.current;
     if (!m || !drawing) return;
     const canvas = m.getCanvas();
-    canvas.style.cursor = 'crosshair';
+    canvas.style.cursor = "crosshair";
     // Suppresses the zoom that would otherwise fire when finishing a shape.
     m.doubleClickZoom.disable();
 
@@ -399,22 +533,35 @@ export const MapView = () => {
       finishDrawing();
     };
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { event.preventDefault(); cancelDrawing(); }
-      else if (event.key === 'Enter') { event.preventDefault(); finishDrawing(); }
-      else if (event.key === 'Backspace') { event.preventDefault(); undoDrawingVertex(); }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        cancelDrawing();
+      } else if (event.key === "Enter") {
+        event.preventDefault();
+        finishDrawing();
+      } else if (event.key === "Backspace") {
+        event.preventDefault();
+        undoDrawingVertex();
+      }
     };
 
-    m.on('click', onClick);
-    m.on('dblclick', onDoubleClick);
-    window.addEventListener('keydown', onKeyDown);
+    m.on("click", onClick);
+    m.on("dblclick", onDoubleClick);
+    window.addEventListener("keydown", onKeyDown);
     return () => {
-      m.off('click', onClick);
-      m.off('dblclick', onDoubleClick);
-      window.removeEventListener('keydown', onKeyDown);
-      canvas.style.cursor = '';
+      m.off("click", onClick);
+      m.off("dblclick", onDoubleClick);
+      window.removeEventListener("keydown", onKeyDown);
+      canvas.style.cursor = "";
       m.doubleClickZoom.enable();
     };
-  }, [drawing, addDrawingVertex, finishDrawing, cancelDrawing, undoDrawingVertex]);
+  }, [
+    drawing,
+    addDrawingVertex,
+    finishDrawing,
+    cancelDrawing,
+    undoDrawingVertex,
+  ]);
 
   /** Renders committed and in-progress geometry for the node being drawn into. */
   useEffect(() => {
@@ -429,9 +576,9 @@ export const MapView = () => {
       // Committed layers are excluded because they are already on the map as
       // real layers; drawing them again would double-render every feature.
       const collection = {
-        type: 'FeatureCollection' as const,
+        type: "FeatureCollection" as const,
         features: nodes.flatMap((node) => {
-          if (node.data.type !== 'geometry') return [];
+          if (node.data.type !== "geometry") return [];
           const layer: DrawnLayer | undefined = node.data.config?.layer;
           if (!layer) return [];
           const active = drawing?.nodeId === node.id ? drawing : undefined;
@@ -440,20 +587,53 @@ export const MapView = () => {
         }),
       };
 
-      const existing = m.getSource(DRAW_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
-      if (existing) { existing.setData(collection); return; }
+      const existing = m.getSource(DRAW_SOURCE_ID) as
+        | maplibregl.GeoJSONSource
+        | undefined;
+      if (existing) {
+        existing.setData(collection);
+        return;
+      }
       if (!collection.features.length) return;
 
-      m.addSource(DRAW_SOURCE_ID, { type: 'geojson', data: collection });
-      m.addLayer({ id: `${DRAW_SOURCE_ID}-fill`, type: 'fill', source: DRAW_SOURCE_ID, filter: ['==', ['geometry-type'], 'Polygon'], paint: { 'fill-color': '#6366f1', 'fill-opacity': 0.18 } });
-      m.addLayer({ id: `${DRAW_SOURCE_ID}-line`, type: 'line', source: DRAW_SOURCE_ID, filter: ['!=', ['geometry-type'], 'Point'], paint: { 'line-color': '#4f46e5', 'line-width': 2 } });
-      m.addLayer({ id: `${DRAW_SOURCE_ID}-point`, type: 'circle', source: DRAW_SOURCE_ID, filter: ['==', ['geometry-type'], 'Point'], paint: { 'circle-radius': 5, 'circle-color': '#4f46e5', 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 1.5 } });
+      m.addSource(DRAW_SOURCE_ID, { type: "geojson", data: collection });
+      m.addLayer({
+        id: `${DRAW_SOURCE_ID}-fill`,
+        type: "fill",
+        source: DRAW_SOURCE_ID,
+        filter: ["==", ["geometry-type"], "Polygon"],
+        paint: { "fill-color": "#6366f1", "fill-opacity": 0.18 },
+      });
+      m.addLayer({
+        id: `${DRAW_SOURCE_ID}-line`,
+        type: "line",
+        source: DRAW_SOURCE_ID,
+        filter: ["!=", ["geometry-type"], "Point"],
+        paint: { "line-color": "#4f46e5", "line-width": 2 },
+      });
+      m.addLayer({
+        id: `${DRAW_SOURCE_ID}-point`,
+        type: "circle",
+        source: DRAW_SOURCE_ID,
+        filter: ["==", ["geometry-type"], "Point"],
+        paint: {
+          "circle-radius": 5,
+          "circle-color": "#4f46e5",
+          "circle-stroke-color": "#ffffff",
+          "circle-stroke-width": 1.5,
+        },
+      });
     };
 
     // Style readiness is a ref, so an effect that returned early on it would
     // never run again — the drawing would stay invisible until some other
     // state changed. Same deferral the layer sync uses.
-    if (!styleReady.current) { m.once('style.load', syncDrawing); return () => { m.off('style.load', syncDrawing); }; }
+    if (!styleReady.current) {
+      m.once("style.load", syncDrawing);
+      return () => {
+        m.off("style.load", syncDrawing);
+      };
+    }
     syncDrawing();
   }, [drawing, nodes]);
 
@@ -462,7 +642,9 @@ export const MapView = () => {
     if (!m) return;
     const nextStyleUrl = getBasemap(selectedBasemapId).styleUrl;
     layerEventHandlers.current.forEach((handlers) => {
-      handlers.forEach(({ event, mapLayerId, fn }) => m.off(event, mapLayerId, fn as any));
+      handlers.forEach(({ event, mapLayerId, fn }) =>
+        m.off(event, mapLayerId, fn as any),
+      );
     });
     layerEventHandlers.current.clear();
     renderedLayerIds.current.clear();
@@ -483,11 +665,18 @@ export const MapView = () => {
     const detachLayerHandlers = (layerId: string) => {
       const handlers = layerEventHandlers.current.get(layerId);
       if (!handlers) return;
-      handlers.forEach(({ event, mapLayerId, fn }) => m.off(event, mapLayerId, fn as any));
+      handlers.forEach(({ event, mapLayerId, fn }) =>
+        m.off(event, mapLayerId, fn as any),
+      );
       layerEventHandlers.current.delete(layerId);
     };
 
-    const attachLayerHandler = (layerId: string, event: 'click' | 'mousemove' | 'mouseleave', mapLayerId: string, fn: (...args: any[]) => void) => {
+    const attachLayerHandler = (
+      layerId: string,
+      event: "click" | "mousemove" | "mouseleave",
+      mapLayerId: string,
+      fn: (...args: any[]) => void,
+    ) => {
       m.on(event, mapLayerId, fn as any);
       const handlers = layerEventHandlers.current.get(layerId) || [];
       handlers.push({ event, mapLayerId, fn });
@@ -498,17 +687,27 @@ export const MapView = () => {
       // Gate on style readiness, not isStyleLoaded(): the latter is false
       // whenever any tile is still loading, which on DuckDB MVT layers is
       // most of the time — deferring syncs indefinitely.
-      if (!styleReady.current) { m.once('style.load', syncLayers); return; }
+      if (!styleReady.current) {
+        m.once("style.load", syncLayers);
+        return;
+      }
 
       // On the first dataset, position the camera before registering its vector
       // source. Otherwise MapLibre immediately asks DuckDB for a world-scale
       // tile at zoom 1, where dense building polygons quantize into large
       // triangles/squares and block the useful local tiles behind them.
-      if (renderedLayerIds.current.size === 0 && mapLayers.length > 0 && m.getZoom() <= 2.5) {
+      if (
+        renderedLayerIds.current.size === 0 &&
+        mapLayers.length > 0 &&
+        m.getZoom() <= 2.5
+      ) {
         const requestedLayerId = useStore.getState().layerFocusRequest?.layerId;
-        const initialLayer = mapLayers.find((layer) => layer.id === requestedLayerId) ?? mapLayers[0];
-        const initialBounds = boundsForLayer(initialLayer)
-          || (initialLayer.geojson ? getLayerBounds(initialLayer.geojson) : null);
+        const initialLayer =
+          mapLayers.find((layer) => layer.id === requestedLayerId) ??
+          mapLayers[0];
+        const initialBounds =
+          boundsForLayer(initialLayer) ||
+          (initialLayer.geojson ? getLayerBounds(initialLayer.geojson) : null);
         if (initialBounds) {
           m.fitBounds(initialBounds, { padding: 50, duration: 0, maxZoom: 16 });
         }
@@ -524,7 +723,12 @@ export const MapView = () => {
           const clusterCountLayerId = `${baseLayerId}-cluster-count`;
           const labelLayerId = `${baseLayerId}-labels`;
           const sourceId = `input-source-${rid}`;
-          [baseLayerId, clusterLayerId, clusterCountLayerId, labelLayerId].forEach((id) => {
+          [
+            baseLayerId,
+            clusterLayerId,
+            clusterCountLayerId,
+            labelLayerId,
+          ].forEach((id) => {
             if (m.getLayer(id)) m.removeLayer(id);
           });
           if (m.getSource(sourceId)) m.removeSource(sourceId);
@@ -545,9 +749,15 @@ export const MapView = () => {
         const layerFilters = visualAnalytics.datasets[layer.id]?.filters || [];
         const baseMvtSource = mvtSourceForLayer(layer);
         const tileFilterFields = new Set(baseMvtSource?.propertyColumns || []);
-        const tileFilters = layerFilters.filter((filter) => tileFilterFields.has(filter.field));
+        const tileFilters = layerFilters.filter((filter) =>
+          tileFilterFields.has(filter.field),
+        );
         const renderPropertyColumns = baseMvtSource
-          ? requiredMapTileProperties(baseMvtSource.propertyColumns, layer.visualisation, tileFilters)
+          ? requiredMapTileProperties(
+              baseMvtSource.propertyColumns,
+              layer.visualisation,
+              tileFilters,
+            )
           : [];
         const tileSource = baseMvtSource
           ? {
@@ -556,27 +766,36 @@ export const MapView = () => {
               renderPropertyColumns,
             }
           : undefined;
-        const renderVersion = layer.source.kind === 'duckdb-table' || layer.source.kind === 'duckdb-query'
-          ? layer.source.renderVersion
-          : layer.styleVersion;
+        const renderVersion =
+          layer.source.kind === "duckdb-table" ||
+          layer.source.kind === "duckdb-query"
+            ? layer.source.renderVersion
+            : layer.styleVersion;
         const sourceVersion = `${renderVersion}:${JSON.stringify(tileFilters)}:${JSON.stringify(renderPropertyColumns)}`;
         const isVectorTiled = Boolean(tileSource);
-        const isClustered = !isVectorTiled && layerGeoKind === 'point' && typeof layer.clusterRadius === 'number';
+        const isClustered =
+          !isVectorTiled &&
+          layerGeoKind === "point" &&
+          typeof layer.clusterRadius === "number";
         const sourceLayer = tileSource?.layerName;
         const clusterLayerId = `${layerId}-clusters`;
         const clusterCountLayerId = `${layerId}-cluster-count`;
         const labelLayerId = `${layerId}-labels`;
         const removeRenderedMapLayers = () => {
-          [layerId, clusterLayerId, clusterCountLayerId, labelLayerId].forEach((id) => {
-            if (m.getLayer(id)) m.removeLayer(id);
-          });
+          [layerId, clusterLayerId, clusterCountLayerId, labelLayerId].forEach(
+            (id) => {
+              if (m.getLayer(id)) m.removeLayer(id);
+            },
+          );
         };
 
         if (tileSource) {
           registerMvtTileSource(layer.id, tileSource);
         }
 
-        const existingSourceVersion = renderedSourceVersions.current.get(layer.id);
+        const existingSourceVersion = renderedSourceVersions.current.get(
+          layer.id,
+        );
         if (
           isVectorTiled &&
           m.getSource(sourceId) &&
@@ -589,41 +808,56 @@ export const MapView = () => {
           m.removeSource(sourceId);
         }
 
-        const existingSource = m.getSource(sourceId) as maplibregl.GeoJSONSource | null;
+        const existingSource = m.getSource(
+          sourceId,
+        ) as maplibregl.GeoJSONSource | null;
         if (existingSource && !isVectorTiled) {
-          existingSource.setData((layer.geojson || { type: 'FeatureCollection', features: [] }) as any);
+          existingSource.setData(
+            (layer.geojson || {
+              type: "FeatureCollection",
+              features: [],
+            }) as any,
+          );
         } else if (!existingSource && isVectorTiled && tileSource) {
           m.addSource(sourceId, {
-            type: 'vector',
+            type: "vector",
             tiles: [mvtTileUrl(layer.id, sourceVersion)],
             minzoom: 0,
             maxzoom: 22,
           });
         } else if (!existingSource) {
           m.addSource(sourceId, {
-            type: 'geojson',
-            data: layer.geojson || { type: 'FeatureCollection', features: [] },
+            type: "geojson",
+            data: layer.geojson || { type: "FeatureCollection", features: [] },
             promoteId: FEATURE_ID_PROPERTY,
-            ...(isClustered ? {
-              cluster: true,
-              clusterRadius: layer.clusterRadius,
-              clusterMaxZoom: layer.clusterMaxZoom ?? 16,
-            } : {}),
+            ...(isClustered
+              ? {
+                  cluster: true,
+                  clusterRadius: layer.clusterRadius,
+                  clusterMaxZoom: layer.clusterMaxZoom ?? 16,
+                }
+              : {}),
           } as any);
         }
         renderedSourceVersions.current.set(layer.id, sourceVersion);
 
-        const handleFeatureClick = (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
+        const handleFeatureClick = (
+          e: maplibregl.MapMouseEvent & {
+            features?: maplibregl.MapGeoJSONFeature[];
+          },
+        ) => {
           if (isClustered && e.features?.[0]?.properties?.cluster) {
             const clusterId = e.features[0].properties.cluster_id;
             (m.getSource(sourceId) as maplibregl.GeoJSONSource)
               .getClusterExpansionZoom(clusterId)
               .then((zoom: number) => {
-                const coordinates = (e.features![0].geometry as GeoJSON.Point).coordinates as [number, number];
+                const coordinates = (e.features![0].geometry as GeoJSON.Point)
+                  .coordinates as [number, number];
                 m.easeTo({ center: coordinates, zoom });
               })
               .catch(() => {
-                const coordinates = (e.features![0].geometry as GeoJSON.Point).coordinates as [number, number];
+                const coordinates = (e.features![0].geometry as GeoJSON.Point)
+                  .coordinates as [number, number];
                 m.easeTo({ center: coordinates, zoom: m.getZoom() + 1 });
               });
             return;
@@ -638,20 +872,30 @@ export const MapView = () => {
           if (featureId) toggleSelectedFeature(layer.id, featureId);
 
           if (!featureId) {
-            popup.current?.setLngLat(e.lngLat).setHTML(popupHtml(layer.name, feature.properties || {})).addTo(m);
+            popup.current
+              ?.setLngLat(e.lngLat)
+              .setHTML(popupHtml(layer.name, feature.properties || {}))
+              .addTo(m);
             return;
           }
 
           const requestId = ++popupRequestId.current;
-          popup.current?.setLngLat(e.lngLat).setHTML(popupHtml(layer.name, null, true)).addTo(m);
+          popup.current
+            ?.setLngLat(e.lngLat)
+            .setHTML(popupHtml(layer.name, null, true))
+            .addTo(m);
           void queryLayerFeatureDetails(layer, featureId)
             .then((properties) => {
               if (popupRequestId.current !== requestId) return;
-              popup.current?.setHTML(popupHtml(layer.name, properties || feature.properties || {}));
+              popup.current?.setHTML(
+                popupHtml(layer.name, properties || feature.properties || {}),
+              );
             })
             .catch(() => {
               if (popupRequestId.current !== requestId) return;
-              popup.current?.setHTML(popupHtml(layer.name, feature.properties || {}));
+              popup.current?.setHTML(
+                popupHtml(layer.name, feature.properties || {}),
+              );
             });
         };
 
@@ -662,41 +906,68 @@ export const MapView = () => {
           if (m.getLayer(clusterLayerId)) m.removeLayer(clusterLayerId);
           m.addLayer({
             id: clusterLayerId,
-            type: 'circle',
+            type: "circle",
             source: sourceId,
-            filter: ['has', 'point_count'],
+            filter: ["has", "point_count"],
             paint: {
-              'circle-color': ['step', ['get', 'point_count'], '#94a3b8', 10, '#6366f1', 100, '#8b5cf6', 500, '#ec4899'],
-              'circle-radius': ['step', ['get', 'point_count'], 16, 10, 22, 100, 30, 500, 38],
-              'circle-stroke-width': 2,
-              'circle-stroke-color': '#ffffff',
-              'circle-opacity': layer.visible ? layer.opacity : 0,
+              "circle-color": [
+                "step",
+                ["get", "point_count"],
+                "#94a3b8",
+                10,
+                "#6366f1",
+                100,
+                "#8b5cf6",
+                500,
+                "#ec4899",
+              ],
+              "circle-radius": [
+                "step",
+                ["get", "point_count"],
+                16,
+                10,
+                22,
+                100,
+                30,
+                500,
+                38,
+              ],
+              "circle-stroke-width": 2,
+              "circle-stroke-color": "#ffffff",
+              "circle-opacity": layer.visible ? layer.opacity : 0,
             },
           });
 
-          if (m.getLayer(clusterCountLayerId)) m.removeLayer(clusterCountLayerId);
+          if (m.getLayer(clusterCountLayerId))
+            m.removeLayer(clusterCountLayerId);
           m.addLayer({
             id: clusterCountLayerId,
-            type: 'symbol',
+            type: "symbol",
             source: sourceId,
-            filter: ['has', 'point_count'],
+            filter: ["has", "point_count"],
             layout: {
-              'text-field': ['get', 'point_count_abbreviated'],
-              'text-size': 11,
+              "text-field": ["get", "point_count_abbreviated"],
+              "text-size": 11,
             },
           });
 
           if (m.getLayer(layerId)) m.removeLayer(layerId);
           const compiled = compileLayerStyle(layer, { index: idx });
-          const comparisonPaint = layer.id === visualAnalytics.comparison?.datasetId
-            ? applyCohortComparisonPaint(compiled.paint, visualAnalytics.cohorts, visualAnalytics.comparison, visualAnalytics.datasets[layer.id]?.filters || [])
-            : compiled.paint;
+          const comparisonPaint =
+            layer.id === visualAnalytics.comparison?.datasetId
+              ? applyCohortComparisonPaint(
+                  compiled.paint,
+                  visualAnalytics.cohorts,
+                  visualAnalytics.comparison,
+                  visualAnalytics.datasets[layer.id]?.filters || [],
+                )
+              : compiled.paint;
           m.addLayer({
             id: layerId,
             type: compiled.type as any,
             source: sourceId,
-            ...(sourceLayer ? { 'source-layer': sourceLayer } : {}),
-            filter: ['!', ['has', 'point_count']],
+            ...(sourceLayer ? { "source-layer": sourceLayer } : {}),
+            filter: ["!", ["has", "point_count"]],
             paint: comparisonPaint as any,
             ...optionalLayerProps({ layout: compiled.layout as any }),
           } as any);
@@ -707,46 +978,61 @@ export const MapView = () => {
               id: labelLayerId,
               type: compiled.label.type as any,
               source: sourceId,
-              ...(sourceLayer ? { 'source-layer': sourceLayer } : {}),
-              filter: ['!', ['has', 'point_count']],
+              ...(sourceLayer ? { "source-layer": sourceLayer } : {}),
+              filter: ["!", ["has", "point_count"]],
               layout: compiled.label.layout as any,
               paint: compiled.label.paint as any,
             });
           }
 
-          attachLayerHandler(layer.id, 'click', clusterLayerId, handleFeatureClick);
-          attachLayerHandler(layer.id, 'click', layerId, handleFeatureClick);
+          attachLayerHandler(
+            layer.id,
+            "click",
+            clusterLayerId,
+            handleFeatureClick,
+          );
+          attachLayerHandler(layer.id, "click", layerId, handleFeatureClick);
 
-          attachLayerHandler(layer.id, 'mousemove', clusterLayerId, () => { m.getCanvas().style.cursor = 'pointer'; });
-          attachLayerHandler(layer.id, 'mouseleave', clusterLayerId, () => { m.getCanvas().style.cursor = ''; });
-          attachLayerHandler(layer.id, 'mousemove', layerId, (e) => {
+          attachLayerHandler(layer.id, "mousemove", clusterLayerId, () => {
+            m.getCanvas().style.cursor = "pointer";
+          });
+          attachLayerHandler(layer.id, "mouseleave", clusterLayerId, () => {
+            m.getCanvas().style.cursor = "";
+          });
+          attachLayerHandler(layer.id, "mousemove", layerId, (e) => {
             const feature = e.features?.[0];
             const featureId = feature ? featureIdFromMapFeature(feature) : null;
             if (featureId) setHoveredFeature(layer.id, featureId);
-            m.getCanvas().style.cursor = 'pointer';
+            m.getCanvas().style.cursor = "pointer";
           });
-          attachLayerHandler(layer.id, 'mouseleave', layerId, () => {
+          attachLayerHandler(layer.id, "mouseleave", layerId, () => {
             setHoveredFeature(layer.id, null);
-            m.getCanvas().style.cursor = '';
+            m.getCanvas().style.cursor = "";
           });
         } else {
           if (m.getLayer(layerId)) m.removeLayer(layerId);
           const compiled = compileLayerStyle(layer, { index: idx });
-          const comparisonPaint = layer.id === visualAnalytics.comparison?.datasetId
-            ? applyCohortComparisonPaint(compiled.paint, visualAnalytics.cohorts, visualAnalytics.comparison, visualAnalytics.datasets[layer.id]?.filters || [])
-            : compiled.paint;
+          const comparisonPaint =
+            layer.id === visualAnalytics.comparison?.datasetId
+              ? applyCohortComparisonPaint(
+                  compiled.paint,
+                  visualAnalytics.cohorts,
+                  visualAnalytics.comparison,
+                  visualAnalytics.datasets[layer.id]?.filters || [],
+                )
+              : compiled.paint;
           m.addLayer({
             id: layerId,
             type: compiled.type as any,
             source: sourceId,
-            ...(sourceLayer ? { 'source-layer': sourceLayer } : {}),
+            ...(sourceLayer ? { "source-layer": sourceLayer } : {}),
             paint: comparisonPaint as any,
             ...optionalLayerProps({ layout: compiled.layout as any }),
           } as any);
 
           // 3D extrusion is invisible from straight above — tilt once, then
           // leave the camera to the user.
-          if (compiled.type === 'fill-extrusion' && m.getPitch() === 0) {
+          if (compiled.type === "fill-extrusion" && m.getPitch() === 0) {
             m.easeTo({ pitch: 50, duration: 800 });
           }
 
@@ -756,32 +1042,43 @@ export const MapView = () => {
               id: labelLayerId,
               type: compiled.label.type as any,
               source: sourceId,
-              ...(sourceLayer ? { 'source-layer': sourceLayer } : {}),
+              ...(sourceLayer ? { "source-layer": sourceLayer } : {}),
               layout: compiled.label.layout as any,
               paint: compiled.label.paint as any,
             });
           }
 
-          attachLayerHandler(layer.id, 'click', layerId, handleFeatureClick);
+          attachLayerHandler(layer.id, "click", layerId, handleFeatureClick);
 
-          attachLayerHandler(layer.id, 'mousemove', layerId, (e) => {
+          attachLayerHandler(layer.id, "mousemove", layerId, (e) => {
             const feature = e.features?.[0];
             const featureId = feature ? featureIdFromMapFeature(feature) : null;
             if (featureId) setHoveredFeature(layer.id, featureId);
-            m.getCanvas().style.cursor = 'pointer';
+            m.getCanvas().style.cursor = "pointer";
           });
-          attachLayerHandler(layer.id, 'mouseleave', layerId, () => {
+          attachLayerHandler(layer.id, "mouseleave", layerId, () => {
             setHoveredFeature(layer.id, null);
-            m.getCanvas().style.cursor = '';
+            m.getCanvas().style.cursor = "";
           });
         }
 
         if (m.getLayer(layerId)) {
           // Glyph-grid and deck H3-grid layers render on their own canvases
           // instead; hiding the base layer keeps feature clicks from competing.
-          const glyphActive = layer.visualisation?.kind === 'glyph_grid' || layer.visualisation?.kind === 'h3grid';
-          m.setLayoutProperty(layerId, 'visibility', layer.visible && !glyphActive ? 'visible' : 'none');
-          m.setFilter(layerId, (layer.id === visualAnalytics.comparison?.datasetId ? null : compileMapFilter(layerFilters)) as any);
+          const glyphActive =
+            layer.visualisation?.kind === "glyph_grid" ||
+            layer.visualisation?.kind === "h3grid";
+          m.setLayoutProperty(
+            layerId,
+            "visibility",
+            layer.visible && !glyphActive ? "visible" : "none",
+          );
+          m.setFilter(
+            layerId,
+            (layer.id === visualAnalytics.comparison?.datasetId
+              ? null
+              : compileMapFilter(layerFilters)) as any,
+          );
         }
 
         if (layer.sourceNodeId) {
@@ -793,7 +1090,15 @@ export const MapView = () => {
     };
 
     syncLayers();
-  }, [mapLayers, selectedBasemapId, layerFilterKey, setSelectedNodeId, selectLayer, setHoveredFeature, toggleSelectedFeature]);
+  }, [
+    mapLayers,
+    selectedBasemapId,
+    layerFilterKey,
+    setSelectedNodeId,
+    selectLayer,
+    setHoveredFeature,
+    toggleSelectedFeature,
+  ]);
 
   // Glyph-grid layers: screengrid custom canvas layers fed from DuckDB points.
   useEffect(() => {
@@ -803,21 +1108,28 @@ export const MapView = () => {
 
     const syncGlyphLayers = async () => {
       if (!styleReady.current) {
-        m.once('style.load', () => { if (!cancelled) syncGlyphLayers(); });
+        m.once("style.load", () => {
+          if (!cancelled) syncGlyphLayers();
+        });
         return;
       }
 
-      const wanted = new Map<string, { layer: typeof mapLayers[number]; vis: GlyphGridVisualisation }>();
+      const wanted = new Map<
+        string,
+        { layer: (typeof mapLayers)[number]; vis: GlyphGridVisualisation }
+      >();
       const configuredGlyphLayerIds = new Set<string>();
       mapLayers.forEach((layer) => {
-        if (layer.visualisation?.kind === 'glyph_grid') configuredGlyphLayerIds.add(layer.id);
-        if (layer.visible && layer.visualisation?.kind === 'glyph_grid') {
+        if (layer.visualisation?.kind === "glyph_grid")
+          configuredGlyphLayerIds.add(layer.id);
+        if (layer.visible && layer.visualisation?.kind === "glyph_grid") {
           wanted.set(layer.id, { layer, vis: layer.visualisation });
         }
       });
 
       glyphPointCache.current.forEach((_, layerId) => {
-        if (!configuredGlyphLayerIds.has(layerId)) glyphPointCache.current.delete(layerId);
+        if (!configuredGlyphLayerIds.has(layerId))
+          glyphPointCache.current.delete(layerId);
       });
 
       glyphLayers.current.forEach((entry, layerId) => {
@@ -847,7 +1159,10 @@ export const MapView = () => {
         } catch (error) {
           const cached = glyphPointCache.current.get(layerId);
           if (cached?.key === dataKey) glyphPointCache.current.delete(layerId);
-          console.error(`Failed to prepare glyph-grid points for layer "${layer.name}"`, error);
+          console.error(
+            `Failed to prepare glyph-grid points for layer "${layer.name}"`,
+            error,
+          );
           // Data errors surface as an empty glyph layer rather than a crash.
         }
         if (cancelled) return;
@@ -870,15 +1185,25 @@ export const MapView = () => {
         }
 
         if (m.getLayer(glyphMapLayerId)) m.removeLayer(glyphMapLayerId);
-        const glyphLayer = new ScreenGridLayerGL<GlyphPoint, number, number[]>(options);
+        const glyphLayer = new ScreenGridLayerGL<GlyphPoint, number, number[]>(
+          options,
+        );
         m.addLayer(glyphLayer as unknown as maplibregl.CustomLayerInterface);
         glyphLayers.current.set(layerId, { layer: glyphLayer, key });
       }
     };
 
     syncGlyphLayers();
-    return () => { cancelled = true; };
-  }, [mapLayers, layerFilterKey, selectedBasemapId, selectLayer, setFeatureSelection]);
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    mapLayers,
+    layerFilterKey,
+    selectedBasemapId,
+    selectLayer,
+    setFeatureSelection,
+  ]);
 
   // deck.gl H3-grid layers: rendered on the deck overlay canvas, fed from DuckDB.
   useEffect(() => {
@@ -888,7 +1213,7 @@ export const MapView = () => {
 
     const syncDeckLayers = async () => {
       const wanted = mapLayers.filter(
-        (layer) => layer.visible && layer.visualisation?.kind === 'h3grid',
+        (layer) => layer.visible && layer.visualisation?.kind === "h3grid",
       );
 
       if (!wanted.length) {
@@ -897,7 +1222,10 @@ export const MapView = () => {
       }
       if (cancelled) return;
 
-      const [{ H3HexagonLayer }, { MapboxOverlay }] = await Promise.all([loadDeckGeo(), loadDeckMapbox()]);
+      const [{ H3HexagonLayer }, { MapboxOverlay }] = await Promise.all([
+        loadDeckGeo(),
+        loadDeckMapbox(),
+      ]);
       if (cancelled) return;
 
       if (!deckOverlayRef.current) {
@@ -905,22 +1233,30 @@ export const MapView = () => {
           interleaved: false,
           onClick: (info: any) => {
             const datum = info?.object as H3GridDatum | undefined;
-            const layerId = String(info?.layer?.id ?? '').replace('deck-h3-', '');
+            const layerId = String(info?.layer?.id ?? "").replace(
+              "deck-h3-",
+              "",
+            );
             if (!datum || !layerId) return;
             const target = mapLayers.find((l) => l.id === layerId);
             selectLayer(layerId);
             if (!deckPopupRef.current) {
-              deckPopupRef.current = new maplibregl.Popup({ closeButton: true, closeOnClick: false, maxWidth: '300px' });
+              deckPopupRef.current = new maplibregl.Popup({
+                closeButton: true,
+                closeOnClick: false,
+                maxWidth: "300px",
+              });
             }
             const props: Record<string, unknown> = { cell: datum.cell };
-            if (datum.value !== null && datum.value !== undefined) props.value = datum.value;
+            if (datum.value !== null && datum.value !== undefined)
+              props.value = datum.value;
             deckPopupRef.current
               .setLngLat(info.coordinate as [number, number])
               .setHTML(popupHtml(target?.name || layerId, props))
               .addTo(m);
           },
           onHover: (info: any) => {
-            m.getCanvas().style.cursor = info?.object ? 'pointer' : '';
+            m.getCanvas().style.cursor = info?.object ? "pointer" : "";
           },
         });
         m.addControl(overlay);
@@ -930,15 +1266,21 @@ export const MapView = () => {
       const built: any[] = [];
       for (const layer of wanted) {
         const vis = layer.visualisation as H3GridVisualisation;
-        const rows = await queryH3GridRows(layer, vis).catch(() => [] as H3GridDatum[]);
+        const rows = await queryH3GridRows(layer, vis).catch(
+          () => [] as H3GridDatum[],
+        );
         if (cancelled) return;
-        built.push(new H3HexagonLayer(buildH3GridLayerProps(layer, vis, rows) as any));
+        built.push(
+          new H3HexagonLayer(buildH3GridLayerProps(layer, vis, rows) as any),
+        );
       }
       deckOverlayRef.current?.setProps?.({ layers: built });
     };
 
     syncDeckLayers();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [mapLayers, layerFilterKey, selectLayer]);
 
   useEffect(() => {
@@ -950,19 +1292,33 @@ export const MapView = () => {
       if (!m.getSource(sourceId)) return;
       const vectorSourceLayer = mvtSourceForLayer(layer)?.layerName;
 
-      const previous = previousFeatureState.current.get(layer.id) || { highlightedFeatureIds: new Set<string>(), selectedFeatureIds: new Set<string>() };
-      const current = visualAnalytics.datasets[layer.id] || { selectedFeatureIds: [] };
+      const previous = previousFeatureState.current.get(layer.id) || {
+        highlightedFeatureIds: new Set<string>(),
+        selectedFeatureIds: new Set<string>(),
+      };
+      const current = visualAnalytics.datasets[layer.id] || {
+        selectedFeatureIds: [],
+      };
       const nextSelected = new Set(current.selectedFeatureIds);
       const nextHighlighted = new Set(current.highlightedFeatureIds || []);
 
-      const setState = (featureId: string | undefined, state: Record<string, boolean>) => {
+      const setState = (
+        featureId: string | undefined,
+        state: Record<string, boolean>,
+      ) => {
         if (!featureId) return;
         try {
-          m.setFeatureState({
-            source: sourceId,
-            ...(vectorSourceLayer ? { sourceLayer: vectorSourceLayer } : {}),
-            id: vectorSourceLayer && /^\d+$/.test(featureId) ? Number(featureId) : featureId,
-          }, state);
+          m.setFeatureState(
+            {
+              source: sourceId,
+              ...(vectorSourceLayer ? { sourceLayer: vectorSourceLayer } : {}),
+              id:
+                vectorSourceLayer && /^\d+$/.test(featureId)
+                  ? Number(featureId)
+                  : featureId,
+            },
+            state,
+          );
         } catch {
           // The source can be between style reloads; the next sync will apply the state.
         }
@@ -970,15 +1326,21 @@ export const MapView = () => {
 
       setState(previous.hoveredFeatureId, { hover: false });
       previous.highlightedFeatureIds.forEach((featureId) => {
-        if (!nextHighlighted.has(featureId)) setState(featureId, { hover: false });
+        if (!nextHighlighted.has(featureId))
+          setState(featureId, { hover: false });
       });
       previous.selectedFeatureIds.forEach((featureId) => {
-        if (!nextSelected.has(featureId)) setState(featureId, { selected: false });
+        if (!nextSelected.has(featureId))
+          setState(featureId, { selected: false });
       });
 
       setState(current.hoveredFeatureId, { hover: true });
-      nextHighlighted.forEach((featureId) => setState(featureId, { hover: true }));
-      nextSelected.forEach((featureId) => setState(featureId, { selected: true }));
+      nextHighlighted.forEach((featureId) =>
+        setState(featureId, { hover: true }),
+      );
+      nextSelected.forEach((featureId) =>
+        setState(featureId, { selected: true }),
+      );
 
       previousFeatureState.current.set(layer.id, {
         hoveredFeatureId: current.hoveredFeatureId,
@@ -993,17 +1355,32 @@ export const MapView = () => {
     const m = map.current;
     if (!m) return;
 
-    const selectedLayerForNode = selectedNodeId ? nodeLayerMap.current.get(selectedNodeId) : null;
+    const selectedLayerForNode = selectedNodeId
+      ? nodeLayerMap.current.get(selectedNodeId)
+      : null;
     const activeLayerId = selectedLayerId || selectedLayerForNode;
 
     mapLayers.forEach((layer) => {
       const layerId = `input-layer-${layer.id}`;
       if (!m.getLayer(layerId)) return;
       const isInactive = Boolean(activeLayerId && layer.id !== activeLayerId);
-      const glyphActive = layer.visualisation?.kind === 'glyph_grid' || layer.visualisation?.kind === 'h3grid';
+      const glyphActive =
+        layer.visualisation?.kind === "glyph_grid" ||
+        layer.visualisation?.kind === "h3grid";
 
-      m.setLayoutProperty(layerId, 'visibility', layer.visible && !glyphActive ? 'visible' : 'none');
-      m.setFilter(layerId, (layer.id === visualAnalytics.comparison?.datasetId ? null : compileMapFilter(visualAnalytics.datasets[layer.id]?.filters || [])) as any);
+      m.setLayoutProperty(
+        layerId,
+        "visibility",
+        layer.visible && !glyphActive ? "visible" : "none",
+      );
+      m.setFilter(
+        layerId,
+        (layer.id === visualAnalytics.comparison?.datasetId
+          ? null
+          : compileMapFilter(
+              visualAnalytics.datasets[layer.id]?.filters || [],
+            )) as any,
+      );
 
       const isSelected = layer.id === activeLayerId;
       const compiled = compileLayerStyle(layer, {
@@ -1011,9 +1388,15 @@ export const MapView = () => {
         selected: isSelected,
         inactive: isInactive,
       });
-      const comparisonPaint = layer.id === visualAnalytics.comparison?.datasetId
-        ? applyCohortComparisonPaint(compiled.paint, visualAnalytics.cohorts, visualAnalytics.comparison, visualAnalytics.datasets[layer.id]?.filters || [])
-        : compiled.paint;
+      const comparisonPaint =
+        layer.id === visualAnalytics.comparison?.datasetId
+          ? applyCohortComparisonPaint(
+              compiled.paint,
+              visualAnalytics.cohorts,
+              visualAnalytics.comparison,
+              visualAnalytics.datasets[layer.id]?.filters || [],
+            )
+          : compiled.paint;
 
       // A visualisation change can also change the layer TYPE (e.g. fill →
       // fill-extrusion). Setting the new type's paint keys on the old layer
@@ -1027,22 +1410,44 @@ export const MapView = () => {
       const clusterLayerId = `${layerId}-clusters`;
       const clusterCountLayerId = `${layerId}-cluster-count`;
       const labelLayerId = `${layerId}-labels`;
-      const clusterOpacity = isInactive ? Math.min(0.25, layer.opacity * 0.35) : layer.opacity;
+      const clusterOpacity = isInactive
+        ? Math.min(0.25, layer.opacity * 0.35)
+        : layer.opacity;
 
       if (m.getLayer(clusterLayerId)) {
-        m.setLayoutProperty(clusterLayerId, 'visibility', layer.visible ? 'visible' : 'none');
-        m.setPaintProperty(clusterLayerId, 'circle-opacity', clusterOpacity);
+        m.setLayoutProperty(
+          clusterLayerId,
+          "visibility",
+          layer.visible ? "visible" : "none",
+        );
+        m.setPaintProperty(clusterLayerId, "circle-opacity", clusterOpacity);
       }
 
       if (m.getLayer(clusterCountLayerId)) {
-        m.setLayoutProperty(clusterCountLayerId, 'visibility', layer.visible ? 'visible' : 'none');
-        m.setPaintProperty(clusterCountLayerId, 'text-opacity', clusterOpacity);
+        m.setLayoutProperty(
+          clusterCountLayerId,
+          "visibility",
+          layer.visible ? "visible" : "none",
+        );
+        m.setPaintProperty(clusterCountLayerId, "text-opacity", clusterOpacity);
       }
 
       if (m.getLayer(labelLayerId)) {
-        m.setLayoutProperty(labelLayerId, 'visibility', layer.visible ? 'visible' : 'none');
-        m.setPaintProperty(labelLayerId, 'text-opacity', isInactive ? Math.min(0.2, layer.opacity * 0.4) : layer.opacity);
-        m.setPaintProperty(labelLayerId, 'text-halo-width', isInactive ? 1.5 : compiled.label?.paint['text-halo-width'] ?? 1.5);
+        m.setLayoutProperty(
+          labelLayerId,
+          "visibility",
+          layer.visible ? "visible" : "none",
+        );
+        m.setPaintProperty(
+          labelLayerId,
+          "text-opacity",
+          isInactive ? Math.min(0.2, layer.opacity * 0.4) : layer.opacity,
+        );
+        m.setPaintProperty(
+          labelLayerId,
+          "text-halo-width",
+          isInactive ? 1.5 : (compiled.label?.paint["text-halo-width"] ?? 1.5),
+        );
       }
     });
   }, [selectedNodeId, selectedLayerId, mapLayers, visualAnalytics]);
@@ -1052,9 +1457,14 @@ export const MapView = () => {
     if (!m || !layerFocusRequest) return;
 
     const fitFocusedLayer = () => {
-      const layer = useStore.getState().mapLayers.find((item) => item.id === layerFocusRequest.layerId);
+      const layer = useStore
+        .getState()
+        .mapLayers.find((item) => item.id === layerFocusRequest.layerId);
       if (!layer) return;
-      const bounds = layerFocusRequest.bounds || boundsForLayer(layer) || (layer.geojson ? getLayerBounds(layer.geojson) : null);
+      const bounds =
+        layerFocusRequest.bounds ||
+        boundsForLayer(layer) ||
+        (layer.geojson ? getLayerBounds(layer.geojson) : null);
       if (bounds) {
         m.fitBounds(bounds, { padding: 50, duration: 600, maxZoom: 16 });
       }
@@ -1063,9 +1473,9 @@ export const MapView = () => {
     // isStyleLoaded() becomes false again while custom tiles are loading. The
     // style.load event is the correct readiness boundary for camera changes.
     if (!styleReady.current) {
-      m.once('style.load', fitFocusedLayer);
+      m.once("style.load", fitFocusedLayer);
       return () => {
-        m.off('style.load', fitFocusedLayer);
+        m.off("style.load", fitFocusedLayer);
       };
     }
 
@@ -1077,7 +1487,7 @@ export const MapView = () => {
     if (!m) return;
 
     locationMarker.current?.remove();
-    locationMarker.current = new maplibregl.Marker({ color: '#0f766e' })
+    locationMarker.current = new maplibregl.Marker({ color: "#0f766e" })
       .setLngLat(result.center)
       .addTo(m);
 
@@ -1086,7 +1496,11 @@ export const MapView = () => {
       return;
     }
 
-    m.flyTo({ center: result.center, zoom: Math.max(m.getZoom(), 14), duration: 700 });
+    m.flyTo({
+      center: result.center,
+      zoom: Math.max(m.getZoom(), 14),
+      duration: 700,
+    });
   };
 
   const clearSearchResult = () => {
@@ -1097,7 +1511,10 @@ export const MapView = () => {
   return (
     <div className="w-full h-full relative">
       <div ref={mapContainer} className="w-full h-full" />
-      <LocationSearchControl onSelect={focusSearchResult} onClear={clearSearchResult} />
+      <LocationSearchControl
+        onSelect={focusSearchResult}
+        onClear={clearSearchResult}
+      />
       <LegendControl legends={visibleLegends} />
       <MapInteractionToolbar
         selectionMode={selectionMode}
@@ -1105,29 +1522,50 @@ export const MapView = () => {
         coordinates={coordinates}
         onToggleSelection={() => setSelectionMode((current) => !current)}
         onHome={() => {
-          const layerId = selectedLayerId || mapLayers.find((layer) => layer.visible)?.id;
+          const layerId =
+            selectedLayerId || mapLayers.find((layer) => layer.visible)?.id;
           if (layerId) focusLayer(layerId);
         }}
         onZoomIn={() => map.current?.zoomIn({ duration: 180 })}
         onZoomOut={() => map.current?.zoomOut({ duration: 180 })}
         onGeolocate={() => {
-          if (!navigator.geolocation) { addToast({ type: 'warning', message: 'Geolocation is unavailable in this browser.' }); return; }
+          if (!navigator.geolocation) {
+            addToast({
+              type: "warning",
+              message: "Geolocation is unavailable in this browser.",
+            });
+            return;
+          }
           navigator.geolocation.getCurrentPosition(
-            ({ coords }) => map.current?.flyTo({ center: [coords.longitude, coords.latitude], zoom: Math.max(map.current?.getZoom() || 0, 13), duration: 700 }),
-            () => addToast({ type: 'warning', message: 'Could not access your location.' }),
+            ({ coords }) =>
+              map.current?.flyTo({
+                center: [coords.longitude, coords.latitude],
+                zoom: Math.max(map.current?.getZoom() || 0, 13),
+                duration: 700,
+              }),
+            () =>
+              addToast({
+                type: "warning",
+                message: "Could not access your location.",
+              }),
             { enableHighAccuracy: false },
           );
         }}
         onFullscreen={() => {
           const element = mapContainer.current?.parentElement;
           if (!element) return;
-          if (document.fullscreenElement) void document.exitFullscreen(); else void element.requestFullscreen();
+          if (document.fullscreenElement) void document.exitFullscreen();
+          else void element.requestFullscreen();
         }}
         onCopyCoordinates={() => {
           if (!coordinates) return;
           void navigator.clipboard?.writeText(coordinates).then(
-            () => addToast({ type: 'success', message: 'Coordinates copied.' }),
-            () => addToast({ type: 'warning', message: 'Could not copy coordinates.' }),
+            () => addToast({ type: "success", message: "Coordinates copied." }),
+            () =>
+              addToast({
+                type: "warning",
+                message: "Could not copy coordinates.",
+              }),
           );
         }}
       />
