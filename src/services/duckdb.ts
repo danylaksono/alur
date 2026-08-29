@@ -343,23 +343,32 @@ class DuckDBService {
         throw new Error(`DuckDB could not read ${file.name}.${mountedFiles} ${errors.join(' | ')}`);
     }
 
+    /**
+     * Create a table from rows of JSON.
+     *
+     * Read with `read_json_auto` rather than duckdb-wasm's `insertJSONFromPath`,
+     * which **silently truncates to the first 100 columns**. Not an error, not a
+     * warning — a 130-column document simply arrives with 30 columns missing,
+     * and which 30 depends on key order. That cost us a whole afternoon: a
+     * calculation's output is the original row plus its new values, so a wide
+     * dataset pushed the geometry key past the hundredth and the table came back
+     * with no geometry column at all, failing later and somewhere else.
+     *
+     * The reader itself has no such limit; only that API does.
+     */
     async registerJsonRows(tableName: string, rows: Record<string, unknown>[]) {
         if (!this.db || !this.conn) throw new Error('DuckDB not initialized');
         const fileName = `${tableName}.json`;
         await this.db.registerFileText(fileName, JSON.stringify(rows));
         await this.conn.query(`DROP TABLE IF EXISTS "${tableName}";`);
+        const create = `CREATE OR REPLACE TABLE "${tableName.replace(/"/g, '""')}" AS
+            SELECT * FROM read_json_auto('${fileName.replace(/'/g, "''")}');`;
         try {
-            await this.conn.insertJSONFromPath(fileName, {
-                schema: 'main',
-                name: tableName,
-            });
+            await this.conn.query(create);
         } catch (err) {
             // Retry once after dropping again (handles race conditions)
             await this.conn.query(`DROP TABLE IF EXISTS "${tableName}";`);
-            await this.conn.insertJSONFromPath(fileName, {
-                schema: 'main',
-                name: tableName,
-            });
+            await this.conn.query(create);
         }
     }
 
@@ -701,9 +710,24 @@ class DuckDBService {
         return this.resultToGeoJSON(result, 'geojson');
     }
 
-    async getGeoJSONFromTable(tableName: string, limit = 5000) {
+    /**
+     * Read a table as GeoJSON.
+     *
+     * `sourceCrs` reprojects on the way out. GeoJSON is defined as WGS84
+     * (RFC 7946), and a caller handing these features to anything that measures
+     * distance — a plugin, an export, another tool — has no way to discover that
+     * the numbers are actually projected metres. Consumers were reading Web
+     * Mercator coordinates as degrees and getting silently wrong answers.
+     */
+    async getGeoJSONFromTable(tableName: string, limit = 5000, sourceCrs?: string) {
         const info = await this.query(`PRAGMA table_info('${tableName}');`);
         const columns = info.toArray().map((row: any) => typeof row.toJSON === 'function' ? row.toJSON() : row);
+
+        const crs = sourceCrs?.replace(/'/g, "''");
+        const toLonLat = (geometry: string) =>
+            crs && crs.toUpperCase() !== 'EPSG:4326'
+                ? `ST_Transform(${geometry}, '${crs}', 'EPSG:4326', true)`
+                : geometry;
 
         // 1) Look for a proper geometry column (type = GEOMETRY)
         const geomColStrict = columns.find((col: any) => {
@@ -713,7 +737,7 @@ class DuckDBService {
 
         if (geomColStrict?.name && this.spatialLoaded) {
             const result = await this.query(
-                `SELECT *, ST_AsGeoJSON(${geomColStrict.name}) AS geojson FROM "${tableName}" LIMIT ${limit};`
+                `SELECT *, ST_AsGeoJSON(${toLonLat(geomColStrict.name)}) AS geojson FROM "${tableName}" LIMIT ${limit};`
             );
             const fc = this.resultToGeoJSON(result, 'geojson');
             if (fc.features.length) return fc;
@@ -733,7 +757,7 @@ class DuckDBService {
             if (wkbCol?.name) {
                 try {
                     const result = await this.query(
-                        `SELECT *, ST_AsGeoJSON(ST_GeomFromWKB(${wkbCol.name})) AS geojson FROM "${tableName}" LIMIT ${limit};`
+                        `SELECT *, ST_AsGeoJSON(${toLonLat(`ST_GeomFromWKB(${wkbCol.name})`)}) AS geojson FROM "${tableName}" LIMIT ${limit};`
                     );
                     const fc = this.resultToGeoJSON(result, 'geojson');
                     if (fc.features.length) return fc;

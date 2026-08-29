@@ -6,7 +6,7 @@ import { LayersTab } from './LayersTab';
 import { NodePalette } from './NodePalette';
 import { CohortPanel } from '../Visualisation/CohortPanel';
 import { ScorePanel } from '../Score/ScorePanel';
-import { OperationsPanel } from '../Operations/OperationsPanel';
+import { ToolboxPanel } from '../Operations/ToolboxPanel';
 import { cn } from '../../utils/cn';
 
 const Chat = lazy(() => import('../Chat').then((module) => ({ default: module.Chat })));
@@ -77,7 +77,7 @@ export const LeftPanel = () => {
           </ErrorBoundary>
         ) : activeRailTab === 'operations' ? (
           <ErrorBoundary>
-            <OperationsPanel />
+            <ToolboxPanel />
           </ErrorBoundary>
         ) : activeRailTab === 'cohorts' ? (
           <ErrorBoundary name="Cohorts and bookmarks">

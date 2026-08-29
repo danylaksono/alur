@@ -1,0 +1,5 @@
+{
+  "$comment": "Plugins offered in the Calculations panel's loader. Ships EMPTY on purpose, and should stay that way in this repository. ALUR contains no analytical calculation and names no analytical domain; entries here would put both back, and a reviewer checking that claim reads this file alongside src/providers/index.ts. Deployments fill it in. Each entry: { name, label, description, url } where url points at a plugin's alur.plugin.json.",
+  "contract": 1,
+  "plugins": []
+}

@@ -5,8 +5,13 @@ import type {
   OperationManifest,
   OperationProvider,
   OperationRunResult,
+  PluginManifest,
 } from '../types/operations';
-import { operationManifestErrors } from './operationRegistry';
+import {
+  operationManifestErrors,
+  pluginContentErrors,
+  pluginManifestErrors,
+} from '../types/operations';
 
 /**
  * The half of the provider host that does not need a Worker to exist.
@@ -22,7 +27,9 @@ import { operationManifestErrors } from './operationRegistry';
  */
 
 export type OperationHostRequest =
+  | { kind: 'installed'; id: number }
   | { kind: 'load'; id: number; url: string }
+  | { kind: 'loadPlugin'; id: number; url: string }
   | { kind: 'create'; id: number; providerId: string; inputs: OperationInputData[]; parameters: Record<string, unknown> }
   | { kind: 'setChanges'; id: number; handle: string; changes: OperationChange[] }
   | { kind: 'setParameters'; id: number; handle: string; values: Record<string, unknown> }
@@ -34,7 +41,19 @@ export type OperationHostResponse =
   | { kind: 'error'; id: number; message: string };
 
 /** What a provider package must expose. Checked, because it comes from outside. */
-export type ProviderModule = { provider?: OperationProvider; default?: OperationProvider };
+export type ProviderModule = {
+  providers?: OperationProvider[];
+  provider?: OperationProvider;
+  default?: OperationProvider;
+};
+
+/** What a loaded plugin reports back, so the panel can show it without re-fetching. */
+export type LoadedPlugin = {
+  plugin: PluginManifest;
+  /** Absolute URL the entry was resolved to, kept so a run can reload it. */
+  entryUrl: string;
+  calculations: OperationManifest[];
+};
 
 export type OperationHostCore = {
   handle(request: OperationHostRequest): Promise<OperationHostResponse>;
@@ -42,16 +61,51 @@ export type OperationHostCore = {
   liveHandles(): string[];
 };
 
-const providerFrom = (module: unknown): OperationProvider => {
-  const candidate = (module as ProviderModule)?.provider ?? (module as ProviderModule)?.default;
-  if (!candidate || typeof candidate.create !== 'function' || !candidate.manifest) {
-    throw new Error('The module exports no provider. Export it as `provider` or as the default export.');
+const isProvider = (candidate: unknown): candidate is OperationProvider =>
+  Boolean(candidate) &&
+  typeof (candidate as OperationProvider).create === 'function' &&
+  Boolean((candidate as OperationProvider).manifest);
+
+/**
+ * Every provider a module exports.
+ *
+ * Three shapes are accepted, and the single-provider ones are not legacy debt:
+ * a package with one calculation should not have to write a one-element array,
+ * and the modules written before packaging existed keep working untouched.
+ */
+const providersFrom = (module: unknown): OperationProvider[] => {
+  const candidate = module as ProviderModule;
+  if (Array.isArray(candidate?.providers)) {
+    const found = candidate.providers.filter(isProvider);
+    if (found.length !== candidate.providers.length) {
+      throw new Error('One of the exported providers has no manifest or no create().');
+    }
+    if (found.length) return found;
   }
-  return candidate;
+  const single = candidate?.provider ?? candidate?.default;
+  if (isProvider(single)) return [single];
+  throw new Error(
+    'The module exports no calculation. Export `providers` as an array, or `provider` / default for a single one.',
+  );
 };
 
 export const createOperationHostCore = (
   load: (url: string) => Promise<unknown>,
+  fetchJson: (url: string) => Promise<unknown> = async (url) => {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Could not read ${url} (${response.status} ${response.statusText}).`);
+    return response.json();
+  },
+  /**
+   * Plugins compiled into the app rather than fetched.
+   *
+   * They are registered here, in the worker, rather than on the main thread, so
+   * that a bundled calculation runs by exactly the same route as a fetched one.
+   * Two execution paths for the same contract would be two sets of bugs, and the
+   * bundled path — being the one under our own eye — is the one whose bugs would
+   * go unnoticed.
+   */
+  installed: Array<{ plugin: PluginManifest; providers: OperationProvider[] }> = [],
 ): OperationHostCore => {
   const providers = new Map<string, OperationProvider>();
   const instances = new Map<string, OperationInstance>();
@@ -63,16 +117,76 @@ export const createOperationHostCore = (
     return found;
   };
 
+  // Registered eagerly: the toolbox lists what is installed before the analyst
+  // has chosen anything, so there is nothing to defer until.
+  const preinstalled: LoadedPlugin[] = [];
+  for (const entry of installed) {
+    for (const provider of entry.providers) {
+      const errors = operationManifestErrors(provider.manifest);
+      // A bundled provider with a bad manifest is a programming error, but it
+      // must not stop the other ones from being available.
+      if (errors.length) continue;
+      providers.set(provider.manifest.id, provider);
+    }
+    preinstalled.push({
+      plugin: entry.plugin,
+      entryUrl: '',
+      calculations: entry.providers
+        .filter((provider) => !operationManifestErrors(provider.manifest).length)
+        .map((provider) => provider.manifest),
+    });
+  }
+
   const run = async (request: OperationHostRequest): Promise<unknown> => {
     switch (request.kind) {
+      case 'installed':
+        return preinstalled satisfies LoadedPlugin[];
+
       case 'load': {
-        const provider = providerFrom(await load(request.url));
-        const errors = operationManifestErrors(provider.manifest);
-        if (errors.length) {
-          throw new Error(`The calculation at ${request.url} declares an invalid manifest. ${errors[0]}`);
+        // The bare-module path: still supported, and now returns every
+        // calculation a module exports rather than only the first.
+        const loaded = providersFrom(await load(request.url));
+        for (const provider of loaded) {
+          const errors = operationManifestErrors(provider.manifest);
+          if (errors.length) {
+            throw new Error(`The calculation at ${request.url} declares an invalid manifest. ${errors[0]}`);
+          }
+          providers.set(provider.manifest.id, provider);
         }
-        providers.set(provider.manifest.id, provider);
-        return provider.manifest satisfies OperationManifest;
+        return loaded.map((provider) => provider.manifest) satisfies OperationManifest[];
+      }
+
+      case 'loadPlugin': {
+        // Fetched and checked as data first, so a malformed or hostile package
+        // is refused without any of its code being imported.
+        const plugin = (await fetchJson(request.url)) as PluginManifest;
+        const manifestErrors = pluginManifestErrors(plugin);
+        if (manifestErrors.length) {
+          throw new Error(`${request.url} is not a valid plugin. ${manifestErrors[0]}`);
+        }
+
+        // Resolved against the plugin manifest, never against what was typed.
+        // This is what lets an entry import `../dist/index.js` without the
+        // analyst having to serve from exactly the right directory.
+        const entryUrl = new URL(plugin.entry, request.url).href;
+        const loaded = providersFrom(await load(entryUrl));
+
+        for (const provider of loaded) {
+          const errors = operationManifestErrors(provider.manifest);
+          if (errors.length) {
+            throw new Error(`"${plugin.label}" declares an invalid calculation. ${errors[0]}`);
+          }
+        }
+
+        const contentErrors = pluginContentErrors(plugin, loaded.map((provider) => provider.manifest));
+        if (contentErrors.length) throw new Error(contentErrors[0]);
+
+        for (const provider of loaded) providers.set(provider.manifest.id, provider);
+        return {
+          plugin,
+          entryUrl,
+          calculations: loaded.map((provider) => provider.manifest),
+        } satisfies LoadedPlugin;
       }
 
       case 'create': {

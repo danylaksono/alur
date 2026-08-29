@@ -1,6 +1,8 @@
 import type {
+  OperationChange,
   OperationInputBinding,
   OperationInputData,
+  OperationInputSpec,
   OperationManifest,
   OperationOutputData,
   OperationOutputSpec,
@@ -54,46 +56,144 @@ export type OperationRunReport = {
 const featuresOf = (collection: GeoJSON.FeatureCollection | null) => collection?.features ?? [];
 
 /**
+ * The property name a role's values are written to, whatever the source called
+ * them.
+ *
+ * Prefixed so it cannot collide with a column the analyst's data already has —
+ * `id` and `cost` are common enough that an unprefixed name would sometimes
+ * overwrite real data, and the overwrite would look like a provider bug.
+ */
+export const canonicalRoleProperty = (roleId: string) => `__alur_role_${roleId}`;
+
+/**
+ * Copy a feature's bound columns onto canonical names, keeping everything else.
+ *
+ * This is what lets several datasets feed one input. Each names its own columns
+ * for the same roles; after projection every feature carries the role values
+ * under one agreed name, so the provider reads `properties[fields.cost]` and
+ * neither knows nor cares which dataset the row came from. Original properties
+ * survive untouched, so a provider that wants to look at an unbound column
+ * still can.
+ */
+export const projectFeature = (
+  feature: GeoJSON.Feature,
+  fields: Record<string, string>,
+  sourceLabel: string,
+): GeoJSON.Feature => {
+  const properties: Record<string, unknown> = { ...(feature.properties ?? {}) };
+  for (const [roleId, column] of Object.entries(fields)) {
+    if (!column) continue;
+    properties[canonicalRoleProperty(roleId)] = properties[column] ?? null;
+  }
+  properties.__alur_source = sourceLabel;
+  return { ...feature, properties };
+};
+
+/** Role id to the canonical property carrying it, for every bound role. */
+const canonicalFields = (spec: OperationInputSpec, binding: OperationInputBinding) => {
+  const bound = new Set<string>();
+  for (const source of binding.sources) {
+    for (const [roleId, column] of Object.entries(source.fields)) if (column) bound.add(roleId);
+  }
+  return Object.fromEntries([...bound].map((roleId) => [roleId, canonicalRoleProperty(roleId)]));
+};
+
+/**
  * Read one bound input out of DuckDB in the shape its declaration asked for.
  *
  * Spatial inputs travel as GeoJSON text rather than parsed objects: every
  * provider seen so far parses it itself (the wasm boundary takes a string
  * anyway), and stringifying once here is cheaper than handing over an object
  * graph that `postMessage` would clone.
+ *
+ * The cap is shared across an input's sources rather than applied per source, so
+ * binding a second dataset cannot quietly double how much is read.
  */
 export const collectInput = async (
   manifest: OperationManifest,
   binding: OperationInputBinding,
-  dataset: DatasetDescriptor,
+  datasets: Record<string, DatasetDescriptor>,
   featureCap: number,
-): Promise<{ input: OperationInputData; collection: GeoJSON.FeatureCollection | null; warning?: string }> => {
+): Promise<{ input: OperationInputData; collection: GeoJSON.FeatureCollection | null; warnings: string[] }> => {
   const spec = manifest.inputs.find((candidate) => candidate.id === binding.inputId);
   if (!spec) throw new Error(`"${binding.inputId}" is not an input of ${manifest.label}.`);
 
-  const relation = relationForDataset(dataset) ?? dataset.originTableName;
-  if (!relation) throw new Error(`${spec.label} is bound to a dataset with no readable table.`);
+  const sources = binding.sources.filter((source) => source.datasetId);
+  if (!sources.length) throw new Error(`${spec.label} has no dataset bound.`);
+  if (sources.length > 1 && !spec.multiple) {
+    throw new Error(`${spec.label} takes one dataset, but ${sources.length} are bound.`);
+  }
+
+  const fields = canonicalFields(spec, binding);
+  const warnings: string[] = [];
+  const used: OperationInputData['sources'] = [];
+  let remaining = featureCap;
 
   if (spec.geometry === 'none') {
-    const result = await duckdbService.query(`SELECT * FROM "${relation.replace(/"/g, '""')}" LIMIT ${featureCap};`);
-    const rows = result.toArray().map((row: any) => (typeof row?.toJSON === 'function' ? row.toJSON() : row));
-    return {
-      input: { inputId: binding.inputId, fields: binding.fields, rows },
-      collection: null,
-      warning: rows.length >= featureCap ? `${spec.label} was truncated at ${featureCap} rows.` : undefined,
-    };
+    const rows: Array<Record<string, unknown>> = [];
+    for (const source of sources) {
+      const dataset = datasets[source.datasetId];
+      if (!dataset) throw new Error(`${spec.label} is bound to a dataset that is no longer loaded.`);
+      const relation = relationForDataset(dataset) ?? dataset.originTableName;
+      if (!relation) throw new Error(`${spec.label} is bound to a dataset with no readable table.`);
+      if (remaining <= 0) {
+        warnings.push(`${spec.label}: "${dataset.name}" was not read; the ${featureCap} row cap was already reached.`);
+        continue;
+      }
+
+      const result = await duckdbService.query(
+        `SELECT * FROM "${relation.replace(/"/g, '""')}" LIMIT ${remaining};`,
+      );
+      const read = result.toArray().map((row: any) => (typeof row?.toJSON === 'function' ? row.toJSON() : row));
+      for (const row of read) {
+        const projected: Record<string, unknown> = { ...row };
+        for (const [roleId, column] of Object.entries(source.fields)) {
+          if (column) projected[canonicalRoleProperty(roleId)] = row[column] ?? null;
+        }
+        projected.__alur_source = dataset.name;
+        rows.push(projected);
+      }
+      used.push({ datasetId: dataset.id, label: dataset.name, count: read.length });
+      remaining -= read.length;
+    }
+
+    if (remaining <= 0) warnings.push(`${spec.label} was truncated at ${featureCap} rows.`);
+    return { input: { inputId: binding.inputId, fields, rows, sources: used }, collection: null, warnings };
   }
 
-  const collection = await duckdbService.getGeoJSONFromTable(relation, featureCap);
-  if (!collection || !collection.features.length) {
-    throw new Error(`${spec.label} ("${dataset.name}") returned no geometry.`);
+  const features: GeoJSON.Feature[] = [];
+  for (const source of sources) {
+    const dataset = datasets[source.datasetId];
+    if (!dataset) throw new Error(`${spec.label} is bound to a dataset that is no longer loaded.`);
+    const relation = relationForDataset(dataset) ?? dataset.originTableName;
+    if (!relation) throw new Error(`${spec.label} is bound to a dataset with no readable table.`);
+    if (remaining <= 0) {
+      warnings.push(`${spec.label}: "${dataset.name}" was not read; the ${featureCap} feature cap was already reached.`);
+      continue;
+    }
+
+    // Reprojected to WGS84 on the way out. A provider is handed GeoJSON, GeoJSON
+    // is WGS84 by definition, and a plugin measuring distance has no way to
+    // discover that the numbers it was given are projected metres — it just
+    // returns a wrong answer confidently.
+    const collection = await duckdbService.getGeoJSONFromTable(relation, remaining, dataset.geometryCrs);
+    if (!collection || !collection.features.length) {
+      throw new Error(`${spec.label} ("${dataset.name}") returned no geometry.`);
+    }
+    for (const feature of collection.features) features.push(projectFeature(feature, source.fields, dataset.name));
+    used.push({ datasetId: dataset.id, label: dataset.name, count: collection.features.length });
+    remaining -= collection.features.length;
   }
 
+  if (remaining <= 0) {
+    warnings.push(`${spec.label} was truncated at ${featureCap} features, so the result is partial.`);
+  }
+
+  const collection: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features };
   return {
-    input: { inputId: binding.inputId, fields: binding.fields, geojson: JSON.stringify(collection) },
+    input: { inputId: binding.inputId, fields, geojson: JSON.stringify(collection), sources: used },
     collection,
-    warning: collection.features.length >= featureCap
-      ? `${spec.label} was truncated at ${featureCap} features, so the result is partial.`
-      : undefined,
+    warnings,
   };
 };
 
@@ -117,10 +217,35 @@ export const joinColumnFor = (
     : input.fields.find((field) => field.required && field.semanticType === 'identifier');
   if (!role) throw new Error(`Output "${output.id}" joins to "${input.label}", which declares no identifier to join on.`);
 
+  // The canonical property, not the analyst's column: the collection this joins
+  // onto is the projected one, and with several datasets bound there is no
+  // single original column name to use.
   const binding = bindings.find((candidate) => candidate.inputId === input.id);
-  const column = binding?.fields[role.id];
-  if (!column) throw new Error(`Output "${output.id}" needs ${role.label} bound on ${input.label}.`);
-  return column;
+  const bound = binding?.sources.some((source) => source.fields[role.id]);
+  if (!bound) throw new Error(`Output "${output.id}" needs ${role.label} bound on ${input.label}.`);
+  return canonicalRoleProperty(role.id);
+};
+
+/**
+ * The canonical property a `rows` change's ids are expressed in.
+ *
+ * The gap this closes: a row target carries the dataset's own row-id column, and
+ * a provider had no declared way to know which column that was. `targetFieldRole`
+ * says it; where a spec omits it, the input's first required identifier is the
+ * only sensible reading.
+ */
+export const targetColumnFor = (
+  manifest: OperationManifest,
+  changeId: string,
+): string | null => {
+  const spec = manifest.accepts.find((candidate) => candidate.id === changeId);
+  if (!spec || spec.referent !== 'rows') return null;
+  const input = manifest.inputs.find((candidate) => candidate.id === spec.inputId);
+  if (!input) return null;
+  const role = spec.targetFieldRole
+    ? input.fields.find((field) => field.id === spec.targetFieldRole)
+    : input.fields.find((field) => field.required && field.semanticType === 'identifier');
+  return role ? canonicalRoleProperty(role.id) : null;
 };
 
 /**
@@ -223,7 +348,80 @@ export const materialiseOutputs = async (
   return report;
 };
 
+/**
+ * Re-express row targets in the values the provider will actually see.
+ *
+ * A `rows` target carries the *dataset's* row-id column, which is rarely the
+ * column bound to the role a provider keys on — and a provider had no declared
+ * way to find out which. Rather than making every adapter guess, the shell
+ * translates: it is holding both the collection and the dataset descriptor, so
+ * it is the only place that can do this without guessing at all.
+ *
+ * Ids that match nothing are dropped and reported. Silently passing them through
+ * would leave a provider matching against a column it was never told about,
+ * which is exactly the failure this replaces.
+ */
+export const resolveRowTargets = (
+  manifest: OperationManifest,
+  changes: OperationChange[],
+  collections: Record<string, GeoJSON.FeatureCollection | null>,
+  datasets: Record<string, DatasetDescriptor>,
+): { changes: OperationChange[]; warnings: string[] } => {
+  const warnings: string[] = [];
+
+  const resolved = changes.map((change) => {
+    if (change.target.kind !== 'rows') return change;
+
+    const spec = manifest.accepts.find((candidate) => candidate.id === change.changeId);
+    const targetColumn = targetColumnFor(manifest, change.changeId);
+    const collection = spec ? collections[spec.inputId] : null;
+    const dataset = datasets[change.target.datasetId];
+    if (!spec || !targetColumn || !collection || !dataset) return change;
+
+    const rowIdColumn = dataset.rowIdColumn;
+    const lookup = new Map<string, string>();
+    for (const feature of collection.features) {
+      const properties = feature.properties ?? {};
+      // Scoped to the dataset the change names: with several datasets bound, the
+      // same row-id value can legitimately appear in more than one of them.
+      if (properties.__alur_source !== dataset.name) continue;
+      const from = properties[rowIdColumn];
+      const to = properties[targetColumn];
+      if (from === null || from === undefined || to === null || to === undefined) continue;
+      if (!lookup.has(String(from))) lookup.set(String(from), String(to));
+    }
+
+    // Nothing to translate — the role is already the row id column.
+    if (!lookup.size) return change;
+
+    const rowIds: string[] = [];
+    let missing = 0;
+    for (const rowId of change.target.rowIds) {
+      const mapped = lookup.get(String(rowId));
+      if (mapped === undefined) missing += 1;
+      else rowIds.push(mapped);
+    }
+    if (missing) {
+      warnings.push(
+        `${spec.label}: ${missing} of ${change.target.rowIds.length} selected rows are no longer in "${dataset.name}" and were dropped.`,
+      );
+    }
+
+    return { ...change, target: { ...change.target, rowIds } };
+  });
+
+  return { changes: resolved, warnings };
+};
+
 export type OperationRunRequest = {
+  /**
+   * Where to load the calculation from, or empty for one compiled into the app.
+   *
+   * A bundled calculation is already registered in the host, so there is nothing
+   * to fetch. It is the same instruction either way — "make sure this is
+   * loaded" — which is why this is an empty string rather than a second code
+   * path through the runner.
+   */
   providerUrl: string;
   manifest: OperationManifest;
   bindings: OperationInputBinding[];
@@ -251,19 +449,24 @@ export const runOperation = async (
   const warnings: string[] = [];
 
   for (const binding of request.bindings) {
-    const dataset = request.datasets[binding.datasetId];
-    if (!dataset) throw new Error(`A bound dataset is no longer loaded.`);
-    const collected = await collectInput(request.manifest, binding, dataset, featureCap);
+    const collected = await collectInput(request.manifest, binding, request.datasets, featureCap);
     inputs.push(collected.input);
     collections[binding.inputId] = collected.collection;
-    if (collected.warning) warnings.push(collected.warning);
+    warnings.push(...collected.warnings);
   }
 
-  await operationHost.load(request.providerUrl);
+  if (request.providerUrl) await operationHost.load(request.providerUrl);
   const handle = await operationHost.create(request.manifest.id, inputs, request.parameters);
 
   try {
-    await operationHost.setChanges(handle, toOperationChanges(request.operations, request.manifest.id));
+    const targeted = resolveRowTargets(
+      request.manifest,
+      toOperationChanges(request.operations, request.manifest.id),
+      collections,
+      request.datasets,
+    );
+    warnings.push(...targeted.warnings);
+    await operationHost.setChanges(handle, targeted.changes);
     const result = await operationHost.evaluate(handle);
     const report = await materialiseOutputs(
       request.manifest,

@@ -17,9 +17,10 @@
     "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@alur/operation-contract": ["./packages/operation-contract/src/index.ts"]
     }
   },
-  "include": ["src"],
+  "include": ["src", "packages/operation-contract/src"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

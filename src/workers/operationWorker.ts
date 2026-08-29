@@ -1,4 +1,5 @@
 import { createOperationHostCore, type OperationHostRequest } from '../services/operationHostCore';
+import { BUNDLED_PLUGIN, BUNDLED_PROVIDERS } from '../providers';
 
 /**
  * Where calculations run.
@@ -12,7 +13,11 @@ import { createOperationHostCore, type OperationHostRequest } from '../services/
  * The vite-ignore comment is deliberate: the whole point is that the URL is not
  * known at build time, so vite must not try to resolve it into the bundle.
  */
-const core = createOperationHostCore((url) => import(/* @vite-ignore */ url));
+const core = createOperationHostCore(
+  (url) => import(/* @vite-ignore */ url),
+  undefined,
+  [{ plugin: BUNDLED_PLUGIN, providers: BUNDLED_PROVIDERS }],
+);
 
 self.onmessage = async (event: MessageEvent<OperationHostRequest>) => {
   const response = await core.handle(event.data);

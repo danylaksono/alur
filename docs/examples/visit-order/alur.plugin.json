@@ -1,0 +1,17 @@
+{
+  "contract": 1,
+  "name": "example",
+  "label": "Example plugin",
+  "version": "1.0.0",
+  "description": "A worked example for anyone writing their first ALUR calculation.",
+  "entry": "./index.js",
+  "license": "MIT",
+  "calculations": [
+    {
+      "id": "example.visit-order",
+      "label": "Order into a visiting sequence",
+      "summary": "Starts at one stop and repeatedly moves to the nearest one not yet visited.",
+      "group": "Routing"
+    }
+  ]
+}

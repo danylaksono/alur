@@ -2,10 +2,25 @@
 
 How to make a calculation ALUR does not contain callable from inside it.
 
-The contract lives in [`src/types/operations.ts`](../src/types/operations.ts). The
-worked example is [`reach-ops/alur-provider/`](https://github.com/danylaksono/reach-ops)
-— a Rust reachability engine compiled to wasm, wrapped in about 250 lines of
-JavaScript.
+**New to this? Start with [Building your first calculation](building-your-first-calculation.md)**
+— a half-hour walk from an empty folder to something running in the toolbox, with
+a complete worked example. This page is the reference you come back to.
+
+The contract lives in [`@alur/operation-contract`](../packages/operation-contract),
+a package you install — ALUR compiles against the same one, so the two cannot
+drift.
+
+Two worked examples exist, deliberately unalike — they share no domain, no
+language and no output shape, and neither required a line of ALUR to change:
+
+| | |
+| --- | --- |
+| [`reach-ops/alur-provider/`](https://github.com/danylaksono/reach-ops) | A Rust reachability engine compiled to wasm. Placements and severances on a road network; travel time per destination. |
+| [`interactive-scenario-modeller/alur-provider/`](https://github.com/danylaksono/interactive-scenario-modeller) | A TypeScript simulation library. A budget spent down year by year over ranked units; what was committed when, and what it yields. |
+| [`docs/examples/visit-order/`](examples/visit-order/) | The tutorial's example, deliberately the smallest complete thing: one input, one setting, one change, one output. |
+
+Both are about 250–500 lines of plain JavaScript over an engine that already
+existed.
 
 ---
 
@@ -22,6 +37,28 @@ cheapest one that works.
 
 If you find yourself writing a provider that emits one `SELECT`, write a
 fragment instead.
+
+---
+
+## Install the contract
+
+```sh
+npm i -D @alur/operation-contract
+```
+
+Types and the validators ALUR itself runs. Use them and a wrong manifest is a
+compile error in your editor instead of a surprise in someone else's panel — the
+first externally written plugin declared `options` as objects where the renderer
+wanted strings, and a `semanticType` of `"quantitative"`, which is not one of the
+seven. Both passed validation.
+
+In plain JavaScript, a JSDoc annotation gets the same checking with no runtime
+dependency:
+
+```js
+/** @type {import('@alur/operation-contract').OperationManifest} */
+const manifest = { /* … */ };
+```
 
 ---
 
@@ -106,6 +143,34 @@ makes your calculation unusable against the data it exists for.
 
 `geometry: "none"` gets plain rows instead of GeoJSON.
 
+#### `multiple` — several datasets, one input
+
+```js
+{ id: "units", label: "Units", geometry: "any", multiple: true, fields: [ /* … */ ] }
+```
+
+Declare it and the analyst can bind more than one dataset to the same input;
+ALUR concatenates them. This is what makes "draw a few more candidates and run it
+again" a binding change rather than a pipeline change — no union node, no schema
+surgery.
+
+Role binding is what makes it work. Each dataset maps its **own** column names
+onto the same roles, so a three-column layer somebody drew and a sixty-column
+table they loaded unify with nothing in common but the roles. Every feature gains
+`__alur_source` naming the dataset it came from, so a provider that wants to tell
+them apart can.
+
+**Read roles through `fields`, never by column name.** ALUR projects every bound
+role onto a canonical property and `fields` points at it:
+
+```js
+const cost = feature.properties[input.fields.cost];   // right
+const cost = feature.properties.ashp_total_cost;      // wrong; only works for one dataset
+```
+
+Unbound columns still arrive under their original names, so looking at extra
+columns is still possible — it just cannot be relied on across sources.
+
 ### Parameters — settings, not assertions
 
 ```js
@@ -142,6 +207,13 @@ accepts: [
   attribute on units that already exist.
 - **`point`** / **`geometry`** — a location on the map. Placing something that
   was not there: a charge point, a camp, a break in a network.
+
+For a `rows` change, set **`targetFieldRole`** to the role those ids should be
+expressed in. ALUR translates the selection from the dataset's own row-id column
+into that role's values before handing you the change, so you match on the same
+property you read everywhere else. Omit it and the input's first required
+identifier is assumed — which is right whenever there is one, and an error at
+registration when there is not.
 
 Declaring one of these is all it takes to get a working editor — a selection or
 a placement mode, a form built from `parameters`, and a persisted record.
@@ -245,15 +317,78 @@ every other change in the list over.
 
 ## Packaging and loading
 
-A provider is **plain ESM, loaded by URL at runtime** inside a Web Worker. No
-build step is required, and no registration in ALUR.
+A plugin is a **package manifest plus plain ESM**, loaded by URL at runtime
+inside a Web Worker. No build step is required, and no registration in ALUR.
 
-- Export the provider as `provider` or as the default export.
-- Serve it over HTTP **with CORS allowed**. `file://` will not work, and neither
-  will `python -m http.server` — it sends no `Access-Control-Allow-Origin`, and
-  the failure surfaces as a bare `net::ERR_FAILED` that reads like a missing
-  file. Use `npx serve --cors` or equivalent.
-- Paste the URL into ALUR's **Calculations** panel.
+### `alur.plugin.json`
+
+Put it at the root of whatever you serve, beside the tree your entry imports
+from.
+
+```json
+{
+  "contract": 1,
+  "name": "ism",
+  "label": "Interactive scenario modeller",
+  "version": "0.2.0",
+  "description": "…",
+  "entry": "./alur-provider/index.js",
+  "calculations": [
+    { "id": "ism.phased-allocation", "label": "Phased allocation under a recurring budget" }
+  ]
+}
+```
+
+It earns its place three times over:
+
+- **Several calculations behind one load.** Export `providers: [a, b, c]` and the
+  panel offers a picker. A library that does a dozen useful things no longer has
+  to publish a dozen URLs.
+- **Nothing runs before it is checked.** The manifest is fetched and validated as
+  data. A package declaring a contract revision ALUR does not speak, or
+  advertising a calculation its entry does not export, is refused without any of
+  its code being imported.
+- **`entry` resolves against the manifest**, not against whatever was pasted. An
+  entry importing `../dist/index.js` reaches the right place regardless, which is
+  what makes serving from the wrong directory stop being a failure mode.
+
+`calculations` must match what the entry exports, exactly and in both directions.
+A catalogue nobody checks becomes a catalogue that lies.
+
+### Exporting
+
+```js
+export const providers = [phasedAllocation, someOtherCalculation];
+```
+
+`provider` or a default export are still accepted for a single calculation — a
+one-element array should not be mandatory, and modules written before packaging
+existed keep working.
+
+### Serving
+
+Serve it over HTTP **with CORS allowed**. `file://` will not work, and neither
+will `python -m http.server` — it sends no `Access-Control-Allow-Origin`, and the
+failure surfaces as a bare `net::ERR_FAILED` that reads like a missing file.
+
+```sh
+npx serve --cors -l 8733 .
+```
+
+Then point ALUR's **Calculations** panel at
+`http://localhost:8733/alur.plugin.json`.
+
+### Being listed in the loader
+
+ALUR ships a plugin catalogue at
+[`src/data/pluginCatalogue.json`](../src/data/pluginCatalogue.json), which turns
+the loader's text box into a picker. **It ships empty and should stay empty in
+this repository** — ALUR contains no analytical calculation and names no
+analytical domain, and entries here would put both back. Deployments fill it in:
+
+```json
+{ "name": "ism", "label": "Scenario modeller", "url": "https://…/alur.plugin.json" }
+```
 
 ### wasm
 
@@ -319,17 +454,26 @@ more, say so in your README — it is not something ALUR can infer.
 **Instances are not yet held open across edits.** The runner currently creates,
 runs and disposes per run, which throws away the lifecycle's advantage. Design
 for the lifecycle anyway: it is the contract, and keeping instances warm is the
-next improvement rather than a change to your provider.
+next improvement rather than a change to your provider. It becomes load-bearing
+once calculations are workflow nodes, because a node otherwise rebuilds its
+engine on every graph run.
+
+**Binding is not remembered.** It lives in the panel's own state, so it is
+re-entered after a reload and is not reused across variants. Auto-binding from
+role semantics is the intended fix; nothing about your manifest changes when it
+lands.
 
 ---
 
 ## Checklist
 
+- [ ] `alur.plugin.json` lists exactly what the entry exports
 - [ ] `id` is namespaced and stable
 - [ ] Every input declares its field roles; nothing assumes a column name
 - [ ] `geometry: "any"` unless you truly cannot cope
 - [ ] Settings are `parameters`; things with a location are `accepts`
-- [ ] `joinFieldRole` set on every `join` output
+- [ ] `joinFieldRole` set on every `join` output, `targetFieldRole` on every `rows` change
+- [ ] Roles read through `fields`, never by column name
 - [ ] `setChanges` replaces state; it does not accumulate
 - [ ] Missing values come back as `null`, not `0`
 - [ ] Boundaries reported as `warnings`, not thrown

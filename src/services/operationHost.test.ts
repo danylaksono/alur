@@ -7,8 +7,11 @@ import { createOperationHostCore, type OperationHostRequest, type OperationHostR
  * A transport that runs the real core in-process. Nothing here is a stand-in for
  * the logic under test — only for `postMessage`, which node has no opinion about.
  */
-const localTransport = (load: (url: string) => Promise<unknown>) => {
-  const core = createOperationHostCore(load);
+const localTransport = (
+  load: (url: string) => Promise<unknown>,
+  fetchJson?: (url: string) => Promise<unknown>,
+) => {
+  const core = createOperationHostCore(load, fetchJson);
   let handler: ((response: OperationHostResponse) => void) | null = null;
   const terminate = vi.fn();
 
@@ -30,11 +33,14 @@ const localTransport = (load: (url: string) => Promise<unknown>) => {
  * A fixture that reused one would hide the fact that terminating loses every
  * loaded provider — the one thing the shutdown tests are here to pin down.
  */
-const localTransportFactory = (load: (url: string) => Promise<unknown>) => {
+const localTransportFactory = (
+  load: (url: string) => Promise<unknown>,
+  fetchJson?: (url: string) => Promise<unknown>,
+) => {
   const connections: Array<ReturnType<typeof localTransport>> = [];
   return {
     create: () => {
-      const connection = localTransport(load);
+      const connection = localTransport(load, fetchJson);
       connections.push(connection);
       return connection.transport;
     },
@@ -47,8 +53,11 @@ const loadReference = async (url: string) => {
   throw new Error(`nothing at ${url}`);
 };
 
-const hostWith = (load: (url: string) => Promise<unknown> = loadReference) => {
-  const factory = localTransportFactory(load);
+const hostWith = (
+  load: (url: string) => Promise<unknown> = loadReference,
+  fetchJson?: (url: string) => Promise<unknown>,
+) => {
+  const factory = localTransportFactory(load, fetchJson);
   const host = new OperationHost(factory.create);
   return {
     host,
@@ -81,7 +90,7 @@ const valuesOf = (result: { outputs: Record<string, unknown> }) => {
 describe('loading', () => {
   it('returns what a provider declares', async () => {
     const { host } = hostWith();
-    const manifest = await host.load('reference');
+    const [manifest] = await host.load('reference');
     expect(manifest.id).toBe('reference.tally');
     expect(manifest.accepts.map((accepted) => accepted.id)).toEqual(['adjust', 'place']);
   });
@@ -93,7 +102,7 @@ describe('loading', () => {
 
   it('refuses a module that exports no provider', async () => {
     const { host } = hostWith(async () => ({ somethingElse: true }));
-    await expect(host.load('bad')).rejects.toThrow(/exports no provider/);
+    await expect(host.load('bad')).rejects.toThrow(/exports no calculation/);
   });
 
   it('refuses a provider whose manifest is invalid, rather than loading it', async () => {
@@ -104,7 +113,7 @@ describe('loading', () => {
 
   it('accepts a default export as well as a named one', async () => {
     const { host } = hostWith(async () => ({ default: referenceProvider }));
-    await expect(host.load('default-export')).resolves.toMatchObject({ id: 'reference.tally' });
+    await expect(host.load('default-export')).resolves.toMatchObject([{ id: 'reference.tally' }]);
   });
 });
 
@@ -208,5 +217,85 @@ describe('shutdown', () => {
     // worth asserting, because silently losing loaded providers would look like
     // a caching bug rather than a restart.
     await expect(host.create('reference.tally', rowsInput(['1']), {})).rejects.toThrow(/No calculation named/);
+  });
+});
+
+/**
+ * Loading a package rather than a bare module.
+ *
+ * The three properties worth pinning down are the three reasons packaging
+ * exists: several calculations behind one load, the entry resolving against the
+ * manifest rather than against what was typed, and the package being checked as
+ * data before any of its code is imported.
+ */
+describe('loading a plugin package', () => {
+  const second = {
+    ...referenceProvider,
+    manifest: { ...referenceProvider.manifest, id: 'reference.second', label: 'Second' },
+  };
+
+  const pluginJson = (patch: Record<string, unknown> = {}) => ({
+    contract: 1,
+    name: 'reference',
+    label: 'Reference plugin',
+    version: '2.0.0',
+    entry: './dist/index.js',
+    calculations: [
+      { id: 'reference.tally', label: 'Tally' },
+      { id: 'reference.second', label: 'Second' },
+    ],
+    ...patch,
+  });
+
+  const loadEntry = async (url: string) => {
+    if (url === 'https://example.test/plugins/ism/dist/index.js') {
+      return { providers: [referenceProvider, second] };
+    }
+    throw new Error(`nothing at ${url}`);
+  };
+
+  const manifestUrl = 'https://example.test/plugins/ism/alur.plugin.json';
+
+  it('returns every calculation the package contains', async () => {
+    const { host } = hostWith(loadEntry, async () => pluginJson());
+    const loaded = await host.loadPlugin(manifestUrl);
+    expect(loaded.plugin.label).toBe('Reference plugin');
+    expect(loaded.calculations.map((calculation) => calculation.id)).toEqual(['reference.tally', 'reference.second']);
+  });
+
+  it('resolves the entry against the manifest, not against the pasted URL', async () => {
+    // The whole reason the manifest is a separate fetch. An entry of
+    // "./dist/index.js" beside the manifest must reach the sibling directory,
+    // which is what makes serving from the wrong root stop mattering.
+    const seen: string[] = [];
+    const { host } = hostWith(
+      async (url) => { seen.push(url); return loadEntry(url); },
+      async () => pluginJson(),
+    );
+    await host.loadPlugin(manifestUrl);
+    expect(seen).toEqual(['https://example.test/plugins/ism/dist/index.js']);
+  });
+
+  it('refuses a contract revision it does not speak, without importing anything', async () => {
+    const load = vi.fn(loadEntry);
+    const { host } = hostWith(load, async () => pluginJson({ contract: 99 }));
+    await expect(host.loadPlugin(manifestUrl)).rejects.toThrow(/revision 99/);
+    expect(load).not.toHaveBeenCalled();
+  });
+
+  it('refuses a package that advertises a calculation it does not export', async () => {
+    const { host } = hostWith(
+      async () => ({ providers: [referenceProvider] }),
+      async () => pluginJson(),
+    );
+    await expect(host.loadPlugin(manifestUrl)).rejects.toThrow(/does not export it/);
+  });
+
+  it('runs a calculation loaded through a package', async () => {
+    const { host } = hostWith(loadEntry, async () => pluginJson());
+    await host.loadPlugin(manifestUrl);
+    const handle = await host.create('reference.second', rowsInput(['1', '2']), { start: 0 });
+    await host.setChanges(handle, []);
+    await expect(host.evaluate(handle)).resolves.toHaveProperty('outputs');
   });
 });

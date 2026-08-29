@@ -4,7 +4,7 @@ import type {
   OperationManifest,
   OperationRunResult,
 } from '../types/operations';
-import type { OperationHostRequest, OperationHostResponse } from './operationHostCore';
+import type { LoadedPlugin, OperationHostRequest, OperationHostResponse } from './operationHostCore';
 
 /**
  * The main thread's handle on calculations running in a worker.
@@ -78,9 +78,25 @@ export class OperationHost {
     });
   }
 
-  /** Load a provider package and return what it declares. */
+  /** The plugins compiled into the app, available without fetching anything. */
+  installed() {
+    return this.send<LoadedPlugin[]>({ kind: 'installed' });
+  }
+
+  /** Load a bare provider module and return every calculation it exports. */
   load(url: string) {
-    return this.send<OperationManifest>({ kind: 'load', url });
+    return this.send<OperationManifest[]>({ kind: 'load', url });
+  }
+
+  /**
+   * Load a plugin package by the URL of its `alur.plugin.json`.
+   *
+   * Preferred over `load`, because the manifest is checked as data before the
+   * entry is imported, and the entry resolves relative to the manifest rather
+   * than to whatever the analyst pasted.
+   */
+  loadPlugin(url: string) {
+    return this.send<LoadedPlugin>({ kind: 'loadPlugin', url });
   }
 
   create(providerId: string, inputs: OperationInputData[], parameters: Record<string, unknown>) {
