@@ -45,6 +45,11 @@ export type ProvenanceActivity =
   // Execution.
   | 'workflow.ran'
   | 'sweep.ran'
+  // A calculation from outside ALUR. Kept apart from `workflow.ran` because it
+  // names code the project does not contain: an account has to be able to say
+  // which plugin, at which version, produced a number.
+  | 'calculation.configured'
+  | 'calculation.ran'
   // Analytical choices that leave no variant behind.
   | 'filter.applied'
   | 'filter.cleared'
@@ -68,7 +73,8 @@ export type ProvenanceEntityType =
   | 'operation'
   | 'layer'
   | 'workflow'
-  | 'project';
+  | 'project'
+  | 'calculation';
 
 export type ProvenanceEvent = {
   schemaVersion: typeof PROVENANCE_SCHEMA_VERSION;

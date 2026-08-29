@@ -17,6 +17,7 @@ import { ensureFeatureIds } from "../utils/featureIdentity";
 import type {
   AnalysisSession,
   AnalysisVariant,
+  CalculationSetup,
   VariantOperation,
   AnalyticalBookmark,
   CohortComparisonSelection,
@@ -561,6 +562,19 @@ export interface AppState {
     >,
   ) => void;
   removeVariant: (variantId: string) => void;
+  /**
+   * Record how a calculation was pointed at data, so the run can be repeated.
+   *
+   * One setup per calculation per line of enquiry, replaced in place. That is a
+   * deliberate limit rather than an oversight: the common case is "these are my
+   * bindings for this calculation", and a list of near-identical setups would
+   * need naming and managing to be worth having. Asserting something different
+   * about the same data is what a variant is for.
+   */
+  saveCalculationSetup: (
+    setup: Omit<CalculationSetup, 'id' | 'createdAt' | 'updatedAt'> & { lastRunAt?: number },
+  ) => void;
+  removeCalculationSetup: (setupId: string) => void;
   addChatMessage: (
     role: "user" | "assistant" | "system",
     content: string,
@@ -3494,6 +3508,58 @@ export const useStore = create<AppState>()(
               : {}),
           };
         }),
+
+      saveCalculationSetup: (setup) =>
+        set((state) => {
+          const existing = (state.visualAnalytics.calculations || []).find(
+            (candidate) =>
+              candidate.calculationId === setup.calculationId &&
+              candidate.sessionId === (setup.sessionId ?? state.visualAnalytics.activeSessionId),
+          );
+          const now = Date.now();
+          const sessionId = setup.sessionId ?? state.visualAnalytics.activeSessionId;
+          const saved: CalculationSetup = existing
+            ? { ...existing, ...setup, sessionId, updatedAt: now }
+            : {
+                ...setup,
+                sessionId,
+                id: `calculation-${now.toString(36)}`,
+                createdAt: now,
+                updatedAt: now,
+              };
+          const calculations = existing
+            ? (state.visualAnalytics.calculations || []).map((candidate) =>
+                candidate.id === existing.id ? saved : candidate,
+              )
+            : [...(state.visualAnalytics.calculations || []), saved];
+
+          return {
+            visualAnalytics: { ...state.visualAnalytics, calculations },
+            provenanceEvents: recordProvenanceEvent(state, {
+              // A run is the event worth recording; re-binding a column on the
+              // way to one is not, and would bury the runs it led to.
+              activity: setup.lastRunAt ? "calculation.ran" : "calculation.configured",
+              entityType: "calculation",
+              entityId: saved.id,
+              payload: {
+                label: saved.label,
+                calculationId: saved.calculationId,
+                version: saved.calculationVersion,
+                pluginUrl: saved.pluginUrl,
+              },
+            }),
+          };
+        }),
+
+      removeCalculationSetup: (setupId) =>
+        set((state) => ({
+          visualAnalytics: {
+            ...state.visualAnalytics,
+            calculations: (state.visualAnalytics.calculations || []).filter(
+              (candidate) => candidate.id !== setupId,
+            ),
+          },
+        })),
 
       removeVariant: (variantId) =>
         set((state) => {

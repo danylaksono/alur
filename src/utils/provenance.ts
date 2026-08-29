@@ -19,6 +19,8 @@ export const createProvenanceId = (prefix = 'prov') =>
   `${prefix}-${Date.now().toString(36)}-${(sequence++).toString(36)}`;
 
 const ENTITY_FOR_ACTIVITY: Record<ProvenanceActivity, ProvenanceEntityType> = {
+  'calculation.configured': 'calculation',
+  'calculation.ran': 'calculation',
   'session.created': 'session',
   'session.renamed': 'session',
   'variant.created': 'variant',
@@ -127,6 +129,21 @@ export function summariseProvenance(activity: ProvenanceActivity, payload: Recor
       // A partial sweep is the interesting case, so the count that failed is
       // part of the sentence rather than something to look up afterwards.
       return failed ? `Ran the workflow across ${scope}, ${failed} failing` : `Ran the workflow across ${scope}`;
+    }
+    case 'calculation.configured': {
+      return `Set up ${asText(payload.label, 'a calculation')}`;
+    }
+    case 'calculation.ran': {
+      const label = asText(payload.label, 'a calculation');
+      const version = asText(payload.version, '');
+      const datasets = asCount(payload.datasetCount);
+      // The version is in the sentence rather than the payload alone: a number
+      // produced by a plugin is only accountable if the account says which
+      // build of it ran.
+      const what = version ? `${label} ${version}` : label;
+      return datasets === null
+        ? `Ran ${what}`
+        : `Ran ${what}, producing ${plural(datasets, 'dataset')}`;
     }
     case 'filter.applied': {
       const label = asText(payload.description, asText(payload.field, 'a condition'));

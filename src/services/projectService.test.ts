@@ -163,3 +163,69 @@ describe('projectService', () => {
     expect(serialiseProjectManifest(restored)).not.toContain('spatial-intervention-loop');
   });
 });
+
+/**
+ * Repeating a calculation from a saved project.
+ *
+ * This is the whole point of persisting a setup: someone else, with the same
+ * data, opens the file and can run the calculation again with the bindings and
+ * settings it was run with. It fails silently if it fails at all — the project
+ * loads, and the calculation simply cannot be repeated — so it is worth pinning
+ * down rather than assuming.
+ */
+describe('calculation setups in a project', () => {
+  afterEach(() => useStore.getState().resetWorkspace());
+
+  const setup = {
+    id: 'calculation-1',
+    pluginUrl: 'https://example.test/alur.plugin.json',
+    calculationId: 'example.visit-order',
+    calculationVersion: '1.0.0',
+    label: 'Order into a visiting sequence',
+    inputs: [{ inputId: 'stops', sources: [{ datasetId: 'dataset-1', fields: { id: 'code' } }] }],
+    parameters: { returnToStart: 'yes' },
+    createdAt: 1,
+    updatedAt: 2,
+    lastRunAt: 3,
+  };
+
+  it('round-trips everything needed to repeat a run', () => {
+    useStore.setState((state) => ({
+      visualAnalytics: { ...state.visualAnalytics, calculations: [setup] },
+    }));
+
+    const reopened = parseProjectManifest(
+      serialiseProjectManifest(createProjectManifest(useStore.getState())),
+    );
+    const [restored] = reopened.visualAnalytics.calculations ?? [];
+
+    expect(restored).toBeDefined();
+    // Named individually rather than by deep equality: each of these is here
+    // because without it the run cannot be repeated, and a wholesale match
+    // would not say which one went missing.
+    expect(restored.pluginUrl).toBe(setup.pluginUrl);
+    expect(restored.calculationId).toBe(setup.calculationId);
+    expect(restored.calculationVersion).toBe(setup.calculationVersion);
+    expect(restored.inputs).toEqual(setup.inputs);
+    expect(restored.parameters).toEqual(setup.parameters);
+  });
+
+  it('carries the label, so a project reads without the plugin loaded', () => {
+    // An open ecosystem means opening work whose calculations you do not have.
+    useStore.setState((state) => ({
+      visualAnalytics: { ...state.visualAnalytics, calculations: [setup] },
+    }));
+    const reopened = parseProjectManifest(
+      serialiseProjectManifest(createProjectManifest(useStore.getState())),
+    );
+    expect(reopened.visualAnalytics.calculations?.[0].label).toBe('Order into a visiting sequence');
+  });
+
+  it('reads a project written before setups existed', () => {
+    // Additive and optional, so no manifest bump — the same contract
+    // `provenanceEvents` took. An older project must not become unreadable.
+    const manifest = JSON.parse(serialiseProjectManifest(createProjectManifest(useStore.getState())));
+    delete manifest.visualAnalytics.calculations;
+    expect(parseProjectManifest(JSON.stringify(manifest)).visualAnalytics.calculations).toEqual([]);
+  });
+});

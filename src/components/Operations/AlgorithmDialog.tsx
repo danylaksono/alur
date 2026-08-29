@@ -87,17 +87,36 @@ export const AlgorithmDialog = ({
   const startPlacement = useStore((state) => state.startPlacement);
   const cancelPlacement = useStore((state) => state.cancelPlacement);
   const recordRowChange = useStore((state) => state.recordRowChange);
+  const savedSetups = useStore((state) => state.visualAnalytics.calculations);
+  const saveCalculationSetup = useStore((state) => state.saveCalculationSetup);
   const removeVariantOperation = useStore((state) => state.removeVariantOperation);
   const addToast = useStore((state) => state.addToast);
 
+  /**
+   * What this calculation was configured with last time, if anything.
+   *
+   * Read once, when the dialog opens. Binding every role by hand on every visit
+   * was the single most tedious part of using a calculation, and worse, it meant
+   * a saved project could not repeat one — the configuration lived here and was
+   * gone when the dialog closed.
+   */
+  const saved = (savedSetups || []).find(
+    (setup) => setup.calculationId === manifest.id
+      && (!activeSessionId || !setup.sessionId || setup.sessionId === activeSessionId),
+  );
+
   const [running, setRunning] = useState(false);
   const [report, setReport] = useState<OperationRunReport | null>(null);
-  const [bindings, setBindings] = useState<OperationInputBinding[]>(
-    manifest.inputs.map((input) => ({ inputId: input.id, sources: [{ datasetId: '', fields: {} }] })),
+  const [bindings, setBindings] = useState<OperationInputBinding[]>(() =>
+    manifest.inputs.map((input) =>
+      saved?.inputs.find((binding) => binding.inputId === input.id)
+        ?? { inputId: input.id, sources: [{ datasetId: '', fields: {} }] },
+    ),
   );
-  const [parameters, setParameters] = useState<Record<string, unknown>>(
-    Object.fromEntries(manifest.parameters.map((parameter) => [parameter.id, parameter.defaultValue])),
-  );
+  const [parameters, setParameters] = useState<Record<string, unknown>>(() => ({
+    ...Object.fromEntries(manifest.parameters.map((parameter) => [parameter.id, parameter.defaultValue])),
+    ...(saved?.parameters ?? {}),
+  }));
   const [variantId, setVariantId] = useState('');
   const [changeValues, setChangeValues] = useState<Record<string, Record<string, unknown>>>({});
 
@@ -184,6 +203,17 @@ export const AlgorithmDialog = ({
         operations: variant.operations,
       }, { runLabel: `${manifest.label} · ${variant.name}` });
       setReport(outcome);
+      // Recorded on success rather than on open: what is worth repeating is a
+      // run that produced something, not a form somebody half filled in.
+      saveCalculationSetup({
+        pluginUrl: entryUrl,
+        calculationId: manifest.id,
+        calculationVersion: manifest.version,
+        label: manifest.label,
+        inputs: bindings,
+        parameters,
+        lastRunAt: Date.now(),
+      });
       addToast({
         type: outcome.warnings.length ? 'warning' : 'success',
         message: `${manifest.label} produced ${outcome.created.length} dataset${outcome.created.length === 1 ? '' : 's'}.`,

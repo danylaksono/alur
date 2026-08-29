@@ -19,9 +19,58 @@ export type VisualAnalyticsState = {
   sessions?: AnalysisSession[];
   activeSessionId?: string;
   variants?: AnalysisVariant[];
+  calculations?: CalculationSetup[];
   comparison?: CohortComparisonSelection;
   /** @deprecated v1 compatibility only. New projects use `explain`. */
   dashboard?: DashboardLayout;
+};
+
+/**
+ * How a calculation was pointed at data, kept so a run can be repeated.
+ *
+ * This is the half of a calculation that is *method* — which plugin, which
+ * calculation, which columns bound to which roles, which settings. The other
+ * half, what the analyst asserted about particular places, lives on a variant as
+ * `VariantOperation[]` and stays there.
+ *
+ * The split is deliberate and worth keeping. A saved project then says "here is
+ * how this was computed" separately from "here is the scenario someone argued
+ * for", so a reader can take the method, apply their own scenario, and compare —
+ * which is a stronger reproducibility claim than a single frozen answer.
+ *
+ * Before this existed the whole configuration lived in the dialog's React state
+ * and was gone when it closed: reopening meant re-binding every role, and a
+ * shared project could not reproduce a calculation at all.
+ */
+export type CalculationSetup = {
+  id: string;
+  /**
+   * Where the plugin was loaded from. Empty for one compiled into the app,
+   * which needs no fetching and cannot go missing.
+   */
+  pluginUrl: string;
+  /** The calculation this configures. */
+  calculationId: string;
+  /**
+   * Recorded so a project opened against a newer plugin can say the version
+   * moved, rather than silently running a different calculation under the same
+   * id and reporting a number nobody can account for.
+   */
+  calculationVersion: string;
+  /**
+   * The calculation's own label at the time it was configured. Kept so a saved
+   * project is readable without the plugin loaded — an ecosystem means opening
+   * work whose calculations you do not have.
+   */
+  label: string;
+  /** The line of enquiry this belongs to, stamped like everything else. */
+  sessionId?: string;
+  inputs: import('./operations').OperationInputBinding[];
+  parameters: Record<string, unknown>;
+  createdAt: number;
+  updatedAt: number;
+  /** When it last produced datasets, if it ever has. */
+  lastRunAt?: number;
 };
 
 export type ComparisonScope =

@@ -115,6 +115,10 @@ const persistedAnalytics = (analytics: VisualAnalyticsState): VisualAnalyticsSta
   sessions: sanitiseValue(analytics.sessions || []) as NonNullable<VisualAnalyticsState['sessions']>,
   activeSessionId: analytics.activeSessionId,
   variants: sanitiseValue(analytics.variants || []) as NonNullable<VisualAnalyticsState['variants']>,
+  // Additive and optional, so no manifest bump: an older reader that ignores
+  // this loses the ability to repeat a calculation but reads everything else
+  // correctly, which is the same contract `provenanceEvents` took.
+  calculations: sanitiseValue(analytics.calculations || []) as NonNullable<VisualAnalyticsState['calculations']>,
 });
 
 const defaultExplain = (): ExplainDocument => ({
@@ -145,6 +149,7 @@ const normaliseAnalytics = (analytics: ProjectManifestV1['visualAnalytics'] | Re
     sessions: value.sessions || [],
     activeSessionId: value.activeSessionId,
     variants: value.variants || [],
+    calculations: value.calculations || [],
   });
 };
 

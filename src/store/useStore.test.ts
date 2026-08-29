@@ -827,3 +827,90 @@ describe('provenance account', () => {
     expect(renamed.summary).toBe('Renamed variant from “variant-a” to “High ambition”');
   });
 });
+
+/**
+ * How a calculation was pointed at data.
+ *
+ * The half of a calculation that is *method* — plugin, version, bindings,
+ * settings — as opposed to what an analyst asserted about particular places,
+ * which stays on a variant. Before this existed the whole configuration lived in
+ * the dialog's React state, so reopening meant re-binding every role and a
+ * shared project could not repeat a calculation at all.
+ */
+describe('calculation setups', () => {
+  const setup = (patch: Record<string, unknown> = {}) => ({
+    pluginUrl: '',
+    calculationId: 'alur.thin-by-spacing',
+    calculationVersion: '1.0.0',
+    label: 'Thin by minimum spacing',
+    inputs: [{ inputId: 'units', sources: [{ datasetId: 'dataset-1', fields: { id: 'code' } }] }],
+    parameters: { minSpacingKm: 0.5 },
+    ...patch,
+  });
+
+  beforeEach(() => {
+    useStore.getState().resetWorkspace();
+    useStore.setState({ toasts: [], provenanceEvents: [] });
+  });
+
+  const saved = () => useStore.getState().visualAnalytics.calculations || [];
+
+  it('records what a calculation was configured with', () => {
+    useStore.getState().saveCalculationSetup(setup());
+    expect(saved()).toHaveLength(1);
+    expect(saved()[0]).toMatchObject({
+      calculationId: 'alur.thin-by-spacing',
+      calculationVersion: '1.0.0',
+      parameters: { minSpacingKm: 0.5 },
+    });
+  });
+
+  it('replaces the setup for a calculation rather than accumulating near-copies', () => {
+    useStore.getState().saveCalculationSetup(setup());
+    useStore.getState().saveCalculationSetup(setup({ parameters: { minSpacingKm: 2 } }));
+    expect(saved()).toHaveLength(1);
+    expect(saved()[0].parameters).toEqual({ minSpacingKm: 2 });
+  });
+
+  it('keeps the original creation time when it replaces one', () => {
+    useStore.getState().saveCalculationSetup(setup());
+    const first = saved()[0];
+    useStore.getState().saveCalculationSetup(setup({ parameters: { minSpacingKm: 2 } }));
+    expect(saved()[0].id).toBe(first.id);
+    expect(saved()[0].createdAt).toBe(first.createdAt);
+  });
+
+  it('keeps setups for different calculations apart', () => {
+    useStore.getState().saveCalculationSetup(setup());
+    useStore.getState().saveCalculationSetup(setup({ calculationId: 'alur.cluster-by-distance', label: 'Cluster' }));
+    expect(saved()).toHaveLength(2);
+  });
+
+  it('records the plugin version, so a project can say the calculation moved', () => {
+    // A number produced by a plugin is only accountable if the record says
+    // which build of it ran.
+    useStore.getState().saveCalculationSetup(setup({ calculationVersion: '2.1.0' }));
+    expect(saved()[0].calculationVersion).toBe('2.1.0');
+  });
+
+  it('logs a run as a run, and a setup that has not run as configuration', () => {
+    useStore.getState().saveCalculationSetup(setup());
+    useStore.getState().saveCalculationSetup(setup({ calculationId: 'other.calc', lastRunAt: Date.now() }));
+    const activities = useStore.getState().provenanceEvents.map((event) => event.activity);
+    expect(activities).toContain('calculation.configured');
+    expect(activities).toContain('calculation.ran');
+  });
+
+  it('names the calculation in the account, readable without the plugin loaded', () => {
+    useStore.getState().saveCalculationSetup(setup({ lastRunAt: Date.now() }));
+    const event = useStore.getState().provenanceEvents.find((e) => e.activity === 'calculation.ran');
+    expect(event?.summary).toContain('Thin by minimum spacing');
+    expect(event?.summary).toContain('1.0.0');
+  });
+
+  it('forgets one on request', () => {
+    useStore.getState().saveCalculationSetup(setup());
+    useStore.getState().removeCalculationSetup(saved()[0].id);
+    expect(saved()).toEqual([]);
+  });
+});
