@@ -5,6 +5,7 @@ import {
   GitCompareArrows,
   Info,
   Layers,
+  Plug,
   PanelLeftClose,
   PanelLeftOpen,
   SlidersHorizontal,
@@ -49,6 +50,7 @@ const GROUPS: Group[] = [
     items: [
       { id: 'compare', icon: GitCompareArrows, label: 'Compare', hint: 'Compare groups, places or time windows' },
       { id: 'score', icon: SlidersHorizontal, label: 'Score', hint: 'Weight criteria and rank candidates' },
+      { id: 'operations', icon: Plug, label: 'Calculations', hint: 'Load an external calculation and run it against your data' },
       { id: 'cohorts', icon: Users, label: 'Cohorts', hint: 'Saved subsets and analytical bookmarks' },
     ],
   },

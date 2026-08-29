@@ -185,11 +185,50 @@ export type ScoreModelSpec = {
   sensitivity?: number[];
 };
 
+/** Operation kinds ALUR itself provides, kept nameable for the built-in editors. */
+export type BuiltInOperationType =
+  | 'weighted-score'
+  | 'ranked-selection'
+  | 'value-change'
+  | 'allocation'
+  | 'phase-assignment'
+  | 'remove-operation';
+
+/**
+ * One change the analyst asserted, as it is persisted.
+ *
+ * `type` was a closed union of the six kinds above, which made `src/types/` the
+ * one place outside a calculation that named what a calculation does. It is now
+ * resolved against the provider registry instead, so a provider ALUR has never
+ * heard of records its changes in the same shape as a built-in one. The union is
+ * kept as a documented alias rather than deleted — the built-ins are still real,
+ * and losing their names would make the existing editors unreadable.
+ *
+ * Every field below `assumptions` is optional because projects written before
+ * providers existed have operations without them, and those still load.
+ */
 export type VariantOperation = {
   id: string;
-  type: 'weighted-score' | 'ranked-selection' | 'value-change' | 'allocation' | 'phase-assignment' | 'remove-operation';
+  type: BuiltInOperationType | (string & Record<never, never>);
   parameters: Record<string, unknown>;
   assumptions?: string[];
+  /**
+   * Position in the ordered list. Absent on pre-provider records, which are
+   * ordered by their position in `operations` and get a sequence on first write.
+   */
+  sequence?: number;
+  /** The registered provider this operation belongs to, when it is not built in. */
+  providerId?: string;
+  /** The `OperationChangeSpec.id` within that provider. */
+  changeId?: string;
+  /**
+   * What the change is about. A change with no target is a model parameter, and
+   * the two are kept apart on purpose: an assertion about a place and a setting
+   * that applies everywhere are different claims, and an account that showed
+   * them alike would misreport what the analyst did.
+   */
+  target?: import('./operations').OperationTarget;
+  createdAt?: number;
 };
 
 /**

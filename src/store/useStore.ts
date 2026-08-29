@@ -17,6 +17,7 @@ import { ensureFeatureIds } from "../utils/featureIdentity";
 import type {
   AnalysisSession,
   AnalysisVariant,
+  VariantOperation,
   AnalyticalBookmark,
   CohortComparisonSelection,
   CohortSpec,
@@ -83,6 +84,7 @@ import {
   type DrawnLayer,
 } from "../utils/drawnFeatures";
 import type { Position } from "geojson";
+import { appendOperation, removeOperation } from "../utils/operationRecords";
 
 export type NodeExecutionState = {
   status: "idle" | "running" | "done" | "error";
@@ -170,6 +172,7 @@ export type RailTab =
   | "charts"
   | "cohorts"
   | "score"
+  | "operations"
   | "chat"
   | "nodes";
 export type DrawerTab = "workflow" | "table" | "sql";
@@ -245,6 +248,7 @@ const PANEL_DESTINATIONS: RailTab[] = [
   "charts",
   "cohorts",
   "score",
+  "operations",
   "chat",
   "nodes",
 ];
@@ -282,6 +286,22 @@ export type UIState = {
    * restore a half-drawn shape.
    */
   drawing?: { nodeId: string; kind: DrawGeometryKind; positions: Position[] };
+  /**
+   * A change waiting for the analyst to say where it applies.
+   *
+   * Carries everything the record needs so the map stays ignorant of providers:
+   * it reports a coordinate, and the store writes the record. Transient for the
+   * same reason `drawing` is — an intention to place something is not part of
+   * the project until it has been placed.
+   */
+  placement?: {
+    providerId: string;
+    changeId: string;
+    label: string;
+    values: Record<string, unknown>;
+    /** The scenario the record will belong to. A change always belongs to one. */
+    variantId: string;
+  };
   recoverySave: {
     status: "idle" | "saving" | "saved" | "error";
     savedAt?: number;
@@ -566,6 +586,26 @@ export interface AppState {
   clearAnalysisHistory: () => void;
   recordProvenance: (input: ProvenanceEventInput) => void;
   clearProvenance: () => void;
+  startPlacement: (
+    placement: NonNullable<UIState["placement"]> & { variantId: string },
+  ) => void;
+  cancelPlacement: () => void;
+  /** Writes the pending placement as a record on the active variant. */
+  completePlacement: (position: Position) => void;
+  /** Records a change against units already selected, with no map step. */
+  recordRowChange: (input: {
+    variantId: string;
+    providerId: string;
+    changeId: string;
+    datasetId: string;
+    rowIds: string[];
+    values: Record<string, unknown>;
+  }) => void;
+  appendVariantOperation: (
+    variantId: string,
+    operation: VariantOperation,
+  ) => void;
+  removeVariantOperation: (variantId: string, operationId: string) => void;
   startDrawing: (nodeId: string, kind: DrawGeometryKind) => void;
   addDrawingVertex: (position: Position) => void;
   undoDrawingVertex: () => void;
@@ -1547,6 +1587,79 @@ export const useStore = create<AppState>()(
 
       cancelDrawing: () =>
         set((state) => ({ ui: { ...state.ui, drawing: undefined } })),
+
+      startPlacement: (placement) =>
+        set((state) => ({ ui: { ...state.ui, placement } })),
+
+      cancelPlacement: () =>
+        set((state) => ({ ui: { ...state.ui, placement: undefined } })),
+
+      completePlacement: (position) => {
+        const placement = get().ui.placement;
+        if (!placement) return;
+        get().appendVariantOperation(placement.variantId, {
+          id: `operation-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          type: placement.providerId,
+          providerId: placement.providerId,
+          changeId: placement.changeId,
+          parameters: placement.values,
+          target: {
+            kind: "geometry",
+            geometry: { type: "Point", coordinates: [position[0], position[1]] },
+          },
+        });
+        // One placement per arming. Staying armed would turn a stray map click
+        // into an assertion the analyst never meant to make.
+        set((state) => ({ ui: { ...state.ui, placement: undefined } }));
+      },
+
+      recordRowChange: ({ variantId, providerId, changeId, datasetId, rowIds, values }) =>
+        get().appendVariantOperation(variantId, {
+          id: `operation-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          type: providerId,
+          providerId,
+          changeId,
+          parameters: values,
+          target: { kind: "rows", datasetId, rowIds },
+        }),
+
+      appendVariantOperation: (variantId, operation) =>
+        set((state) => {
+          const variants = (state.visualAnalytics.variants || []).map((variant) =>
+            variant.id === variantId
+              ? { ...variant, operations: appendOperation(variant.operations, operation) }
+              : variant,
+          );
+          return {
+            visualAnalytics: { ...state.visualAnalytics, variants },
+            provenanceEvents: recordProvenanceEvent(state, {
+              activity: "operation.applied",
+              entityType: "operation",
+              entityId: operation.id,
+              variantId,
+              payload: { providerId: operation.providerId, changeId: operation.changeId },
+            }),
+          };
+        }),
+
+      removeVariantOperation: (variantId, operationId) =>
+        set((state) => {
+          const variants = (state.visualAnalytics.variants || []).map((variant) =>
+            variant.id === variantId
+              ? { ...variant, operations: removeOperation(variant.operations, operationId) }
+              : variant,
+          );
+          return {
+            visualAnalytics: { ...state.visualAnalytics, variants },
+            provenanceEvents: recordProvenanceEvent(state, {
+              activity: "operation.removed",
+              entityType: "operation",
+              entityId: operationId,
+              variantId,
+              payload: {},
+            }),
+          };
+        }),
 
       createSession: (session) =>
         set((state) => {

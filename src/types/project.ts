@@ -85,7 +85,7 @@ export type ProjectManifestV2 = Omit<ProjectManifestV1, 'version' | 'workspace'>
    */
   provenanceEvents?: ProvenanceEvent[];
   workspace: Omit<ProjectManifestV1['workspace'], 'activeRailTab' | 'workspaceMode'> & {
-    activeRailTab: 'layers' | 'charts' | 'chat' | 'cohorts' | 'score' | 'nodes';
+    activeRailTab: 'layers' | 'charts' | 'chat' | 'cohorts' | 'score' | 'nodes' | 'operations';
     workspaceMode: 'explore' | 'compare' | 'explain' | 'board';
     /** Optional so v2 files written before layouts existed still validate. */
     isRailExpanded?: boolean;

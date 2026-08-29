@@ -1,5 +1,15 @@
 import type { AnalysisVariant, ScoreModelSpec, VariantOperation } from '../types/visualAnalytics';
 
+/**
+ * The operation kinds ALUR provides itself, lowered to ordinary workflow nodes.
+ *
+ * These stay separate from the provider registry in `operationRegistry.ts`, and
+ * the split is a real one rather than a migration left half-done: a built-in
+ * lowers to SQL the engine already runs, so it needs no lifecycle, no inputs to
+ * bind and no host to run in. A provider is code that ALUR cannot express. Both
+ * write the same `VariantOperation` record, which is what lets the history, the
+ * account and the export treat them alike.
+ */
 export type OperationDefinition = {
   type: VariantOperation['type'];
   label: string;

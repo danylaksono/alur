@@ -236,6 +236,9 @@ export const MapView = () => {
   const addToast = useStore((s) => s.addToast);
   const mapCamera = useStore((s) => s.ui.mapCamera);
   const drawing = useStore((s) => s.ui.drawing);
+  const placement = useStore((s) => s.ui.placement);
+  const completePlacement = useStore((s) => s.completePlacement);
+  const cancelPlacement = useStore((s) => s.cancelPlacement);
   const nodes = useStore((s) => s.nodes);
   const addDrawingVertex = useStore((s) => s.addDrawingVertex);
   const finishDrawing = useStore((s) => s.finishDrawing);
@@ -562,6 +565,38 @@ export const MapView = () => {
     cancelDrawing,
     undoDrawingVertex,
   ]);
+
+  /**
+   * Placing a change a calculation accepts at a location.
+   *
+   * Separate from the drawing handler because it ends after one click and has no
+   * shape in progress. The map reports a coordinate and nothing else — it does
+   * not know which calculation asked, or what the change means, which is what
+   * keeps a provider's vocabulary out of the map.
+   */
+  useEffect(() => {
+    const m = map.current;
+    if (!m || !placement) return;
+    const canvas = m.getCanvas();
+    canvas.style.cursor = "crosshair";
+
+    const onClick = (event: maplibregl.MapMouseEvent) => {
+      completePlacement([event.lngLat.lng, event.lngLat.lat]);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      cancelPlacement();
+    };
+
+    m.on("click", onClick);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      m.off("click", onClick);
+      window.removeEventListener("keydown", onKeyDown);
+      canvas.style.cursor = "";
+    };
+  }, [placement, completePlacement, cancelPlacement]);
 
   /** Renders committed and in-progress geometry for the node being drawn into. */
   useEffect(() => {
