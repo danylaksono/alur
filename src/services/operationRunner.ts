@@ -284,7 +284,10 @@ const ingestCollection = async (collection: GeoJSON.FeatureCollection, name: str
   });
   // `sourceKind: 'clipboard'` for the same reason drawn layers use it: the bytes
   // were generated in the browser and there is no file or URL to point back at.
-  return ingestFile(file, { sourceKind: 'clipboard' });
+  // `generated` says the same thing to the size guard, which is there to bound
+  // parsing documents from outside — a result computed from rows DuckDB already
+  // holds is not one, and 25,000 features of real data comfortably exceeds it.
+  return ingestFile(file, { sourceKind: 'clipboard', generated: true });
 };
 
 /**

@@ -397,6 +397,17 @@ export const ingestFile = async (
     nodeId?: string;
     position?: { x: number; y: number };
     sourceKind?: IngestionSourceKind;
+    /**
+     * The bytes were built in this tab, not read from outside.
+     *
+     * The JSON size guard exists because parsing a large untrusted document is
+     * how the tab locks up, and a file somebody dropped is exactly that. A
+     * calculation's result is not: it was constructed in memory, one row per row
+     * DuckDB already held, and refusing it means a calculation silently produces
+     * nothing on any dataset big enough to be interesting. So the limit still
+     * applies to everything that came from outside, and only to that.
+     */
+    generated?: boolean;
   } = {},
 ): Promise<{ tableName: string; layerId: string | null } | null> => {
   const { addNode, addToast, startLoadingOperation } = useStore.getState();
@@ -410,6 +421,7 @@ export const ingestFile = async (
     return null;
   }
   if (
+    !options.generated &&
     (detectedFormat === "json" || detectedFormat === "geojson") &&
     file.size > MAX_JSON_BYTES
   ) {

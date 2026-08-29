@@ -3,7 +3,7 @@ import { type LucideIcon } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import { NodeActions } from './NodeActions';
 
-type NodeTone = 'blue' | 'purple' | 'slate' | 'orange' | 'amber' | 'emerald' | 'cyan';
+type NodeTone = 'blue' | 'purple' | 'slate' | 'orange' | 'amber' | 'emerald' | 'cyan' | 'violet';
 
 const toneStyles: Record<NodeTone, { bar: string; icon: string; handle: string }> = {
   blue: { bar: 'bg-blue-400', icon: 'text-blue-600 bg-blue-50', handle: '!bg-blue-500' },
@@ -13,6 +13,7 @@ const toneStyles: Record<NodeTone, { bar: string; icon: string; handle: string }
   orange: { bar: 'bg-orange-400', icon: 'text-orange-600 bg-orange-50', handle: '!bg-orange-500' },
   amber: { bar: 'bg-amber-400', icon: 'text-amber-600 bg-amber-50', handle: '!bg-amber-500' },
   emerald: { bar: 'bg-emerald-400', icon: 'text-emerald-600 bg-emerald-50', handle: '!bg-emerald-500' },
+  violet: { bar: 'bg-violet-400', icon: 'text-violet-600 bg-violet-50', handle: '!bg-violet-500' },
 };
 
 interface FlowNodeShellProps {

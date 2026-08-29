@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useStore } from "../store/useStore";
-import { buildWorkflowSQL, cteAlias } from "../utils/workflowEngine";
+import { buildUpToSQL, buildWorkflowSQL, cteAlias } from "../utils/workflowEngine";
 import { indicativeParameters } from "../utils/workflowParameters";
 import { duckdbService } from "../services/duckdb";
 
@@ -16,10 +16,26 @@ export function useSchemaFetcher() {
     const fetchSchemas = async () => {
       if (!duckdbReady || nodes.length === 0) return;
 
+      const parameters = indicativeParameters(variants);
+
+      const readSchema = async (nodeId: string, withClause: string) => {
+        const alias = cteAlias(nodeId);
+        const result = await duckdbService.query(
+          `${withClause} SELECT * FROM ${alias} LIMIT 0;`,
+        );
+        setNodeSchema(
+          nodeId,
+          result.schema.fields.map((field) => ({
+            name: field.name,
+            type: String(field.type),
+          })),
+        );
+      };
+
       try {
         const { withClause, needsH3 } = buildWorkflowSQL(nodes, edges, {
           fragments,
-          parameters: indicativeParameters(variants),
+          parameters,
         });
         // H3 nodes resolve through DuckDB's community h3 extension; make sure
         // it is loaded before any per-node schema query touches them.
@@ -27,21 +43,27 @@ export function useSchemaFetcher() {
 
         for (const node of nodes) {
           try {
-            const alias = cteAlias(node.id);
-            const schemaSql = `${withClause} SELECT * FROM ${alias} LIMIT 0;`;
-            const result = await duckdbService.query(schemaSql);
-            const arrowSchema = result.schema;
-            const schema = arrowSchema.fields.map((field) => ({
-              name: field.name,
-              type: String(field.type),
-            }));
-            setNodeSchema(node.id, schema);
+            await readSchema(node.id, withClause);
           } catch {
             // Node might not be ready or valid yet
           }
         }
       } catch {
-        // Workflow might not be ready
+        // One node that will not compile used to cost every node its columns,
+        // because the whole graph is built in a single pass. That is fatal for a
+        // calculation node in particular: it cannot compile until it has been
+        // run, and it cannot be configured until the columns above it are known,
+        // so the node could never be set up at all. Falling back to a build per
+        // node costs more only in the case that was previously a dead end.
+        for (const node of nodes) {
+          try {
+            const branch = buildUpToSQL(nodes, edges, node.id, { fragments, parameters });
+            if (branch.needsH3) await duckdbService.ensureH3();
+            await readSchema(node.id, branch.withClause);
+          } catch {
+            // This node genuinely is not ready; its neighbours still are.
+          }
+        }
       }
     };
 

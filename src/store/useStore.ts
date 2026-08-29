@@ -146,7 +146,8 @@ export type WorkflowNode = Node & {
       | "visualisation"
       | "output"
       | "fragment"
-      | "h3";
+      | "h3"
+      | "calculation";
     config: any;
   };
 };

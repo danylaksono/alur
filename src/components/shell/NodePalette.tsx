@@ -91,7 +91,8 @@ type NodeType =
   | "visualisation"
   | "output"
   | "fragment"
-  | "h3";
+  | "h3"
+  | "calculation";
 
 /** Logical buckets used to group the palette cards. */
 type NodeGroupId = "source" | "transform" | "analyse" | "output";
@@ -260,6 +261,7 @@ const nodeLabels: Record<NodeType, string> = {
   visualisation: "Visualisation",
   output: "Layer Output",
   h3: "H3 Op",
+  calculation: "Calculation",
 };
 
 /** One palette card. Shared by grouped and search-flattened lists. */

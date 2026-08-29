@@ -212,9 +212,55 @@ function isBooleanPredicate(operation: string): boolean {
 export const unloadedSourceNodes = (nodes: WorkflowNode[]) =>
   nodes.filter(
     (node) =>
-      (node.data.type === "input" || node.data.type === "geometry") &&
+      (node.data.type === "input" ||
+        node.data.type === "geometry" ||
+        node.data.type === "calculation") &&
       !node.data.config?.tableName,
   );
+
+/**
+ * Nodes still part of the SQL once calculations are cut out of the chain.
+ *
+ * A calculation is not compiled — it runs outside DuckDB and leaves a table
+ * behind — so by the time the graph is compiled, whatever fed it has already
+ * been read and is no longer part of this query. Emitting those CTEs anyway
+ * would be dead weight at best, and at worst would fail the whole build because
+ * a source the calculation no longer needs has since been unloaded.
+ *
+ * Walking back from the leaves rather than forward from the roots is what makes
+ * this safe to apply unconditionally: every node is an ancestor of some leaf, so
+ * a graph with no calculations in it keeps every node exactly as before.
+ */
+const compiledGraph = (nodes: WorkflowNode[], edges: Edge[]) => {
+  if (!nodes.some((node) => node.data.type === "calculation")) return { nodes, edges };
+
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const parents = new Map<string, string[]>();
+  const hasChild = new Set<string>();
+  for (const edge of edges) {
+    if (!byId.has(edge.source) || !byId.has(edge.target)) continue;
+    parents.set(edge.target, [...(parents.get(edge.target) || []), edge.source]);
+    hasChild.add(edge.source);
+  }
+
+  const keep = new Set<string>();
+  const walk = (id: string) => {
+    if (keep.has(id)) return;
+    keep.add(id);
+    // Stop here: the calculation holds its own materialised result.
+    if (byId.get(id)?.data.type === "calculation") return;
+    for (const parent of parents.get(id) || []) walk(parent);
+  };
+  for (const node of nodes) if (!hasChild.has(node.id)) walk(node.id);
+
+  // The edges go with them. A topological sort counts incoming edges, so an
+  // edge left pointing at a dropped node would leave its target waiting on a
+  // predecessor that is never coming and silently drop it from the output too.
+  return {
+    nodes: nodes.filter((node) => keep.has(node.id)),
+    edges: edges.filter((edge) => keep.has(edge.source) && keep.has(edge.target)),
+  };
+};
 
 // ─── main builder ─────────────────────────────────────────────────────
 
@@ -234,6 +280,9 @@ export function buildWorkflowSQL(
   // Then parameters, for the same reason and in this order: an operation's own
   // steps can name a parameter, and they do not exist until it is expanded.
   nodes = resolveNodeParameters(nodes, options?.parameters);
+  // After expansion, so a calculation placed inside a saved operation cuts the
+  // chain in exactly the same way one placed on the canvas does.
+  ({ nodes, edges } = compiledGraph(nodes, edges));
 
   const sorted = topoSort(nodes, edges);
 
@@ -262,15 +311,17 @@ export function buildWorkflowSQL(
     );
     const parentAliases = parentEdges.map((edge) => cteAlias(edge.source));
 
-    if (type === "input" || type === "geometry") {
+    if (type === "input" || type === "geometry" || type === "calculation") {
       const tableName = config?.tableName;
       if (!tableName) {
-        // A drawn layer exists only in the node until it is committed, so the
-        // message points at the step that would make it queryable.
+        // Each of these is a node that holds a table once some step has been
+        // taken, so the message names the step rather than the shortfall.
         throw new Error(
           type === "geometry"
             ? `Drawn layer "${node.id}" has not been created yet. Use "Create dataset" on the node to make it queryable.`
-            : `Input node "${node.id}" has no table loaded.`,
+            : type === "calculation"
+              ? `Calculation "${node.data.label}" has not been run yet. Run it on the node to make its result available downstream.`
+              : `Input node "${node.id}" has no table loaded.`,
         );
       }
       ctes.push(`${alias} AS (\n  SELECT * FROM ${qi(tableName)}\n)`);

@@ -219,7 +219,7 @@ class NearestInstance implements OperationInstance {
     // Largest demand first: a convention, not an optimum, and stated in the
     // manifest so the result can be explained rather than guessed at.
     const ordered = [...this.demand].filter((unit) => unit.point).sort((a, b) => b.weight - a.weight);
-    let withoutGeometry = this.demand.length - ordered.length;
+    const withoutGeometry = this.demand.length - ordered.length;
 
     for (const unit of ordered) {
       const reachable = sites

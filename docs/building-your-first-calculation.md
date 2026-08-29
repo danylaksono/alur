@@ -367,6 +367,41 @@ missing file. This has cost more than one afternoon.
 
 ---
 
+## Step 8 — Your calculation as a step in a workflow
+
+You get this one free. The same manifest that generates the dialog also places a
+node on the workflow canvas — the button beside your calculation in the toolbox
+adds it — and nothing in your code changes between the two.
+
+What differs is where the data comes from. In the dialog the analyst picks
+datasets; on the canvas your inputs are **handles**, one per declared input, and
+whatever is wired into a handle is what you get. So a manifest with two inputs
+gets two handles, and an input with `multiple: true` accepts several edges into
+the same one. That is the whole of the wiring.
+
+Two consequences worth designing for:
+
+**Your input may be a mid-pipeline result, not a file.** It has been filtered,
+joined and scored on the way to you, and it very likely carries no unique column
+at all. ALUR fills a required `identifier` role with a row number when the
+analyst binds nothing, so your calculation runs — but if you can do something
+better with a real identifier, say so in the role's `description`, because that
+text is what the analyst reads when deciding whether to bind one.
+
+**Your result becomes a table the graph reads from.** Only one declared output
+can be passed downstream; the analyst chooses which, and the rest still register
+as datasets exactly as they do from the dialog. If one of your outputs is
+obviously the one people will build on, declare it first.
+
+You do not need to do anything for staleness. ALUR fingerprints the compiled SQL
+above your node, the bindings, the settings, your `version`, and the scenario —
+and tells the analyst when the held result no longer follows. It never re-runs
+you on its own. Bumping your `version` is enough to mark every held result in
+every saved project as needing a re-run, which is the honest thing to do when
+your answer changes.
+
+---
+
 ## When it does not work
 
 | What you see | What it usually is |
@@ -391,7 +426,11 @@ missing file. This has cost more than one afternoon.
   disposes per run, which throws away the lifecycle's advantage. Design for the
   lifecycle anyway: it is the contract, and keeping instances warm is the next
   improvement rather than a change to your calculation.
-- **Binding is not remembered** between sessions.
+- **A saved project remembers the configuration, not your code.** Bindings,
+  settings and your `version` travel in the project file; your plugin does not.
+  Opening a project whose plugin is not installed is a normal thing that says so
+  clearly, rather than an error — which is why the id you choose is a lasting
+  public name, and why changing what an id means is worse than adding a new one.
 - **You are in a worker.** No DOM, no map, no store — enforced by the runtime
   rather than by your good intentions. The manifest must survive
   `structuredClone`: no functions, no class instances.
