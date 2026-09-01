@@ -127,7 +127,7 @@ export const BottomDrawer = () => {
                 type="button"
                 onClick={() => openDrawerTab(id)}
                 className={cn(
-                  'flex shrink-0 items-center rounded-md font-semibold transition-colors',
+                  'pressable flex shrink-0 items-center rounded-md font-semibold transition-colors',
                   stacked ? 'h-7 w-7 justify-center' : 'gap-1.5 px-3 py-1.5 text-xs',
                   isOpen && activeDrawerTab === id
                     ? 'bg-slate-900 text-white'
@@ -147,7 +147,7 @@ export const BottomDrawer = () => {
               <button
                 type="button"
                 onClick={() => setDrawerMode(isMaximized ? 'open' : 'maximized')}
-                className="rounded-md p-1.5 text-slate-500 transition-colors hover:bg-slate-200/60 hover:text-slate-700"
+                className="pressable rounded-md p-1.5 text-slate-500 transition-colors hover:bg-slate-200/60 hover:text-slate-700"
                 title={isMaximized ? 'Restore panel' : 'Maximize panel'}
               >
                 {isMaximized ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
@@ -156,7 +156,7 @@ export const BottomDrawer = () => {
             <button
               type="button"
               onClick={() => setDrawerMode(isOpen ? 'collapsed' : 'open')}
-              className="rounded-md p-1.5 text-slate-500 transition-colors hover:bg-slate-200/60 hover:text-slate-700"
+              className="pressable rounded-md p-1.5 text-slate-500 transition-colors hover:bg-slate-200/60 hover:text-slate-700"
               title={isOpen ? 'Collapse panel' : 'Open panel'}
             >
               <CollapseIcon className={cn('h-3.5 w-3.5', !isOpen && 'rotate-180')} />

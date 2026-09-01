@@ -66,7 +66,7 @@ export const LayoutMenu = ({ expanded }: { expanded: boolean }) => {
         type="button"
         onClick={() => setOpen(!isOpen)}
         className={cn(
-          'flex h-9 items-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700',
+          'pressable flex h-9 items-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700',
           expanded ? 'w-full gap-2.5 px-2.5' : 'w-9 justify-center',
         )}
         title={`Layout: ${currentLabel}`}
@@ -99,7 +99,7 @@ export const LayoutMenu = ({ expanded }: { expanded: boolean }) => {
                   setOpen(false);
                 }}
                 className={cn(
-                  'flex w-full items-center gap-2.5 rounded-md p-1.5 text-left transition-colors',
+                  'pressable flex w-full items-center gap-2.5 rounded-md p-1.5 text-left transition-colors',
                   active ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-50',
                 )}
               >
@@ -127,7 +127,7 @@ export const LayoutMenu = ({ expanded }: { expanded: boolean }) => {
                 aria-checked={dockSide === id}
                 onClick={() => setDockSide(id)}
                 className={cn(
-                  'flex h-8 flex-1 items-center justify-center rounded-md transition-colors',
+                  'pressable flex h-8 flex-1 items-center justify-center rounded-md transition-colors',
                   dockSide === id ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-100',
                 )}
                 title={label}

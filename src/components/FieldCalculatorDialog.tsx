@@ -110,7 +110,7 @@ export const FieldCalculatorDialog = ({
               </p>
             </div>
           </div>
-          <button type="button" onClick={onClose} aria-label="Close field calculator" className="rounded-md border border-slate-200 p-1.5 text-slate-500 hover:bg-slate-50">
+          <button type="button" onClick={onClose} aria-label="Close field calculator" className="pressable rounded-md border border-slate-200 p-1.5 text-slate-500 hover:bg-slate-50">
             <X className="h-4 w-4" />
           </button>
         </header>
@@ -127,11 +127,11 @@ export const FieldCalculatorDialog = ({
                     type="button"
                     aria-label={`Edit computed field ${field.name}`}
                     onClick={() => { setEditingId(field.id); setDraft({ name: field.name, expression: field.expression }); }}
-                    className="rounded border border-slate-200 bg-white p-1.5 text-slate-500 hover:text-slate-800"
+                    className="pressable rounded border border-slate-200 bg-white p-1.5 text-slate-500 hover:text-slate-800"
                   >
                     <Pencil className="h-3 w-3" />
                   </button>
-                  <button type="button" aria-label={`Delete computed field ${field.name}`} onClick={() => onDelete(field.id)} className="rounded border border-slate-200 bg-white p-1.5 text-slate-500 hover:text-rose-600">
+                  <button type="button" aria-label={`Delete computed field ${field.name}`} onClick={() => onDelete(field.id)} className="pressable rounded border border-slate-200 bg-white p-1.5 text-slate-500 hover:text-rose-600">
                     <Trash2 className="h-3 w-3" />
                   </button>
                 </div>
@@ -157,7 +157,7 @@ export const FieldCalculatorDialog = ({
               </div>
               <div className="flex max-h-24 flex-wrap gap-1 overflow-auto rounded-md border border-slate-200 bg-slate-50 p-1.5">
                 {filteredColumns.map((column) => (
-                  <button key={column} type="button" onClick={() => insertField(column)} className="rounded border border-slate-200 bg-white px-1.5 py-0.5 font-mono text-[10px] text-slate-600 hover:border-slate-400">
+                  <button key={column} type="button" onClick={() => insertField(column)} className="pressable rounded border border-slate-200 bg-white px-1.5 py-0.5 font-mono text-[10px] text-slate-600 hover:border-slate-400">
                     {column}
                   </button>
                 ))}
@@ -189,10 +189,10 @@ export const FieldCalculatorDialog = ({
             )}
 
             <div className="flex gap-2">
-              <button type="button" onClick={save} disabled={!validation.ok} className="inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">
+              <button type="button" onClick={save} disabled={!validation.ok} className="pressable inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">
                 <Plus className="h-3.5 w-3.5" /> {editingId ? 'Save changes' : 'Add field'}
               </button>
-              {(editingId || draft.name || draft.expression) && <button type="button" onClick={reset} className="rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600">Cancel</button>}
+              {(editingId || draft.name || draft.expression) && <button type="button" onClick={reset} className="pressable rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600">Cancel</button>}
             </div>
 
             <details className="text-xs text-slate-500">

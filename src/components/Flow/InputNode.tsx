@@ -76,7 +76,7 @@ export const InputNode = ({ data, id, selected }: any) => {
         <button
           type="button"
           onClick={() => setConfiguring(true)}
-          className="group flex w-full flex-col items-center justify-center rounded-lg border-2 border-dashed border-muted py-3 transition-all hover:border-blue-200 hover:bg-blue-50"
+          className="pressable group flex w-full flex-col items-center justify-center rounded-lg border-2 border-dashed border-muted py-3 transition-colors hover:border-blue-200 hover:bg-blue-50"
         >
           <Cloud className="mb-1 h-4 w-4 text-muted-foreground group-hover:text-blue-500" />
           <span className="text-[11px] font-medium text-muted-foreground group-hover:text-blue-600">
@@ -89,7 +89,7 @@ export const InputNode = ({ data, id, selected }: any) => {
           )}
         </button>
       ) : (
-        <label className="cursor-pointer group flex flex-col items-center justify-center py-3 border-2 border-dashed border-muted rounded-lg hover:bg-blue-50 hover:border-blue-200 transition-all">
+        <label className="cursor-pointer group flex flex-col items-center justify-center py-3 border-2 border-dashed border-muted rounded-lg hover:bg-blue-50 hover:border-blue-200 transition-colors">
           <Upload className="w-4 h-4 text-muted-foreground group-hover:text-blue-500 mb-1" />
           <span className="text-[11px] font-medium text-muted-foreground group-hover:text-blue-600">
             {config.loadStatus === 'error' ? 'Try another data file' : 'Upload data file'}

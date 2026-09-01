@@ -55,7 +55,7 @@ export const LayerManager = ({ onEditStyle }: { onEditStyle?: (layerId: string) 
               type="button"
               onClick={() => downloadMapStyleExport(mapLayers)}
               disabled={styledLayerCount === 0}
-              className="rounded-md p-1 text-slate-500 transition-colors hover:bg-slate-200/60 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+              className="pressable rounded-md p-1 text-slate-500 transition-colors hover:bg-slate-200/60 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
               title="Export map style JSON"
             >
               <Download className="h-3.5 w-3.5" />
@@ -122,7 +122,7 @@ export const LayerManager = ({ onEditStyle }: { onEditStyle?: (layerId: string) 
                     <button
                       type="button"
                       onClick={() => selectLayer(isSelected ? null : layer.id)}
-                      className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                      className="pressable flex min-w-0 flex-1 items-center gap-2 text-left"
                       title="Select layer"
                     >
                       <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />
@@ -150,7 +150,7 @@ export const LayerManager = ({ onEditStyle }: { onEditStyle?: (layerId: string) 
                         type="button"
                         onClick={() => onEditStyle(layer.id)}
                         className={cn(
-                          'rounded p-1 transition-colors',
+                          'pressable rounded p-1 transition-colors',
                           layer.visualisation
                             ? 'text-teal-700 hover:bg-teal-50'
                             : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
@@ -163,7 +163,7 @@ export const LayerManager = ({ onEditStyle }: { onEditStyle?: (layerId: string) 
                     <button
                       type="button"
                       onClick={() => setDatasetOverviewLayerId(layer.id)}
-                      className="rounded p-1 text-slate-500 transition-colors hover:bg-sky-50 hover:text-sky-700"
+                      className="pressable rounded p-1 text-slate-500 transition-colors hover:bg-sky-50 hover:text-sky-700"
                       title="Open dataset overview"
                       aria-label={`Overview of ${layer.name}`}
                     >
@@ -172,7 +172,7 @@ export const LayerManager = ({ onEditStyle }: { onEditStyle?: (layerId: string) 
                     <button
                       type="button"
                       onClick={() => toggleMapLayerVisibility(layer.id)}
-                      className="rounded p-1 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                      className="pressable rounded p-1 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
                       title={layer.visible ? 'Hide layer' : 'Show layer'}
                     >
                       {layer.visible ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
@@ -180,7 +180,7 @@ export const LayerManager = ({ onEditStyle }: { onEditStyle?: (layerId: string) 
                     <button
                       type="button"
                       onClick={() => focusLayer(layer.id)}
-                      className="rounded p-1 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                      className="pressable rounded p-1 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
                       title="Zoom to layer"
                     >
                       <Focus className="h-3.5 w-3.5" />
@@ -188,7 +188,7 @@ export const LayerManager = ({ onEditStyle }: { onEditStyle?: (layerId: string) 
                     <button
                       type="button"
                       onClick={() => removeMapLayer(layer.id)}
-                      className="rounded p-1 text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
+                      className="pressable rounded p-1 text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
                       title="Remove layer"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
@@ -227,7 +227,7 @@ export const LayerManager = ({ onEditStyle }: { onEditStyle?: (layerId: string) 
                           <button
                             type="button"
                             onClick={() => clearFeatureSelection(layer.id)}
-                            className="underline decoration-orange-300 underline-offset-2 hover:text-orange-900"
+                            className="pressable underline decoration-orange-300 underline-offset-2 hover:text-orange-900"
                           >
                             clear
                           </button>
@@ -239,7 +239,7 @@ export const LayerManager = ({ onEditStyle }: { onEditStyle?: (layerId: string) 
                           <button
                             type="button"
                             onClick={() => clearLayerFilters(layer.id)}
-                            className="underline decoration-sky-300 underline-offset-2 hover:text-sky-900"
+                            className="pressable underline decoration-sky-300 underline-offset-2 hover:text-sky-900"
                           >
                             clear
                           </button>

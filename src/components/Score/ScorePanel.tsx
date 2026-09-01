@@ -172,7 +172,7 @@ export const ScorePanel = () => {
           <button
             type="button"
             onClick={() => setSpec(equalWeightedScoreModel(numericFields.slice(0, 3)))}
-            className="mt-3 w-full rounded-lg bg-purple-600 px-3 py-2 text-[10px] font-bold text-white hover:bg-purple-700"
+            className="pressable mt-3 w-full rounded-lg bg-purple-600 px-3 py-2 text-[10px] font-bold text-white hover:bg-purple-700"
           >
             Start with {Math.min(3, numericFields.length)} equally weighted criteria
           </button>
@@ -195,7 +195,7 @@ export const ScorePanel = () => {
                   <button
                     type="button"
                     onClick={() => setSpec((current) => ({ ...current, criteria: current.criteria.filter((_, position) => position !== index) }))}
-                    className="rounded p-1 text-slate-400 hover:bg-slate-50 hover:text-rose-600"
+                    className="pressable rounded p-1 text-slate-400 hover:bg-slate-50 hover:text-rose-600"
                     aria-label={`Remove ${criterion.field}`}
                   >
                     <X className="h-3 w-3" />
@@ -248,7 +248,7 @@ export const ScorePanel = () => {
                 type="button"
                 onClick={addCriterion}
                 disabled={spec.criteria.length >= numericFields.length}
-                className="flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1.5 text-[10px] font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+                className="pressable flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1.5 text-[10px] font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
               >
                 <Plus className="h-3 w-3" /> Criterion
               </button>
@@ -304,7 +304,7 @@ export const ScorePanel = () => {
                     <button
                       type="button"
                       onClick={() => setExpandedRow(expanded ? null : rowKey)}
-                      className="w-full rounded-md px-1.5 py-1 text-left hover:bg-slate-50"
+                      className="pressable w-full rounded-md px-1.5 py-1 text-left hover:bg-slate-50"
                       aria-expanded={expanded}
                     >
                       <div className="flex items-baseline gap-2">
@@ -391,7 +391,7 @@ export const ScorePanel = () => {
           type="button"
           onClick={sendToWorkflow}
           disabled={Boolean(errors.length) || !dataset}
-          className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-slate-900 py-2 text-[10px] font-bold text-white hover:bg-black disabled:cursor-not-allowed disabled:opacity-40"
+          className="pressable flex w-full items-center justify-center gap-1.5 rounded-lg bg-slate-900 py-2 text-[10px] font-bold text-white hover:bg-black disabled:cursor-not-allowed disabled:opacity-40"
         >
           <Workflow className="h-3.5 w-3.5" /> Add this score to the workflow
         </button>

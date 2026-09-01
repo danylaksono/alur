@@ -104,7 +104,7 @@ export const TemporalSlider = ({
             type="button"
             onClick={() => setCurrentStart(range.minDate)}
             disabled={playing}
-            className="rounded border border-slate-200 p-1 text-slate-400 hover:bg-slate-50 disabled:opacity-30"
+            className="pressable rounded border border-slate-200 p-1 text-slate-400 hover:bg-slate-50 disabled:opacity-30"
           >
             <SkipBack className="h-3 w-3" />
           </button>
@@ -112,7 +112,7 @@ export const TemporalSlider = ({
             type="button"
             onClick={() => setPlaying((p) => !p)}
             className={cn(
-              'rounded border p-1',
+              'pressable rounded border p-1',
               playing
                 ? 'border-purple-300 bg-purple-50 text-purple-600'
                 : 'border-slate-200 text-slate-600 hover:bg-slate-50',
@@ -124,7 +124,7 @@ export const TemporalSlider = ({
             type="button"
             onClick={() => setCurrentStart(addDays(range.maxDate, -windowSize))}
             disabled={playing}
-            className="rounded border border-slate-200 p-1 text-slate-400 hover:bg-slate-50 disabled:opacity-30"
+            className="pressable rounded border border-slate-200 p-1 text-slate-400 hover:bg-slate-50 disabled:opacity-30"
           >
             <SkipForward className="h-3 w-3" />
           </button>

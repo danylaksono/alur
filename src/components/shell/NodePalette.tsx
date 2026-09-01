@@ -7,6 +7,7 @@ import {
   Eye,
   Filter,
   Gauge,
+  GitBranch,
   GitMerge,
   Hexagon,
   Layers,
@@ -27,7 +28,6 @@ import { nextNodePosition } from "../../utils/nodePlacement";
 import { spatialFunctions } from "../../utils/spatialFunctions";
 import { materializeWorkflowOutput } from "../../services/layerMaterialization";
 import { registerWorkflowResult } from "../../services/workflowRun";
-import { VariantPanel } from "../Variants/VariantPanel";
 import { cn } from "../../utils/cn";
 
 const colorStyles: Record<
@@ -283,7 +283,7 @@ const NodeCardButton = ({
       type="button"
       onClick={() => onAdd(item.type, item.config, item.label)}
       className={cn(
-        "group flex cursor-pointer items-center justify-between rounded-lg border p-2 text-left text-xs transition-all",
+        "pressable group flex cursor-pointer items-center justify-between rounded-lg border p-2 text-left text-xs transition-colors",
         cs.hoverBg,
         cs.hoverBorder,
       )}
@@ -323,6 +323,10 @@ export const NodePalette = () => {
   const nodeCount = useStore((s) => s.nodes.length);
   const fragments = useStore((s) => s.fragments);
   const removeFragment = useStore((s) => s.removeFragment);
+  const navigate = useStore((s) => s.navigate);
+  const activeVariantId = useStore((s) => s.visualAnalytics.activeVariantId);
+  const variants = useStore((s) => s.visualAnalytics.variants);
+  const activeVariant = variants.find((variant) => variant.id === activeVariantId);
   const [executing, setExecuting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -453,7 +457,7 @@ export const NodePalette = () => {
               {matchedFragments.map((fragment) => (
                 <div
                   key={fragment.id}
-                  className="group flex items-center justify-between rounded-lg border border-cyan-100 p-2 text-left text-xs transition-all hover:border-cyan-300 hover:bg-cyan-50/60"
+                  className="group flex items-center justify-between rounded-lg border border-cyan-100 p-2 text-left text-xs transition-colors hover:border-cyan-300 hover:bg-cyan-50/60"
                 >
                   <button
                     type="button"
@@ -464,7 +468,7 @@ export const NodePalette = () => {
                         fragment.name,
                       )
                     }
-                    className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                    className="pressable flex min-w-0 flex-1 items-center gap-2 text-left"
                   >
                     <div className="shrink-0 rounded-md bg-cyan-50 p-1.5">
                       <Package className="h-3.5 w-3.5 text-cyan-600" />
@@ -484,7 +488,7 @@ export const NodePalette = () => {
                     onClick={() => removeFragment(fragment.id)}
                     title={`Forget "${fragment.name}"`}
                     aria-label={`Forget ${fragment.name}`}
-                    className="shrink-0 rounded p-1 text-slate-300 opacity-0 transition-opacity hover:text-rose-600 group-hover:opacity-100"
+                    className="pressable shrink-0 rounded p-1 text-slate-300 opacity-0 transition-opacity hover:text-rose-600 group-hover:opacity-100"
                   >
                     <Trash2 className="h-3 w-3" />
                   </button>
@@ -566,7 +570,7 @@ export const NodePalette = () => {
                   <button
                     key={fn.name}
                     type="button"
-                    className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] transition-colors hover:bg-purple-50"
+                    className="pressable flex w-full cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] transition-colors hover:bg-purple-50"
                     title={fn.summary}
                     onClick={() =>
                       handleAddNode("analysis", { operation: fn.name }, fn.name)
@@ -586,26 +590,30 @@ export const NodePalette = () => {
           </div>
         )}
 
-        {!isSearching && (
-          /* Scenarios branch a workflow specification, so they belong with the
-             nodes rather than behind two disclosures in a separate mode. */
-          <details className="rounded-xl border border-slate-200 bg-slate-50/60">
-            <summary className="cursor-pointer px-3 py-2.5 text-[11px] font-semibold text-slate-600">
-              Scenarios{" "}
-              <span className="font-normal text-slate-500">(advanced)</span>
-            </summary>
-            <div className="border-t border-slate-200 px-3 pb-3">
-              <VariantPanel />
-            </div>
-          </details>
-        )}
+
       </div>
 
-      <div className="border-t bg-muted/20 p-3">
+      <div className="flex flex-col gap-2 border-t bg-muted/20 p-3">
+        {/* All that survives of the old Scenarios disclosure: which scenario the
+            canvas is about to run as. Everything else moved to Analyse ›
+            Scenarios, where a workspace-replacing action is not buried. */}
+        {activeVariant && (
+          <button
+            type="button"
+            onClick={() => navigate("scenarios")}
+            className="pressable flex items-center gap-1.5 self-start rounded-full border border-slate-200 bg-white px-2 py-1 text-[10px] text-slate-600 transition-colors duration-hover hover:bg-slate-50"
+            title="Open scenarios"
+          >
+            <GitBranch className="h-3 w-3 text-slate-400" />
+            <span className="max-w-[11rem] truncate font-semibold">
+              {activeVariant.name}
+            </span>
+          </button>
+        )}
         <button
           onClick={handleExecute}
           disabled={!duckdbReady || executing}
-          className="flex w-full items-center justify-center gap-2 rounded-lg bg-slate-900 py-2.5 text-xs font-semibold text-white shadow transition-all hover:bg-black active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+          className="pressable flex w-full items-center justify-center gap-2 rounded-lg bg-slate-900 py-2.5 text-xs font-semibold text-white shadow transition-colors duration-hover hover:bg-black disabled:cursor-not-allowed disabled:opacity-50"
         >
           {executing ? (
             <>

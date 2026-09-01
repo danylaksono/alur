@@ -83,15 +83,15 @@ export function summariseProvenance(activity: ProvenanceActivity, payload: Recor
         ? `Started “${name()}”, asking: ${asText(payload.question, '')}`
         : `Started “${name()}”`;
     case 'session.renamed':
-      return `Renamed the line of enquiry from ${rename()}`;
+      return `Renamed the question from ${rename()}`;
     case 'variant.created':
-      return `Created variant “${name()}”`;
+      return `Created scenario “${name()}”`;
     case 'variant.branched':
       return `Branched “${asText(payload.name, 'untitled')}” from “${asText(payload.parentName, 'untitled')}”`;
     case 'variant.renamed':
-      return `Renamed variant from ${rename()}`;
+      return `Renamed scenario from ${rename()}`;
     case 'variant.deleted':
-      return `Deleted variant “${name()}”`;
+      return `Deleted scenario “${name()}”`;
     case 'project.saved':
       return `Saved project “${name()}”`;
     case 'project.loaded':
@@ -125,7 +125,7 @@ export function summariseProvenance(activity: ProvenanceActivity, payload: Recor
     case 'sweep.ran': {
       const variants = asCount(payload.variantCount);
       const failed = asCount(payload.failed);
-      const scope = variants === null ? 'variants' : plural(variants, 'variant');
+      const scope = variants === null ? 'scenarios' : plural(variants, 'scenario');
       // A partial sweep is the interesting case, so the count that failed is
       // part of the sentence rather than something to look up afterwards.
       return failed ? `Ran the workflow across ${scope}, ${failed} failing` : `Ran the workflow across ${scope}`;

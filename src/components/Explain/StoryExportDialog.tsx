@@ -54,7 +54,7 @@ export const StoryExportDialog = ({ open, onClose }: { open: boolean; onClose: (
               A story is read-only and stands alone — the reader needs no data, no relinking, and no query engine.
             </p>
           </div>
-          <button type="button" onClick={onClose} className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100" aria-label="Close share dialog"><X className="h-4 w-4" /></button>
+          <button type="button" onClick={onClose} className="pressable rounded-md p-1.5 text-slate-400 hover:bg-slate-100" aria-label="Close share dialog"><X className="h-4 w-4" /></button>
         </div>
 
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
@@ -141,7 +141,7 @@ export const StoryExportDialog = ({ open, onClose }: { open: boolean; onClose: (
                         () => addToast({ type: 'warning', message: 'Could not copy the link.' }),
                       );
                     }}
-                    className="flex shrink-0 items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1.5 text-[10px] font-bold text-slate-700 hover:bg-slate-50"
+                    className="pressable flex shrink-0 items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1.5 text-[10px] font-bold text-slate-700 hover:bg-slate-50"
                   >
                     <Link2 className="h-3 w-3" /> Copy
                   </button>
@@ -169,7 +169,7 @@ export const StoryExportDialog = ({ open, onClose }: { open: boolean; onClose: (
               addToast({ type: 'success', message: 'Story exported. Anyone can open it read-only.' });
               onClose();
             }}
-            className="flex shrink-0 items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white hover:bg-black"
+            className="pressable flex shrink-0 items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white hover:bg-black"
           >
             <Download className="h-3.5 w-3.5" /> Export story
           </button>

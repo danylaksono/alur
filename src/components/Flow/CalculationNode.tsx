@@ -270,7 +270,7 @@ export const CalculationNode = ({ data, id, selected }: any) => {
             type="button"
             onClick={() => void run()}
             disabled={running || !manifest}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-md bg-violet-600 px-2 py-1.5 text-[10px] font-bold text-white disabled:bg-slate-300"
+            className="pressable flex flex-1 items-center justify-center gap-1.5 rounded-md bg-violet-600 px-2 py-1.5 text-[10px] font-bold text-white disabled:bg-slate-300"
           >
             {running ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
             {ran ? 'Run again' : 'Run'}
@@ -280,7 +280,7 @@ export const CalculationNode = ({ data, id, selected }: any) => {
             onClick={() => setExpanded((current) => !current)}
             aria-expanded={expanded}
             aria-label="Configure this calculation"
-            className="rounded-md border border-slate-200 px-2 text-slate-500 hover:bg-slate-50"
+            className="pressable rounded-md border border-slate-200 px-2 text-slate-500 hover:bg-slate-50"
           >
             <Settings2 className="h-3 w-3" />
           </button>

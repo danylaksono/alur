@@ -73,14 +73,14 @@ export const RecoveryDialog = () => {
             <h2 id="recovery-title" className="flex items-center gap-2 text-sm font-bold text-slate-800"><History className="h-4 w-4 text-sky-600" /> Recover your workspace?</h2>
             <p className="mt-1 text-xs leading-5 text-slate-500">A recovery snapshot from {new Date(candidate.createdAt).toLocaleString()} is available.</p>
           </div>
-          <button type="button" onClick={() => { void discard(); }} className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100" aria-label="Discard recovery snapshot"><X className="h-4 w-4" /></button>
+          <button type="button" onClick={() => { void discard(); }} className="pressable rounded-md p-1.5 text-slate-400 hover:bg-slate-100" aria-label="Discard recovery snapshot"><X className="h-4 w-4" /></button>
         </div>
         {sources === null ? (
           <div className="space-y-4 p-5">
             <p className="text-xs leading-5 text-slate-600">Restore the workflow, filters, charts, metrics, styles, and workspace layout. Data files come back from this browser's cache where they are still held, and are asked for where they are not.</p>
             <div className="flex justify-end gap-2">
-              <button type="button" disabled={isRestoring} onClick={() => { void discard(); }} className="rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50">Discard</button>
-              <button type="button" disabled={isRestoring} onClick={() => { void restore(); }} className="rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white hover:bg-slate-700 disabled:opacity-50">
+              <button type="button" disabled={isRestoring} onClick={() => { void discard(); }} className="pressable rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50">Discard</button>
+              <button type="button" disabled={isRestoring} onClick={() => { void restore(); }} className="pressable rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white hover:bg-slate-700 disabled:opacity-50">
                 {isRestoring ? 'Restoring…' : 'Restore workspace'}
               </button>
             </div>
@@ -92,12 +92,12 @@ export const RecoveryDialog = () => {
               {sources.map((source) => (
                 <div key={source.nodeId} className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
                   <span className="truncate text-xs font-semibold text-slate-700">{source.name}</span>
-                  <button type="button" onClick={() => choose(source)} className="flex shrink-0 items-center gap-1.5 rounded-md bg-slate-900 px-3 py-1.5 text-[11px] font-bold text-white"><Link2 className="h-3 w-3" /> Choose file</button>
+                  <button type="button" onClick={() => choose(source)} className="pressable flex shrink-0 items-center gap-1.5 rounded-md bg-slate-900 px-3 py-1.5 text-[11px] font-bold text-white"><Link2 className="h-3 w-3" /> Choose file</button>
                 </div>
               ))}
             </div>
             <div className="flex justify-end border-t bg-slate-50 px-4 py-3">
-              <button type="button" onClick={() => setCandidate(null)} className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600">Relink later</button>
+              <button type="button" onClick={() => setCandidate(null)} className="pressable rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600">Relink later</button>
             </div>
           </div>
         )}

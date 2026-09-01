@@ -27,7 +27,7 @@ export const StoryLinkStatus = ({ state, onDismiss }: { state: StoryLinkState; o
           <h2 id="story-link-error" className="flex items-center gap-2 text-sm font-bold text-slate-800">
             <AlertTriangle className="h-4 w-4 text-amber-500" /> This story link could not be opened
           </h2>
-          <button type="button" onClick={onDismiss} className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100" aria-label="Dismiss"><X className="h-4 w-4" /></button>
+          <button type="button" onClick={onDismiss} className="pressable rounded-md p-1.5 text-slate-400 hover:bg-slate-100" aria-label="Dismiss"><X className="h-4 w-4" /></button>
         </div>
         <div className="space-y-3 px-5 py-4">
           <p className="text-xs leading-5 text-slate-700">{state.message}</p>
@@ -38,7 +38,7 @@ export const StoryLinkStatus = ({ state, onDismiss }: { state: StoryLinkState; o
           </p>
         </div>
         <footer className="flex justify-end border-t bg-slate-50 px-5 py-3">
-          <button type="button" onClick={onDismiss} className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white hover:bg-black">
+          <button type="button" onClick={onDismiss} className="pressable rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white hover:bg-black">
             Continue to ALUR
           </button>
         </footer>

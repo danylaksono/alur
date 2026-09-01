@@ -762,7 +762,7 @@ describe('lines of enquiry', () => {
 
     useStore.getState().updateSession('s1', { name: 'Retrofit phase 1' });
     const renamed = useStore.getState().provenanceEvents.find((event) => event.activity === 'session.renamed')!;
-    expect(renamed.summary).toBe('Renamed the line of enquiry from “Retrofit” to “Retrofit phase 1”');
+    expect(renamed.summary).toBe('Renamed the question from “Retrofit” to “Retrofit phase 1”');
   });
 });
 
@@ -824,7 +824,7 @@ describe('provenance account', () => {
 
     useStore.getState().updateVariant('variant-a', { name: 'High ambition' });
     const renamed = useStore.getState().provenanceEvents.find((event) => event.activity === 'variant.renamed')!;
-    expect(renamed.summary).toBe('Renamed variant from “variant-a” to “High ambition”');
+    expect(renamed.summary).toBe('Renamed scenario from “variant-a” to “High ambition”');
   });
 });
 

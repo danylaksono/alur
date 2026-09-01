@@ -2,6 +2,7 @@ import type { OperationProvider, PluginManifest } from '../types/operations';
 import { thinBySpacing } from './bundled/thinBySpacing';
 import { nearestWithCapacity } from './bundled/nearestWithCapacity';
 import { clusterByDistance } from './bundled/clusterByDistance';
+import { phasedAllocation } from './bundled/phasedAllocation';
 
 /**
  * The plugin ALUR ships with, and the standing of what is in it.
@@ -33,12 +34,22 @@ import { clusterByDistance } from './bundled/clusterByDistance';
  * The reference provider under `reference/` is deliberately *not* here. It means
  * nothing, and a meaningless entry in the toolbox would be worse than a short
  * one.
+ *
+ * `phasedAllocation` has a lineage worth stating: its behaviour was specified by
+ * the `interactive-scenario-modeller` adapter, which had already been validated
+ * against real stock data, and the two are checked to agree scenario by scenario.
+ * The code here is nonetheless written against this contract alone. Depending on
+ * that library instead was the obvious alternative and was rejected — it is not
+ * on npm, it exports its whole domain plugin surface from one barrel, and
+ * bundling it would have made ALUR contain the library whose independence is the
+ * thing the plugin system exists to demonstrate.
  */
 
 export const BUNDLED_PROVIDERS: OperationProvider[] = [
   thinBySpacing,
   nearestWithCapacity,
   clusterByDistance,
+  phasedAllocation,
 ];
 
 export const BUNDLED_PLUGIN: PluginManifest = {

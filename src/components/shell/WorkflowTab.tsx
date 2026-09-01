@@ -141,7 +141,7 @@ export const WorkflowTab = () => {
                 <button
                   type="button"
                   onClick={() => setSavingFragment(selectedIds)}
-                  className="flex items-center gap-1.5 rounded-lg border border-cyan-200 bg-white px-3 py-1.5 text-[11px] font-bold text-cyan-700 shadow-md transition-colors hover:bg-cyan-50"
+                  className="pressable flex items-center gap-1.5 rounded-lg border border-cyan-200 bg-white px-3 py-1.5 text-[11px] font-bold text-cyan-700 shadow-md transition-colors hover:bg-cyan-50"
                 >
                   <Package className="h-3.5 w-3.5" />
                   Save {selectedIds.length} steps as an operation

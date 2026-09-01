@@ -27,6 +27,7 @@ import { StoryDiffView } from '../Explain/StoryDiffView';
 import { StoryLinkStatus } from '../Explain/StoryLinkStatus';
 import { useStoryLink } from '../../hooks/useStoryLink';
 import { AnalysisContextBar } from './AnalysisContextBar';
+import { ScenarioBar } from './ScenarioBar';
 import { EvidenceTray } from './EvidenceTray';
 
 /** Where the docked surface sits relative to the map. */
@@ -85,6 +86,7 @@ export const AppShell = () => {
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-background" aria-busy={isGlobalLoading}>
       {!isPresenting && <Header />}
+      {!isExplain && <ScenarioBar />}
       {!isExplain && <AnalysisContextBar />}
 
       <div className="relative flex min-h-0 flex-1">

@@ -37,7 +37,7 @@ export const VariantLineageCard = ({ snapshot, presenting = false }: { snapshot?
       <div>
         {heading}
         <p className="mt-3 text-xs leading-5 text-slate-400">
-          No scenarios yet. Create one from the Cohorts panel, then branch it — this card will show what came from what.
+          No scenarios yet. Open Analyse › Scenarios and branch one — this card will show what came from what.
         </p>
       </div>
     );

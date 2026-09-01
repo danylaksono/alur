@@ -85,7 +85,7 @@ export const SelectionSummary = ({
         <h3 className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500"><Activity className="h-3.5 w-3.5" /> Summary</h3>
         <div className="flex items-center gap-1">
           {isLoading && <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-400" />}
-          {metadata && <button type="button" onClick={() => setConfiguring((value) => !value)} aria-expanded={configuring} className="rounded p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700" title="Choose summary fields"><Settings2 className="h-3.5 w-3.5" /></button>}
+          {metadata && <button type="button" onClick={() => setConfiguring((value) => !value)} aria-expanded={configuring} className="pressable rounded p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700" title="Choose summary fields"><Settings2 className="h-3.5 w-3.5" /></button>}
         </div>
         {configuring && metadata && (
           <div className="absolute right-2 top-9 z-20 w-64 rounded-lg border border-slate-200 bg-white p-2 shadow-xl">
@@ -106,7 +106,7 @@ export const SelectionSummary = ({
 
           {summary.numericMetrics.map((metric) => (
             <div key={metric.field} className="rounded-md border border-slate-200 bg-slate-50 p-2">
-              <div className="mb-1.5 flex items-center justify-between gap-2"><div className="truncate text-[10px] font-semibold uppercase tracking-wide text-slate-500">{metric.field} · mean</div><button type="button" onClick={() => addKpi({ id: `kpi-${Date.now()}`, datasetId: layer.id, title: `${metric.field} mean`, field: metric.field, aggregation: 'avg', comparison: 'total', format: 'compact' })} className="rounded p-1 text-slate-400 hover:bg-sky-100 hover:text-sky-700" title={`Pin mean ${metric.field}`}><Gauge className="h-3 w-3" /></button></div>
+              <div className="mb-1.5 flex items-center justify-between gap-2"><div className="truncate text-[10px] font-semibold uppercase tracking-wide text-slate-500">{metric.field} · mean</div><button type="button" onClick={() => addKpi({ id: `kpi-${Date.now()}`, datasetId: layer.id, title: `${metric.field} mean`, field: metric.field, aggregation: 'avg', comparison: 'total', format: 'compact' })} className="pressable rounded p-1 text-slate-400 hover:bg-sky-100 hover:text-sky-700" title={`Pin mean ${metric.field}`}><Gauge className="h-3 w-3" /></button></div>
               <div className="grid grid-cols-3 gap-2 tabular-nums"><span><span className="block text-[9px] uppercase text-slate-400">Selected</span><b>{formatNumber(metric.selected.mean)}</b></span><span><span className="block text-[9px] uppercase text-slate-400">Active</span><b>{formatNumber(metric.active.mean)}</b></span><span><span className="block text-[9px] uppercase text-slate-400">Total</span><b>{formatNumber(metric.total.mean)}</b></span></div>
               <div className="mt-1 text-[9px] text-slate-400">Selected range {formatNumber(metric.selected.min)}–{formatNumber(metric.selected.max)}</div>
             </div>

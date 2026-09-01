@@ -43,7 +43,7 @@ describe('projectService', () => {
     const restored = parseProjectManifest(serialiseProjectManifest(createProjectManifest(useStore.getState())));
 
     expect(restored.provenanceEvents).toHaveLength(1);
-    expect(restored.provenanceEvents![0].summary).toBe('Created variant “Baseline”');
+    expect(restored.provenanceEvents![0].summary).toBe('Created scenario “Baseline”');
   });
 
   it('loads a project written before the account existed with an empty one', () => {

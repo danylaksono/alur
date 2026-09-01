@@ -183,13 +183,13 @@ export const StoryViewer = ({ story }: { story: AlurStory }) => {
           <button
             type="button"
             onClick={() => compareInputRef.current?.click()}
-            className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-50"
+            className="pressable flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-50"
             title="Compare this story with another one"
           >
             <GitCompareArrows className="h-3.5 w-3.5" /> Compare with…
           </button>
           <input ref={compareInputRef} type="file" accept=".json,.alur-story.json,application/json" className="hidden" onChange={handleCompareImport} />
-          <button type="button" onClick={closeStory} className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-50">
+          <button type="button" onClick={closeStory} className="pressable flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-50">
             <X className="h-3.5 w-3.5" /> Close story
           </button>
         </div>

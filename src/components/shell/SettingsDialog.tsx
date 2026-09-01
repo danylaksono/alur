@@ -80,7 +80,7 @@ export const SettingsDialog = () => {
           <button
             type="button"
             onClick={() => setSettingsOpen(false)}
-            className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+            className="pressable rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
             title="Close"
           >
             <X className="h-4 w-4" />
@@ -124,7 +124,7 @@ export const SettingsDialog = () => {
                 <button
                   type="button"
                   onClick={() => setShowKey((v) => !v)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-slate-400 hover:text-slate-600"
+                  className="pressable absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-slate-400 hover:text-slate-600"
                   title={showKey ? 'Hide key' : 'Show key'}
                 >
                   {showKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
@@ -168,7 +168,7 @@ export const SettingsDialog = () => {
                 type="button"
                 disabled={!cacheUsage?.count || isClearingCache}
                 onClick={handleClearCache}
-                className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                className="pressable rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isClearingCache ? 'Clearing…' : 'Clear'}
               </button>
@@ -181,7 +181,7 @@ export const SettingsDialog = () => {
             type="button"
             onClick={handleTest}
             disabled={!apiKey.trim() || testState === 'testing'}
-            className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+            className="pressable flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {testState === 'testing' && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             {testState === 'ok' && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />}
@@ -192,14 +192,14 @@ export const SettingsDialog = () => {
             <button
               type="button"
               onClick={() => setSettingsOpen(false)}
-              className="rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-500 transition-colors hover:bg-slate-100"
+              className="pressable rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-500 transition-colors hover:bg-slate-100"
             >
               Cancel
             </button>
             <button
               type="button"
               onClick={handleSave}
-              className="rounded-lg bg-slate-900 px-4 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-slate-700"
+              className="pressable rounded-lg bg-slate-900 px-4 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-slate-700"
             >
               Save
             </button>

@@ -59,7 +59,7 @@ export const LegendControl = ({
         type="button"
         onClick={() => setPanelCollapsed(!panelCollapsed)}
         className={cn(
-          "flex w-full items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500",
+          "pressable flex w-full items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500",
           !panelCollapsed && "mb-2",
         )}
         aria-expanded={!panelCollapsed}
@@ -119,7 +119,7 @@ export const LegendControl = ({
                       }))
                     }
                     aria-expanded={!isCollapsed}
-                    className="flex min-w-0 flex-1 items-center gap-1.5 rounded text-left font-semibold text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+                    className="pressable flex min-w-0 flex-1 items-center gap-1.5 rounded text-left font-semibold text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
                   >
                     {isCollapsed ? (
                       <ChevronRight className="h-3 w-3 shrink-0" />
@@ -135,7 +135,7 @@ export const LegendControl = ({
                       <button
                         type="button"
                         onClick={() => clearLayerFilters(layerId)}
-                        className="rounded px-1 py-0.5 text-[9px] font-semibold text-orange-600 hover:bg-orange-50"
+                        className="pressable rounded px-1 py-0.5 text-[9px] font-semibold text-orange-600 hover:bg-orange-50"
                       >
                         clear
                       </button>
@@ -259,7 +259,7 @@ export const LegendControl = ({
                               }
                               title={`Filter ${legend.title}: ${item.label}`}
                               className={cn(
-                                "flex w-full min-w-0 items-center gap-2 rounded px-1 py-1 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400",
+                                "pressable flex w-full min-w-0 items-center gap-2 rounded px-1 py-1 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400",
                                 isActive
                                   ? "bg-orange-50 ring-1 ring-orange-200"
                                   : "hover:bg-slate-100",
@@ -290,7 +290,7 @@ export const LegendControl = ({
                                 [layerId]: !value[layerId],
                               }))
                             }
-                            className="rounded px-1 py-0.5 text-[10px] font-semibold text-sky-700 hover:bg-sky-50"
+                            className="pressable rounded px-1 py-0.5 text-[10px] font-semibold text-sky-700 hover:bg-sky-50"
                           >
                             {expandedItems[layerId]
                               ? "Show less"

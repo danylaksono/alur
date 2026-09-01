@@ -215,7 +215,7 @@ export const ToolboxPanel = () => {
               <button
                 type="button"
                 onClick={() => toggle(pluginKey)}
-                className="flex w-full items-center gap-1 rounded-md px-1 py-1 text-left hover:bg-slate-50"
+                className="pressable flex w-full items-center gap-1 rounded-md px-1 py-1 text-left hover:bg-slate-50"
               >
                 {pluginOpen ? <ChevronDown className="h-3 w-3 shrink-0 text-slate-400" /> : <ChevronRight className="h-3 w-3 shrink-0 text-slate-400" />}
                 <Package className="h-3 w-3 shrink-0 text-slate-400" />
@@ -234,7 +234,7 @@ export const ToolboxPanel = () => {
                         <button
                           type="button"
                           onClick={() => toggle(groupKey)}
-                          className="flex w-full items-center gap-1 rounded-md px-1 py-0.5 text-left hover:bg-slate-50"
+                          className="pressable flex w-full items-center gap-1 rounded-md px-1 py-0.5 text-left hover:bg-slate-50"
                         >
                           {groupOpen ? <ChevronDown className="h-2.5 w-2.5 shrink-0 text-slate-300" /> : <ChevronRight className="h-2.5 w-2.5 shrink-0 text-slate-300" />}
                           <span className="min-w-0 flex-1 truncate text-[9px] font-bold uppercase tracking-wider text-slate-400">{group}</span>
@@ -246,7 +246,7 @@ export const ToolboxPanel = () => {
                             type="button"
                             onClick={() => setOpen(entry)}
                             title={entry.manifest.description}
-                            className="flex min-w-0 flex-1 items-center gap-1.5 py-1 pl-4 pr-1 text-left"
+                            className="pressable flex min-w-0 flex-1 items-center gap-1.5 py-1 pl-4 pr-1 text-left"
                           >
                             <Play className="h-2.5 w-2.5 shrink-0 text-slate-300 group-hover:text-blue-500" />
                             <span className="min-w-0 flex-1 truncate text-[10px] text-slate-700 group-hover:text-blue-700">{entry.manifest.label}</span>
@@ -256,7 +256,7 @@ export const ToolboxPanel = () => {
                             onClick={() => place(entry)}
                             title="Add to the workflow as a step"
                             aria-label={`Add ${entry.manifest.label} to the workflow`}
-                            className="mr-1 shrink-0 rounded p-1 text-slate-300 opacity-0 hover:bg-white hover:text-blue-600 focus:opacity-100 group-hover:opacity-100"
+                            className="pressable mr-1 shrink-0 rounded p-1 text-slate-300 opacity-0 hover:bg-white hover:text-blue-600 focus:opacity-100 group-hover:opacity-100"
                           >
                             <Workflow className="h-2.5 w-2.5" />
                           </button>
@@ -296,7 +296,7 @@ export const ToolboxPanel = () => {
             type="button"
             onClick={() => void load()}
             disabled={loading || !url.trim()}
-            className="flex items-center gap-1 rounded-md bg-slate-800 px-2 py-1 text-[10px] font-bold text-white hover:bg-slate-700 disabled:opacity-40"
+            className="pressable flex items-center gap-1 rounded-md bg-slate-800 px-2 py-1 text-[10px] font-bold text-white hover:bg-slate-700 disabled:opacity-40"
           >
             {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />} Add
           </button>

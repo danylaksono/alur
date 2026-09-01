@@ -164,7 +164,7 @@ export const LocationSearchControl = ({
             onClick={clear}
             aria-label="Clear location search"
             title="Clear location search and marker"
-            className="rounded p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+            className="pressable rounded p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
           >
             <X className="h-3.5 w-3.5" />
           </button>
@@ -174,7 +174,7 @@ export const LocationSearchControl = ({
           disabled={isLoading}
           aria-label="Search"
           title="Search"
-          className="mr-1.5 rounded-md bg-slate-900 p-2 text-white transition-colors hover:bg-slate-700 disabled:cursor-wait disabled:bg-slate-400"
+          className="pressable mr-1.5 rounded-md bg-slate-900 p-2 text-white transition-colors hover:bg-slate-700 disabled:cursor-wait disabled:bg-slate-400"
         >
           {isLoading
             ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
@@ -204,7 +204,7 @@ export const LocationSearchControl = ({
                 onMouseEnter={() => setActiveIndex(index)}
                 onClick={() => chooseResult(result)}
                 className={cn(
-                  'flex w-full items-start gap-2 rounded-md px-2.5 py-2 text-left transition-colors',
+                  'pressable flex w-full items-start gap-2 rounded-md px-2.5 py-2 text-left transition-colors',
                   activeIndex === index ? 'bg-teal-50' : 'hover:bg-slate-50',
                 )}
               >

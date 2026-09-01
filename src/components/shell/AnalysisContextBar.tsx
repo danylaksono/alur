@@ -75,7 +75,7 @@ export const AnalysisContextBar = () => {
             clearFeatureSelection(datasetId!);
           }}
           className={cn(
-            'flex items-center gap-1 whitespace-nowrap rounded-md border border-slate-200 px-2 py-1 font-bold text-slate-500 hover:bg-slate-50',
+            'pressable flex items-center gap-1 whitespace-nowrap rounded-md border border-slate-200 px-2 py-1 font-bold text-slate-500 hover:bg-slate-50',
             !dataset?.sourceUpdatedAt && 'ml-auto',
           )}
         >

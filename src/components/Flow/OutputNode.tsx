@@ -147,14 +147,14 @@ export const OutputNode = ({ data, id, selected }: any) => {
         {isExportMode ? (
           <button
             onClick={handleExport}
-            className="flex flex-1 items-center justify-center gap-1.5 bg-emerald-50 text-emerald-700 py-1.5 rounded-lg text-[11px] font-bold hover:bg-emerald-100 transition-colors"
+            className="pressable flex flex-1 items-center justify-center gap-1.5 bg-emerald-50 text-emerald-700 py-1.5 rounded-lg text-[11px] font-bold hover:bg-emerald-100 transition-colors"
           >
             <Download className="w-3 h-3" /> EXPORT
           </button>
         ) : (
           <button
             onClick={handlePreview}
-            className="flex-1 bg-emerald-50 text-emerald-700 py-1.5 rounded-lg text-[11px] font-bold hover:bg-emerald-100 transition-colors"
+            className="pressable flex-1 bg-emerald-50 text-emerald-700 py-1.5 rounded-lg text-[11px] font-bold hover:bg-emerald-100 transition-colors"
           >
             PREVIEW
           </button>

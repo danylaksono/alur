@@ -24,6 +24,20 @@ export default {
         sans: ['Figtree', 'Inter', 'system-ui', 'sans-serif'],
         mono: ['JetBrains Mono', 'monospace'],
       },
+      // Mirrors the motion tokens in index.css so components can reach them as
+      // utilities. Defined here rather than as arbitrary values so there is one
+      // place to change a curve.
+      transitionTimingFunction: {
+        out: 'var(--ease-out)',
+        'in-out': 'var(--ease-in-out)',
+        drawer: 'var(--ease-drawer)',
+      },
+      transitionDuration: {
+        press: 'var(--dur-press)',
+        hover: 'var(--dur-hover)',
+        pop: 'var(--dur-pop)',
+        surface: 'var(--dur-surface)',
+      },
     },
   },
   plugins: [],

@@ -174,6 +174,7 @@ export type RailTab =
   | "charts"
   | "cohorts"
   | "score"
+  | "scenarios"
   | "operations"
   | "chat"
   | "nodes";
@@ -250,6 +251,7 @@ const PANEL_DESTINATIONS: RailTab[] = [
   "charts",
   "cohorts",
   "score",
+  "scenarios",
   "operations",
   "chat",
   "nodes",
@@ -637,6 +639,8 @@ export interface AppState {
   ) => void;
   removeSession: (sessionId: string) => void;
   setActiveSession: (sessionId: string | undefined) => void;
+  /** Stand in a scenario. `undefined` is the baseline. */
+  setActiveVariant: (variantId: string | undefined) => void;
 }
 
 export type NewMapLayer = Omit<
@@ -1754,7 +1758,7 @@ export const useStore = create<AppState>()(
                   : state.visualAnalytics.activeSessionId,
             },
             analysisHistory: recordCurrentAnalysis(state, {
-              label: "Remove line of enquiry",
+              label: "Remove question",
             }),
           };
         }),
@@ -1764,6 +1768,18 @@ export const useStore = create<AppState>()(
           visualAnalytics: {
             ...state.visualAnalytics,
             activeSessionId: sessionId,
+            // Switching question abandons the scenario selected inside the old
+            // one; keeping it would leave the bar showing a scenario that the
+            // panel beside it no longer lists.
+            activeVariantId: undefined,
+          },
+        })),
+
+      setActiveVariant: (variantId) =>
+        set((state) => ({
+          visualAnalytics: {
+            ...state.visualAnalytics,
+            activeVariantId: variantId,
           },
         })),
 
@@ -3394,7 +3410,7 @@ export const useStore = create<AppState>()(
               ],
             },
             analysisHistory: recordCurrentAnalysis(state, {
-              label: "Create analysis variant",
+              label: "Create scenario",
             }),
             provenanceEvents: recordProvenanceEvent(state, {
               activity: "variant.created",
@@ -3430,7 +3446,7 @@ export const useStore = create<AppState>()(
               variants: [...state.visualAnalytics.variants, branch],
             },
             analysisHistory: recordCurrentAnalysis(state, {
-              label: "Branch analysis variant",
+              label: "Branch scenario",
             }),
             // `used`/`generated` carry the lineage in PROV terms, so a reader can
             // reconstruct the branch tree from the log alone if the variants are gone.
@@ -3495,7 +3511,7 @@ export const useStore = create<AppState>()(
               ),
             },
             analysisHistory: recordCurrentAnalysis(state, {
-              label: "Edit analysis variant",
+              label: "Edit scenario",
               coalesceKey: `variant:${variantId}`,
             }),
             ...(renamed
@@ -3576,7 +3592,7 @@ export const useStore = create<AppState>()(
               ),
             },
             analysisHistory: recordCurrentAnalysis(state, {
-              label: "Remove analysis variant",
+              label: "Remove scenario",
             }),
             provenanceEvents: recordProvenanceEvent(state, {
               activity: "variant.deleted",

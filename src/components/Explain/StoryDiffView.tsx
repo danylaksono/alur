@@ -103,7 +103,7 @@ export const StoryDiffView = ({ left, right, onClose }: { left: AlurStory; right
           <GitCompareArrows className="h-4 w-4 shrink-0 text-blue-600" />
           <span className="truncate text-[13px] font-semibold text-slate-800">Comparing findings</span>
         </div>
-        <button type="button" onClick={onClose} className="flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-50">
+        <button type="button" onClick={onClose} className="pressable flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-50">
           <X className="h-3.5 w-3.5" /> Close comparison
         </button>
       </header>

@@ -33,7 +33,7 @@ export const MapEmptyState = () => {
           onClick={dismissEmptyState}
           title="Dismiss"
           aria-label="Dismiss welcome prompt"
-          className="absolute right-2.5 top-2.5 rounded-md p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+          className="pressable absolute right-2.5 top-2.5 rounded-md p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
         >
           <X className="h-3.5 w-3.5" />
         </button>
@@ -54,7 +54,7 @@ export const MapEmptyState = () => {
           type="button"
           onClick={() => fileInputRef.current?.click()}
           disabled={!duckdbReady}
-          className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-50"
+          className="pressable flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <FilePlus2 className="h-3.5 w-3.5" />
           {duckdbReady ? "Add data" : "Engine initializing…"}

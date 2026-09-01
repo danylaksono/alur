@@ -34,7 +34,7 @@ export const ContextInspector = () => {
         <button
           type="button"
           onClick={() => clearFeatureSelection(selectedLayer.id)}
-          className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-600"
+          className="pressable rounded p-1 text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-600"
           title="Clear selection"
         >
           <X className="h-3.5 w-3.5" />

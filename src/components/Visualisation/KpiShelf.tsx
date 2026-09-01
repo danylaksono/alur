@@ -77,9 +77,9 @@ const KpiCard = ({ spec, dataset, layer, index, count }: { spec: KpiSpec; datase
         <select id={`kpi-format-${spec.id}`} value={spec.format || 'number'} onChange={(event) => updateKpi(spec.id, { format: event.target.value as KpiFormat })} className="h-6 w-16 rounded border border-slate-200 bg-white px-1 text-[9px] text-slate-500 outline-none focus:border-sky-400">
           <option value="number">Number</option><option value="compact">Compact</option><option value="percent">Percent</option><option value="currency">Currency</option>
         </select>
-        <button type="button" disabled={index === 0} onClick={() => reorderKpi(spec.id, index - 1)} aria-label={`Move ${spec.title} left`} className="rounded p-1 text-slate-400 hover:bg-slate-100 disabled:opacity-25"><ArrowLeft className="h-3 w-3" /></button>
-        <button type="button" disabled={index === count - 1} onClick={() => reorderKpi(spec.id, index + 1)} aria-label={`Move ${spec.title} right`} className="rounded p-1 text-slate-400 hover:bg-slate-100 disabled:opacity-25"><ArrowRight className="h-3 w-3" /></button>
-        <button type="button" onClick={() => removeKpi(spec.id)} aria-label={`Remove ${spec.title}`} className="rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600"><Trash2 className="h-3 w-3" /></button>
+        <button type="button" disabled={index === 0} onClick={() => reorderKpi(spec.id, index - 1)} aria-label={`Move ${spec.title} left`} className="pressable rounded p-1 text-slate-400 hover:bg-slate-100 disabled:opacity-25"><ArrowLeft className="h-3 w-3" /></button>
+        <button type="button" disabled={index === count - 1} onClick={() => reorderKpi(spec.id, index + 1)} aria-label={`Move ${spec.title} right`} className="pressable rounded p-1 text-slate-400 hover:bg-slate-100 disabled:opacity-25"><ArrowRight className="h-3 w-3" /></button>
+        <button type="button" onClick={() => removeKpi(spec.id)} aria-label={`Remove ${spec.title}`} className="pressable rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600"><Trash2 className="h-3 w-3" /></button>
       </div>
     </article>
   );

@@ -195,13 +195,13 @@ export const ComparisonMapEvidence = ({ spec, result, differenceEligible, select
   return <div className="space-y-3">
     {interactive && <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
       <div className="flex rounded-lg bg-slate-100 p-1" role="group" aria-label="Comparison map mode">
-        <button type="button" onClick={() => setMode('multiples')} className={cn('rounded-md px-3 py-1.5 text-[10px] font-bold', activeMode === 'multiples' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600')}>Small multiples</button>
-        <button type="button" disabled={!differenceEligible || !difference} onClick={() => setMode('difference')} className={cn('rounded-md px-3 py-1.5 text-[10px] font-bold disabled:opacity-35', activeMode === 'difference' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600')}>Difference B − A</button>
+        <button type="button" onClick={() => setMode('multiples')} className={cn('pressable rounded-md px-3 py-1.5 text-[10px] font-bold', activeMode === 'multiples' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600')}>Small multiples</button>
+        <button type="button" disabled={!differenceEligible || !difference} onClick={() => setMode('difference')} className={cn('pressable rounded-md px-3 py-1.5 text-[10px] font-bold disabled:opacity-35', activeMode === 'difference' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600')}>Difference B − A</button>
       </div>
       <div className="flex items-center rounded-lg border border-slate-200" role="group" aria-label="Shared map navigation">
-        <button type="button" onClick={() => setCamera((current) => ({ ...current, zoom: current.zoom + 1 }))} className="p-2 text-slate-600" aria-label="Zoom all comparison maps in"><Plus className="h-3.5 w-3.5" /></button>
-        <button type="button" onClick={() => setCamera((current) => ({ ...current, zoom: current.zoom - 1 }))} className="border-l border-slate-200 p-2 text-slate-600" aria-label="Zoom all comparison maps out"><Minus className="h-3.5 w-3.5" /></button>
-        <button type="button" onClick={() => setCamera(home)} className="border-l border-slate-200 p-2 text-slate-600" aria-label="Fit all comparison maps"><Focus className="h-3.5 w-3.5" /></button>
+        <button type="button" onClick={() => setCamera((current) => ({ ...current, zoom: current.zoom + 1 }))} className="pressable p-2 text-slate-600" aria-label="Zoom all comparison maps in"><Plus className="h-3.5 w-3.5" /></button>
+        <button type="button" onClick={() => setCamera((current) => ({ ...current, zoom: current.zoom - 1 }))} className="pressable border-l border-slate-200 p-2 text-slate-600" aria-label="Zoom all comparison maps out"><Minus className="h-3.5 w-3.5" /></button>
+        <button type="button" onClick={() => setCamera(home)} className="pressable border-l border-slate-200 p-2 text-slate-600" aria-label="Fit all comparison maps"><Focus className="h-3.5 w-3.5" /></button>
       </div>
     </div>}
     <div className={cn('grid gap-3', activeMode === 'multiples' && samples.length > 1 ? 'lg:grid-cols-2' : 'grid-cols-1')}>
@@ -312,7 +312,7 @@ export const ComparisonRecordsEvidence = ({ spec, result, selectedKey, onSelectK
   return <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
     <header className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-4 py-3">
       <div><h3 className="text-xs font-bold text-slate-800">Entity-aligned record preview</h3><p className="mt-0.5 text-[10px] text-slate-500">Showing {records.length.toLocaleString()} of {(result.alignedRecordCount || records.length).toLocaleString()} aligned keys. Preview size never changes denominators.</p></div>
-      {onUseAsFilter && <button type="button" disabled={!selected} onClick={() => selected && onUseAsFilter(selected)} className="rounded-lg bg-slate-900 px-3 py-2 text-[10px] font-bold text-white disabled:bg-slate-300">Use selected as filter</button>}
+      {onUseAsFilter && <button type="button" disabled={!selected} onClick={() => selected && onUseAsFilter(selected)} className="pressable rounded-lg bg-slate-900 px-3 py-2 text-[10px] font-bold text-white disabled:bg-slate-300">Use selected as filter</button>}
     </header>
     <div className="max-h-[560px] overflow-auto">
       <table className="w-full min-w-[760px] border-collapse text-left text-[10px]">

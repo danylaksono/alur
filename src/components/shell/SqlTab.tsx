@@ -97,14 +97,14 @@ export const SqlTab = ({
               <button
                 onClick={handleRunSQL}
                 disabled={isRunning || !manualSQL}
-                className="flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-[11px] font-semibold text-white shadow transition-all hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className="pressable flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-[11px] font-semibold text-white shadow transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Play className="h-3 w-3 fill-current" /> {isRunning ? 'Running…' : 'Run query'}
               </button>
               {lastManualSql && (
                 <button
                   onClick={handlePromoteToNode}
-                  className="flex items-center gap-1.5 rounded-lg border border-teal-200 bg-teal-50 px-2.5 py-1.5 text-[11px] font-semibold text-teal-700 transition-all hover:bg-teal-100"
+                  className="pressable flex items-center gap-1.5 rounded-lg border border-teal-200 bg-teal-50 px-2.5 py-1.5 text-[11px] font-semibold text-teal-700 transition-colors hover:bg-teal-100"
                 >
                   <Workflow className="h-3 w-3" /> Promote to node
                 </button>
@@ -120,7 +120,7 @@ export const SqlTab = ({
           onChange={(e) => isManualSQL && setManualSQL(e.target.value)}
           readOnly={!isManualSQL}
           className={cn(
-            'h-full w-full resize-none rounded-lg border bg-white p-3 font-mono text-xs leading-relaxed shadow-inner outline-none transition-all',
+            'h-full w-full resize-none rounded-lg border bg-white p-3 font-mono text-xs leading-relaxed shadow-inner outline-none transition-colors',
             isManualSQL ? 'border-primary text-slate-800 ring-2 ring-primary/5' : 'border-slate-200 bg-slate-100/50 text-slate-500'
           )}
           placeholder={isManualSQL ? 'Write your spatial SQL here…' : 'Build a workflow to see its generated SQL, or switch to manual mode.'}

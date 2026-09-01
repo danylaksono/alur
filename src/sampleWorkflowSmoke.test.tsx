@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { Edge } from '@xyflow/react';
 import App from './App';
 import { WorkflowTab } from './components/shell/WorkflowTab';
+import { ScenarioPanel } from './components/Scenarios/ScenarioPanel';
 import { NodePalette } from './components/shell/NodePalette';
 import { SqlTab } from './components/shell/SqlTab';
 import { Chat } from './components/Chat';
@@ -155,8 +156,12 @@ describe('sample visual analytics workflow smoke test', () => {
     // their results render only once a query narrows them.
     expect(paletteHtml).toContain('Search nodes and');
     expect(paletteHtml).toContain('Execute Workflow');
-    // Scenario tools moved here from the deleted Analyse landing page.
-    expect(paletteHtml).toContain('Scenarios');
+    // Scenarios left the palette for their own rail destination; only the chip
+    // naming the active scenario stays behind, and only once one is selected.
+    expect(paletteHtml).not.toContain('Scenarios');
+
+    const scenarioHtml = renderToString(<ScenarioPanel />);
+    expect(scenarioHtml).toContain('Scenarios');
 
     const workflowHtml = renderToString(<WorkflowTab />);
     expect(workflowHtml).toContain('react-flow');

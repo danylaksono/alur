@@ -122,7 +122,7 @@ export const H3Node = ({ data, id, selected }: any) => {
           type="button"
           onClick={() => updateConfig({ mode: item.value })}
           className={cn(
-            "rounded px-2 py-1 text-[11px] font-medium transition-colors",
+            "pressable rounded px-2 py-1 text-[11px] font-medium transition-colors",
             mode === item.value
               ? "bg-white text-cyan-700 shadow-sm ring-1 ring-cyan-200"
               : "text-slate-500 hover:text-slate-700",

@@ -37,7 +37,7 @@ export const BasemapControl = () => {
               }}
               title={basemap.description}
               className={cn(
-                'flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-xs font-medium transition-colors',
+                'pressable flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-xs font-medium transition-colors',
                 basemap.id === selectedBasemapId
                   ? 'bg-slate-900 text-white'
                   : 'text-slate-600 hover:bg-slate-100'
@@ -55,7 +55,7 @@ export const BasemapControl = () => {
         title="Basemap"
         aria-label="Basemap"
         className={cn(
-          'rounded-lg border border-slate-200 bg-white p-2 text-slate-600 shadow-md transition-colors hover:bg-slate-50',
+          'pressable rounded-lg border border-slate-200 bg-white p-2 text-slate-600 shadow-md transition-colors hover:bg-slate-50',
           open && 'bg-slate-900 text-white hover:bg-slate-900'
         )}
       >

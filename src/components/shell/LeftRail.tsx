@@ -2,6 +2,7 @@ import {
   BarChart3,
   Database,
   FileText,
+  GitBranch,
   GitCompareArrows,
   Info,
   Layers,
@@ -48,6 +49,7 @@ const GROUPS: Group[] = [
     id: 'analyse',
     title: 'Analyse',
     items: [
+      { id: 'scenarios', icon: GitBranch, label: 'Scenarios', hint: 'Branch an analysis and see what each change did' },
       { id: 'compare', icon: GitCompareArrows, label: 'Compare', hint: 'Compare groups, places or time windows' },
       { id: 'score', icon: SlidersHorizontal, label: 'Score', hint: 'Weight criteria and rank candidates' },
       { id: 'operations', icon: Plug, label: 'Calculations', hint: 'Load an external calculation and run it against your data' },
@@ -101,7 +103,7 @@ export const LeftRail = () => {
         type="button"
         onClick={() => handleClick(id)}
         className={cn(
-          'flex h-9 items-center rounded-lg transition-colors',
+          'pressable flex h-9 items-center rounded-lg transition-colors',
           isRailExpanded ? 'w-full gap-2.5 px-2.5' : 'w-9 justify-center',
           active ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700',
         )}
@@ -144,7 +146,7 @@ export const LeftRail = () => {
           type="button"
           onClick={() => setAboutOpen(true)}
           className={cn(
-            'flex h-9 items-center rounded-lg transition-colors',
+            'pressable flex h-9 items-center rounded-lg transition-colors',
             isRailExpanded ? 'w-full gap-2.5 px-2.5' : 'w-9 justify-center',
             isAboutOpen ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700',
           )}
@@ -162,7 +164,7 @@ export const LeftRail = () => {
           type="button"
           onClick={toggleRailExpanded}
           className={cn(
-            'flex h-9 items-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700',
+            'pressable flex h-9 items-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700',
             isRailExpanded ? 'w-full gap-2.5 px-2.5' : 'w-9 justify-center',
           )}
           title={isRailExpanded ? 'Collapse navigation to icons' : 'Expand navigation'}

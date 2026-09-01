@@ -30,7 +30,7 @@ function ToastItem({ toast }: { toast: Toast }) {
     <div className={cn('flex items-start gap-2 px-4 py-3 rounded-xl border shadow-lg text-[11px] font-medium min-w-[280px] max-w-md toast-enter', styleMap[toast.type])}>
       <Icon className="w-4 h-4 shrink-0 mt-0.5" />
       <span className="flex-1">{toast.message}</span>
-      <button type="button" onClick={() => removeToast(toast.id)} className="shrink-0 opacity-60 hover:opacity-100 transition-opacity" aria-label="Dismiss notification">
+      <button type="button" onClick={() => removeToast(toast.id)} className="pressable shrink-0 opacity-60 hover:opacity-100 transition-opacity" aria-label="Dismiss notification">
         <X className="w-3 h-3" />
       </button>
     </div>

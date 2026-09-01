@@ -181,7 +181,7 @@ export const FilterNode = ({ data, id, selected }: any) => {
               <button
                 type="button"
                 onClick={() => updatePredicates([...predicates, { id: `p-${Date.now()}`, expression: '', severity: 'hard' }])}
-                className="rounded px-1 text-[10px] font-bold text-amber-700 hover:bg-amber-50"
+                className="pressable rounded px-1 text-[10px] font-bold text-amber-700 hover:bg-amber-50"
               >
                 + Add
               </button>
@@ -202,7 +202,7 @@ export const FilterNode = ({ data, id, selected }: any) => {
                     <button
                       type="button"
                       onClick={() => updatePredicates(predicates.filter((_, position) => position !== index))}
-                      className="rounded p-1 text-slate-400 hover:bg-white hover:text-rose-600"
+                      className="pressable rounded p-1 text-slate-400 hover:bg-white hover:text-rose-600"
                       aria-label={`Remove condition ${index + 1}`}
                     >
                       <X className="h-3 w-3" />
@@ -258,7 +258,7 @@ export const FilterNode = ({ data, id, selected }: any) => {
               {columnNames.slice(0, 8).map((col) => (
                 <button
                   key={col}
-                  className="rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 font-mono text-[10px] text-amber-700 transition-colors hover:bg-amber-100"
+                  className="pressable rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 font-mono text-[10px] text-amber-700 transition-colors hover:bg-amber-100"
                   onClick={() => updateConfig({ condition: selectionCount ? col : condition ? `${condition} ${col}` : col, selectionIds: undefined })}
                   title={`Insert "${col}" into condition`}
                 >

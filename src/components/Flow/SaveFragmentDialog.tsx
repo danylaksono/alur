@@ -79,7 +79,7 @@ export const SaveFragmentDialog = ({ selectedIds, onClose }: { selectedIds: stri
             <Package className="h-4 w-4 text-cyan-600" />
             Save {selectedIds.length} step{selectedIds.length === 1 ? '' : 's'} as an operation
           </h2>
-          <button type="button" onClick={onClose} className="rounded p-1 text-slate-400 hover:bg-slate-100" aria-label="Close">
+          <button type="button" onClick={onClose} className="pressable rounded p-1 text-slate-400 hover:bg-slate-100" aria-label="Close">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -170,7 +170,7 @@ export const SaveFragmentDialog = ({ selectedIds, onClose }: { selectedIds: stri
             <button
               type="button"
               onClick={() => setParameters([...parameters, { id: `value_${parameters.length + 1}`, label: `Value ${parameters.length + 1}`, type: 'number' }])}
-              className="mt-2 flex items-center gap-1 rounded px-1 text-[11px] font-semibold text-cyan-700 hover:bg-cyan-50"
+              className="pressable mt-2 flex items-center gap-1 rounded px-1 text-[11px] font-semibold text-cyan-700 hover:bg-cyan-50"
             >
               <Plus className="h-3 w-3" /> Add a value by hand
             </button>
@@ -187,12 +187,12 @@ export const SaveFragmentDialog = ({ selectedIds, onClose }: { selectedIds: stri
         </div>
 
         <div className="flex items-center justify-end gap-2 border-t bg-slate-50 px-4 py-3">
-          <button type="button" onClick={onClose} className="rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-100">Cancel</button>
+          <button type="button" onClick={onClose} className="pressable rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-100">Cancel</button>
           <button
             type="button"
             onClick={save}
             disabled={errors.length > 0 || !name.trim()}
-            className="rounded-lg bg-slate-900 px-4 py-1.5 text-xs font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+            className="pressable rounded-lg bg-slate-900 px-4 py-1.5 text-xs font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
           >
             Save operation
           </button>

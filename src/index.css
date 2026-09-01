@@ -12,6 +12,47 @@
     --secondary-foreground: 0.22 0.025 190;
     --muted: 0.93 0.012 180;
     --border: 0.87 0.015 180;
+
+    /* Motion. The built-in CSS easings are too weak to read as intentional —
+       they lack movement in the first few frames, which is exactly where the
+       user is looking. Every transition in the app pulls from these three. */
+    --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+    --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+    --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+
+    /* Nothing exceeds 300ms. A surface that seems to need longer is a surface
+       that should not be animating. */
+    --dur-press: 160ms;
+    --dur-hover: 120ms;
+    --dur-pop: 180ms;
+    --dur-surface: 240ms;
+  }
+}
+
+/**
+ * Press feedback.
+ *
+ * The only motion an ALUR user meets on every single interaction, which is why
+ * it is the one animation applied everywhere rather than case by case. It fires
+ * on pointer-down: acknowledging a press only once the click completes is what
+ * makes an interface feel dead. `scale` takes the children with it, so icons and
+ * labels compress along with the button — that is the effect, not a side effect.
+ */
+@layer utilities {
+  /* Doubled class on purpose. Most pressable elements also carry Tailwind's
+     `transition-colors`, which sets `transition-property` and would drop
+     `transform` from the list — the press then snapped instead of easing. At
+     (0,2,0) this wins wherever it lands in the cascade, so `.pressable` owns
+     the whole transition rather than composing with a utility that fights it. */
+  .pressable.pressable {
+    transition-property: transform, color, background-color, border-color,
+      text-decoration-color, fill, stroke, opacity;
+    transition-duration: var(--dur-hover);
+    transition-timing-function: var(--ease-out);
+  }
+
+  .pressable.pressable:active {
+    transform: scale(0.97);
   }
 }
 
@@ -25,12 +66,26 @@ body {
   outline-offset: 2px;
 }
 
+/**
+ * Reduced motion means fewer and gentler animations, not none.
+ *
+ * The previous rule set every transition to 0.01ms, which also killed the
+ * opacity and colour fades that carry meaning — a toast then blinks into
+ * existence rather than arriving. Movement is what causes motion sickness, so
+ * movement is what goes: transforms are pinned, fades are kept.
+ */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     scroll-behavior: auto !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    transition-property: opacity, color, background-color, border-color, fill, stroke !important;
+    transition-duration: 150ms !important;
+  }
+
+  /* Matches the doubled-class specificity above, or it would not win. */
+  .pressable.pressable:active {
+    transform: none;
   }
 }
 
@@ -60,14 +115,23 @@ body {
 }
 
 /* Grow handles on hover for an easier grab target; compose with RF's
-   positioning transform so the handle doesn't jump. */
-.react-flow__handle-left:hover,
+   positioning transform so the handle doesn't jump. Gated on a real pointer:
+   a touch device fires hover on tap, so ungated this fired every time the user
+   tapped a node and the handles jumped under their finger. */
 .react-flow__handle-left.connectingto {
   transform: translate(-50%, -50%) scale(1.5);
 }
-.react-flow__handle-right:hover,
 .react-flow__handle-right.connectingto {
   transform: translate(50%, -50%) scale(1.5);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .react-flow__handle-left:hover {
+    transform: translate(-50%, -50%) scale(1.5);
+  }
+  .react-flow__handle-right:hover {
+    transform: translate(50%, -50%) scale(1.5);
+  }
 }
 
 .react-flow__edge-path {
@@ -98,17 +162,25 @@ body {
   background-color: #fbfdfd;
 }
 
-@keyframes toast-slide-in {
-  from {
+/**
+ * Toasts arrive on a transition, not a keyframe.
+ *
+ * Keyframes restart from zero when they are interrupted, and toasts are the one
+ * surface here that stacks rapidly — a second toast landing mid-animation used
+ * to snap the first back to its start. A transition retargets from wherever the
+ * element currently is.
+ */
+.toast-enter {
+  transform: translateY(0);
+  opacity: 1;
+  transition:
+    transform var(--dur-surface) var(--ease-out),
+    opacity var(--dur-surface) var(--ease-out);
+}
+
+@starting-style {
+  .toast-enter {
     transform: translateY(-12px);
     opacity: 0;
   }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
-}
-
-.toast-enter {
-  animation: toast-slide-in 0.25s ease-out;
 }

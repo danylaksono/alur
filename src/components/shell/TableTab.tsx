@@ -120,7 +120,7 @@ export const TableTab = ({ table }: { table: ReturnType<typeof useAttributeTable
         </span>
         <div className="flex items-center gap-2">
           {table.selectedLayer && (
-            <button type="button" onClick={() => setDatasetOverviewLayerId(table.selectedLayer!.id)} className="flex items-center gap-1.5 rounded border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-600 transition-colors hover:bg-sky-50 hover:text-sky-700" title="Open dataset overview">
+            <button type="button" onClick={() => setDatasetOverviewLayerId(table.selectedLayer!.id)} className="pressable flex items-center gap-1.5 rounded border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-600 transition-colors hover:bg-sky-50 hover:text-sky-700" title="Open dataset overview">
               <ScanSearch className="h-3 w-3" /> Overview
             </button>
           )}
@@ -128,7 +128,7 @@ export const TableTab = ({ table }: { table: ReturnType<typeof useAttributeTable
             <button
               type="button"
               onClick={() => setCalculatorOpen(true)}
-              className="flex items-center gap-1.5 rounded border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-600 transition-colors hover:bg-slate-100"
+              className="pressable flex items-center gap-1.5 rounded border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-600 transition-colors hover:bg-slate-100"
               title="Add a calculated field"
             >
               <FunctionSquare className="h-3 w-3" /> Calculate
@@ -140,7 +140,7 @@ export const TableTab = ({ table }: { table: ReturnType<typeof useAttributeTable
               <button
                 type="button"
                 onClick={() => { void handleCopySql(); }}
-                className="flex items-center gap-1.5 rounded border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-600 transition-colors hover:bg-slate-100"
+                className="pressable flex items-center gap-1.5 rounded border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-600 transition-colors hover:bg-slate-100"
                 title="Copy SQL for the current filters, search, sorting, and calculated fields"
               >
                 <Copy className="h-3 w-3" /> SQL
@@ -148,7 +148,7 @@ export const TableTab = ({ table }: { table: ReturnType<typeof useAttributeTable
               <button
                 type="button"
                 onClick={() => { void handleExport('csv'); }}
-                className="flex items-center gap-1.5 rounded border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-600 transition-colors hover:bg-slate-100"
+                className="pressable flex items-center gap-1.5 rounded border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-600 transition-colors hover:bg-slate-100"
                 title="Export the current filtered table as CSV"
               >
                 <Download className="h-3 w-3" /> CSV

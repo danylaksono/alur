@@ -97,7 +97,7 @@ export const TypeaheadSelect = ({
         type="button"
         onClick={() => setOpen((current) => !current)}
         title={selected?.description}
-        className="flex w-full items-center justify-between gap-2 rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-left text-xs text-slate-700 outline-none transition-colors hover:bg-white focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+        className="pressable flex w-full items-center justify-between gap-2 rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-left text-xs text-slate-700 outline-none transition-colors hover:bg-white focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
       >
         <span className="block min-w-0 flex-1 truncate font-medium">{selected?.label || value}</span>
         <ChevronDown className={cn('h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform', open && 'rotate-180')} />
@@ -138,7 +138,7 @@ export const TypeaheadSelect = ({
                       onMouseEnter={() => setActiveIndex(index)}
                       onClick={() => commit(option.value)}
                       className={cn(
-                        'flex w-full items-start gap-2 px-3 py-1.5 text-left transition-colors',
+                        'pressable flex w-full items-start gap-2 px-3 py-1.5 text-left transition-colors',
                         isActive ? 'bg-slate-100' : 'hover:bg-slate-50'
                       )}
                     >

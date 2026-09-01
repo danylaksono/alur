@@ -19,6 +19,14 @@ export type VisualAnalyticsState = {
   sessions?: AnalysisSession[];
   activeSessionId?: string;
   variants?: AnalysisVariant[];
+  /**
+   * Which scenario the workspace is currently standing in.
+   *
+   * Separate from `activeSessionId`, which selects a *question*. This selects
+   * one scenario within it, and is what the scenario bar reflects — undefined
+   * means the baseline, the state before any scenario was branched.
+   */
+  activeVariantId?: string;
   calculations?: CalculationSetup[];
   comparison?: CohortComparisonSelection;
   /** @deprecated v1 compatibility only. New projects use `explain`. */

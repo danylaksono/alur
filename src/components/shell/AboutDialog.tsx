@@ -121,7 +121,7 @@ export const AboutDialog = () => {
             ref={closeButtonRef}
             type="button"
             onClick={() => setAboutOpen(false)}
-            className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            className="pressable rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
             title="Close"
             aria-label="Close About"
           >

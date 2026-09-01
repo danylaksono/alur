@@ -67,7 +67,7 @@ export const DatasetOverviewDialog = () => {
             <h2 id="dataset-overview-title" className="truncate text-base font-extrabold text-slate-800">{layer.name}</h2>
             <p className="mt-1 text-[11px] text-slate-500">Dataset overview · cheap metadata appears immediately; detailed statistics are cached by source version.</p>
           </div>
-          <button type="button" onClick={() => setOpen(null)} aria-label="Close dataset overview" className="rounded-md p-2 text-slate-400 hover:bg-slate-200 hover:text-slate-700"><X className="h-4 w-4" /></button>
+          <button type="button" onClick={() => setOpen(null)} aria-label="Close dataset overview" className="pressable rounded-md p-2 text-slate-400 hover:bg-slate-200 hover:text-slate-700"><X className="h-4 w-4" /></button>
         </header>
 
         <div className="min-h-0 flex-1 overflow-y-auto p-5">
@@ -96,7 +96,7 @@ export const DatasetOverviewDialog = () => {
                     return <div key={field.name} className="grid grid-cols-[minmax(8rem,1fr)_7rem_6rem_7rem_2rem] items-center gap-2 px-3 py-2 text-[11px] hover:bg-slate-50">
                       <div className="min-w-0"><div className="truncate font-semibold text-slate-700" title={field.name}>{field.name}</div><div className="text-[9px] capitalize text-slate-400">{field.semanticType}</div></div>
                       <span className="truncate font-mono text-[9px] text-slate-400" title={field.type}>{field.type}</span>
-                      <button type="button" disabled={!detailed} onClick={() => detailed?.nullCount && inspectField(field.name, true)} className="text-left tabular-nums text-slate-500 enabled:hover:text-sky-700">{detailed ? `${(detailed.nullPercent * 100).toFixed(1)}%` : '…'}</button>
+                      <button type="button" disabled={!detailed} onClick={() => detailed?.nullCount && inspectField(field.name, true)} className="pressable text-left tabular-nums text-slate-500 enabled:hover:text-sky-700">{detailed ? `${(detailed.nullPercent * 100).toFixed(1)}%` : '…'}</button>
                       <span className="min-w-0 truncate tabular-nums text-slate-500" title={detailed ? `${detailed.distinctCount.toLocaleString()} distinct` : 'Profiling'}>
                         {detailed?.semanticType === 'numeric' ? <span className="block"><span className="block truncate">{formatNumber(detailed.min)}–{formatNumber(detailed.max)}</span>{detailed.quantiles && detailed.quantiles.length > 1 && <span className="mt-0.5 flex h-1 items-center gap-px" aria-label={`Quantiles ${detailed.quantiles.map(formatNumber).join(', ')}`}>{detailed.quantiles.map((value, index) => <span key={`${value}-${index}`} className="h-1 flex-1 rounded-full bg-sky-400" style={{ opacity: 0.25 + index * 0.15 }} />)}</span>}</span> : detailed?.semanticType === 'temporal' ? `${detailed.temporalStart?.slice(0, 10) || 'n/a'}–${detailed.temporalEnd?.slice(0, 10) || 'n/a'}` : detailed ? `${detailed.distinctCount.toLocaleString()} distinct` : '…'}
                       </span>

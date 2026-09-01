@@ -20,7 +20,7 @@ describe('Provenance events', () => {
     expect(event.agent.type).toBe('user');
     expect(event.entityType).toBe('variant');
     expect(event.entityId).toBe('v1');
-    expect(event.summary).toBe('Created variant “High ambition”');
+    expect(event.summary).toBe('Created scenario “High ambition”');
   });
 
   it('mints unique ids for events emitted within the same millisecond', () => {
@@ -69,11 +69,11 @@ describe('Provenance summaries', () => {
   it('falls back cleanly when a payload is missing its detail', () => {
     expect(summariseProvenance('workflow.ran', {})).toBe('Ran the workflow');
     expect(summariseProvenance('filter.cleared', {})).toBe('Cleared all filters');
-    expect(summariseProvenance('variant.created', {})).toBe('Created variant “untitled”');
+    expect(summariseProvenance('variant.created', {})).toBe('Created scenario “untitled”');
   });
 
   it('uses singular forms for a count of one', () => {
-    expect(summariseProvenance('sweep.ran', { variantCount: 1 })).toBe('Ran the workflow across 1 variant');
+    expect(summariseProvenance('sweep.ran', { variantCount: 1 })).toBe('Ran the workflow across 1 scenario');
   });
 });
 

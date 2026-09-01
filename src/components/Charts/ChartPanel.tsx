@@ -167,7 +167,7 @@ const Bars = ({
             onBlur={onLeave}
             onClick={() => onClick(datum)}
             className={cn(
-              'grid w-full grid-cols-[minmax(0,1fr)_72px] items-center gap-2 rounded-md px-2 py-1 text-left transition-colors hover:bg-slate-50',
+              'pressable grid w-full grid-cols-[minmax(0,1fr)_72px] items-center gap-2 rounded-md px-2 py-1 text-left transition-colors hover:bg-slate-50',
               active && 'bg-sky-50 ring-1 ring-sky-200'
             )}
             title={`${datum.label}: ${formatNumber(datum.value)} of ${formatNumber(datum.totalValue)} (${datum.count.toLocaleString()} rows)`}
@@ -295,7 +295,7 @@ const Histogram = ({
           <button
             type="button"
             onClick={onClearRange}
-            className="flex items-center gap-1 rounded px-1.5 py-0.5 font-semibold uppercase tracking-wide text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            className="pressable flex items-center gap-1 rounded px-1.5 py-0.5 font-semibold uppercase tracking-wide text-slate-400 hover:bg-slate-100 hover:text-slate-600"
           >
             <X className="h-3 w-3" />
             Clear range
@@ -497,7 +497,7 @@ const ScatterChart = ({
           <button
             type="button"
             onClick={onClear}
-            className="flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 font-semibold uppercase tracking-wide text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            className="pressable flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 font-semibold uppercase tracking-wide text-slate-400 hover:bg-slate-100 hover:text-slate-600"
           >
             <X className="h-3 w-3" />
             Clear selection
@@ -596,7 +596,7 @@ const RadialChart = ({
             onMouseEnter={() => onHover(datum)}
             onMouseLeave={onLeave}
             onClick={() => onClick(datum)}
-            className="flex w-full items-center gap-2 rounded px-1 py-0.5 text-left hover:bg-slate-50"
+            className="pressable flex w-full items-center gap-2 rounded px-1 py-0.5 text-left hover:bg-slate-50"
             title={datum.label}
           >
             <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: datum.color }} />
@@ -773,7 +773,7 @@ const TemporalChart = ({
       </svg>
       <div className="flex min-h-5 items-center justify-between gap-2 text-[10px] text-slate-500" aria-live="polite">
         <span className="truncate">{active ? `${active.series} · ${active.point.label}: ${formatNumber(active.point.value ?? 0)} (${active.point.count.toLocaleString()} rows)` : 'Drag across periods to filter · focus a point for details'}</span>
-        {brush && <button type="button" onClick={onClear} className="shrink-0 rounded px-1.5 py-0.5 font-semibold text-sky-700 hover:bg-sky-50">Reset time</button>}
+        {brush && <button type="button" onClick={onClear} className="pressable shrink-0 rounded px-1.5 py-0.5 font-semibold text-sky-700 hover:bg-sky-50">Reset time</button>}
       </div>
       <details className="rounded-md border border-slate-100 bg-slate-50/70 text-[10px] text-slate-500">
         <summary className="cursor-pointer px-2 py-1.5 font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400">Accessible data table</summary>
@@ -1035,7 +1035,7 @@ const ChartCard = ({
             type="button"
             onClick={exportChartData}
             disabled={!exportData}
-            className="rounded-md p-1.5 text-slate-400 hover:bg-sky-50 hover:text-sky-700 disabled:cursor-not-allowed disabled:opacity-30"
+            className="pressable rounded-md p-1.5 text-slate-400 hover:bg-sky-50 hover:text-sky-700 disabled:cursor-not-allowed disabled:opacity-30"
             title="Export the plotted values and filter provenance as CSV"
             aria-label={`Export plotted data for ${chart.title} as CSV`}
           >
@@ -1045,7 +1045,7 @@ const ChartCard = ({
             type="button"
             onClick={() => { void exportChartImage('svg'); }}
             disabled={!exportData}
-            className="rounded-md p-1.5 text-slate-400 hover:bg-sky-50 hover:text-sky-700 disabled:cursor-not-allowed disabled:opacity-30"
+            className="pressable rounded-md p-1.5 text-slate-400 hover:bg-sky-50 hover:text-sky-700 disabled:cursor-not-allowed disabled:opacity-30"
             title="Export the rendered chart as SVG (SVG charts only)"
             aria-label={`Export ${chart.title} as SVG`}
           >
@@ -1055,7 +1055,7 @@ const ChartCard = ({
             type="button"
             onClick={() => { void exportChartImage('png'); }}
             disabled={!exportData}
-            className="rounded-md p-1.5 text-slate-400 hover:bg-sky-50 hover:text-sky-700 disabled:cursor-not-allowed disabled:opacity-30"
+            className="pressable rounded-md p-1.5 text-slate-400 hover:bg-sky-50 hover:text-sky-700 disabled:cursor-not-allowed disabled:opacity-30"
             title="Export the rendered chart as PNG (canvas or SVG charts)"
             aria-label={`Export ${chart.title} as PNG`}
           >
@@ -1065,7 +1065,7 @@ const ChartCard = ({
           <button
             type="button"
             onClick={onRemove}
-            className="rounded-md p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+            className="pressable rounded-md p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
             title="Remove chart"
             aria-label={`Remove ${chart.title}`}
           >
@@ -1633,7 +1633,7 @@ export const ChartPanel = () => {
             <button
               type="button"
               onClick={() => setTablesRefreshTick((tick) => tick + 1)}
-              className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-700"
+              className="pressable flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-700"
               title="Refresh data sources (picks up new workflow and SQL tables)"
             >
               <RotateCw className="h-3.5 w-3.5" />
@@ -1642,7 +1642,7 @@ export const ChartPanel = () => {
               type="button"
               onClick={() => { void handleAddChart(); }}
               disabled={!hasChartableLayer && !tables.length && !tableDatasets.length}
-              className="flex h-8 items-center gap-1.5 rounded-md bg-slate-900 px-3 text-[11px] font-semibold uppercase tracking-wider text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+              className="pressable flex h-8 items-center gap-1.5 rounded-md bg-slate-900 px-3 text-[11px] font-semibold uppercase tracking-wider text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
               <Plus className="h-3.5 w-3.5" />
               Add

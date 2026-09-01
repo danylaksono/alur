@@ -233,7 +233,7 @@ export const AlgorithmDialog = ({
             <h2 className="truncate text-sm font-bold text-slate-900">{manifest.label}</h2>
             <p className="mt-0.5 text-[11px] leading-relaxed text-slate-500">{manifest.description}</p>
           </div>
-          <button type="button" onClick={onClose} aria-label="Close" className="shrink-0 rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
+          <button type="button" onClick={onClose} aria-label="Close" className="pressable shrink-0 rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
             <X className="h-4 w-4" />
           </button>
         </header>
@@ -267,7 +267,7 @@ export const AlgorithmDialog = ({
                                 <button
                                   type="button"
                                   onClick={() => removeSource(input.id, index)}
-                                  className="rounded-md border border-slate-200 px-1.5 text-slate-400 hover:text-rose-500"
+                                  className="pressable rounded-md border border-slate-200 px-1.5 text-slate-400 hover:text-rose-500"
                                   aria-label={`Remove dataset ${index + 1} from ${input.label}`}
                                 >
                                   <X className="h-3 w-3" />
@@ -297,7 +297,7 @@ export const AlgorithmDialog = ({
                         <button
                           type="button"
                           onClick={() => addSource(input.id)}
-                          className="mt-1 flex items-center gap-1 text-[9px] font-bold text-blue-600 hover:text-blue-700"
+                          className="pressable mt-1 flex items-center gap-1 text-[9px] font-bold text-blue-600 hover:text-blue-700"
                         >
                           <Plus className="h-3 w-3" /> Add another dataset
                         </button>
@@ -361,7 +361,7 @@ export const AlgorithmDialog = ({
                     <span className="flex items-center gap-1.5 text-[10px] font-semibold text-orange-800">
                       <Crosshair className="h-3 w-3" /> Click the map to place “{placement.label}”
                     </span>
-                    <button type="button" onClick={cancelPlacement} aria-label="Cancel placement" className="text-orange-700 hover:text-orange-900">
+                    <button type="button" onClick={cancelPlacement} aria-label="Cancel placement" className="pressable text-orange-700 hover:text-orange-900">
                       <X className="h-3 w-3" />
                     </button>
                   </div>
@@ -377,7 +377,7 @@ export const AlgorithmDialog = ({
                           onClick={() => addChange(spec.id)}
                           disabled={!variant}
                           title={spec.referent === 'rows' ? 'Applies to the current selection' : 'Then click the map'}
-                          className="flex shrink-0 items-center gap-1 rounded-md border border-slate-200 px-1.5 py-0.5 text-[9px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                          className="pressable flex shrink-0 items-center gap-1 rounded-md border border-slate-200 px-1.5 py-0.5 text-[9px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-40"
                         >
                           {spec.referent === 'rows' ? <MousePointerClick className="h-2.5 w-2.5" /> : <Crosshair className="h-2.5 w-2.5" />}
                           Record
@@ -416,7 +416,7 @@ export const AlgorithmDialog = ({
                           type="button"
                           onClick={() => variant && removeVariantOperation(variant.id, record.id)}
                           aria-label="Remove this change"
-                          className="shrink-0 text-slate-400 hover:text-rose-500"
+                          className="pressable shrink-0 text-slate-400 hover:text-rose-500"
                         >
                           <Trash2 className="h-2.5 w-2.5" />
                         </button>
@@ -453,7 +453,7 @@ export const AlgorithmDialog = ({
               type="button"
               onClick={() => void run()}
               disabled={running || !variant || bindingErrors.length > 0}
-              className="flex items-center gap-1.5 rounded-md bg-slate-800 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-slate-700 disabled:opacity-40"
+              className="pressable flex items-center gap-1.5 rounded-md bg-slate-800 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-slate-700 disabled:opacity-40"
             >
               {running ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />} Run
             </button>

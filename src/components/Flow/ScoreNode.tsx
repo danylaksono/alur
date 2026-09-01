@@ -89,7 +89,7 @@ export const ScoreNode = ({ data, id, selected }: any) => {
       <div>
         <div className="mb-1 flex items-center justify-between">
           <label className={fieldLabelClass}>Criteria</label>
-          <button type="button" onClick={addCriterion} className="rounded px-1 text-[10px] font-bold text-purple-700 hover:bg-purple-50">
+          <button type="button" onClick={addCriterion} className="pressable rounded px-1 text-[10px] font-bold text-purple-700 hover:bg-purple-50">
             + Add
           </button>
         </div>
@@ -121,7 +121,7 @@ export const ScoreNode = ({ data, id, selected }: any) => {
                 <button
                   type="button"
                   onClick={() => updateModel({ criteria: spec.criteria.filter((_, position) => position !== index) })}
-                  className="rounded p-1 text-slate-400 hover:bg-white hover:text-rose-600"
+                  className="pressable rounded p-1 text-slate-400 hover:bg-white hover:text-rose-600"
                   aria-label={`Remove criterion ${index + 1}`}
                 >
                   <X className="h-3 w-3" />

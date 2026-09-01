@@ -471,7 +471,7 @@ export const Chat = () => {
           <button
             type="button"
             onClick={() => setSettingsOpen(true)}
-            className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-slate-700"
+            className="pressable rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-slate-700"
           >
             Configure OpenRouter key
           </button>
@@ -548,12 +548,12 @@ export const Chat = () => {
             onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
             disabled={!hasApiKey}
             placeholder={hasApiKey ? 'Ask about your data or build a workflow...' : 'Add an API key in Settings to chat'}
-            className="w-full text-xs p-3 pr-10 border rounded-xl focus:ring-2 focus:ring-primary outline-none shadow-sm transition-all disabled:cursor-not-allowed disabled:bg-slate-50"
+            className="w-full text-xs p-3 pr-10 border rounded-xl focus:ring-2 focus:ring-primary outline-none shadow-sm transition-colors disabled:cursor-not-allowed disabled:bg-slate-50"
           />
           <button
             onClick={handleSendMessage}
             disabled={!input.trim() || isLoading || !hasApiKey}
-            className="absolute right-2 top-2 p-1.5 text-primary hover:bg-primary/10 rounded-lg transition-colors disabled:opacity-30"
+            className="pressable absolute right-2 top-2 p-1.5 text-primary hover:bg-primary/10 rounded-lg transition-colors disabled:opacity-30"
           >
             <ArrowRight className="w-4 h-4" />
           </button>

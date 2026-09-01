@@ -155,7 +155,7 @@ const MiniHistogram = ({
             disabled={!canFilter}
             onClick={(event) => { event.stopPropagation(); onSelect?.(bin); }}
             className={cn(
-              'group flex h-full min-w-0 flex-1 items-end rounded-sm px-px outline-none focus-visible:ring-2 focus-visible:ring-orange-400',
+              'pressable group flex h-full min-w-0 flex-1 items-end rounded-sm px-px outline-none focus-visible:ring-2 focus-visible:ring-orange-400',
               canFilter ? 'cursor-pointer hover:bg-slate-100' : 'cursor-default',
               active && 'bg-orange-100 ring-1 ring-orange-400',
             )}
@@ -338,17 +338,17 @@ export const DataTable = ({
             <button
               type="button"
               onClick={() => onSortChange(key)}
-              className="flex h-7 min-w-0 flex-1 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-left text-[11px] font-bold text-slate-700 hover:border-slate-300"
+              className="pressable flex h-7 min-w-0 flex-1 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-left text-[11px] font-bold text-slate-700 hover:border-slate-300"
               title={`Sort by ${key}`}
             >
               <span className="min-w-0 flex-1 truncate">{key}</span>
               {computedNames.has(key) && <span className="rounded bg-violet-50 px-1 text-[8px] font-bold text-violet-600">FX</span>}
               {sortBy === key && (sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}
             </button>
-            <button type="button" onClick={() => togglePinnedColumn(key)} aria-label={`${pinnedColumns.includes(key) ? 'Unpin' : 'Pin'} ${key}`} title={`${pinnedColumns.includes(key) ? 'Unpin' : 'Pin'} ${key}`} className="h-7 w-0 overflow-hidden rounded-md border-0 bg-white p-0 text-slate-400 opacity-0 transition-all hover:text-slate-700 focus-visible:w-7 focus-visible:border focus-visible:border-slate-200 focus-visible:opacity-100 group-hover/column:w-7 group-hover/column:border group-hover/column:border-slate-200 group-hover/column:p-1.5 group-hover/column:opacity-100">
+            <button type="button" onClick={() => togglePinnedColumn(key)} aria-label={`${pinnedColumns.includes(key) ? 'Unpin' : 'Pin'} ${key}`} title={`${pinnedColumns.includes(key) ? 'Unpin' : 'Pin'} ${key}`} className="pressable h-7 w-0 overflow-hidden rounded-md border-0 bg-white p-0 text-slate-400 opacity-0 transition-colors hover:text-slate-700 focus-visible:w-7 focus-visible:border focus-visible:border-slate-200 focus-visible:opacity-100 group-hover/column:w-7 group-hover/column:border group-hover/column:border-slate-200 group-hover/column:p-1.5 group-hover/column:opacity-100">
               {pinnedColumns.includes(key) ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
             </button>
-            <button type="button" onClick={() => hideColumn(key)} aria-label={`Hide ${key}`} title={`Hide ${key}`} className="h-7 w-0 overflow-hidden rounded-md border-0 bg-white p-0 text-slate-400 opacity-0 transition-all hover:text-slate-700 focus-visible:w-7 focus-visible:border focus-visible:border-slate-200 focus-visible:opacity-100 group-hover/column:w-7 group-hover/column:border group-hover/column:border-slate-200 group-hover/column:p-1.5 group-hover/column:opacity-100">
+            <button type="button" onClick={() => hideColumn(key)} aria-label={`Hide ${key}`} title={`Hide ${key}`} className="pressable h-7 w-0 overflow-hidden rounded-md border-0 bg-white p-0 text-slate-400 opacity-0 transition-colors hover:text-slate-700 focus-visible:w-7 focus-visible:border focus-visible:border-slate-200 focus-visible:opacity-100 group-hover/column:w-7 group-hover/column:border group-hover/column:border-slate-200 group-hover/column:p-1.5 group-hover/column:opacity-100">
               <EyeOff className="h-3.5 w-3.5" />
             </button>
             {datasetField && onAddFilter && (
@@ -364,7 +364,7 @@ export const DataTable = ({
           </div>
           {showHistograms && (
             <div className="relative">
-              <button type="button" onClick={() => moveColumn(key, -1)} disabled={orderedColumns.indexOf(key) === 0} aria-label={`Move ${key} left`} title="Move column left" className="absolute -left-2.5 top-1/2 z-10 -translate-y-1/2 rounded-full border border-slate-200 bg-white p-1 text-slate-500 opacity-0 shadow-sm transition-opacity hover:bg-slate-100 disabled:hidden group-hover/column:opacity-100 focus-visible:opacity-100">
+              <button type="button" onClick={() => moveColumn(key, -1)} disabled={orderedColumns.indexOf(key) === 0} aria-label={`Move ${key} left`} title="Move column left" className="pressable absolute -left-2.5 top-1/2 z-10 -translate-y-1/2 rounded-full border border-slate-200 bg-white p-1 text-slate-500 opacity-0 shadow-sm transition-opacity hover:bg-slate-100 disabled:hidden group-hover/column:opacity-100 focus-visible:opacity-100">
                 <ArrowLeft className="h-3 w-3" />
               </button>
               {loading ? (
@@ -374,9 +374,9 @@ export const DataTable = ({
               ) : profile ? (
                 <MiniHistogram profile={profile} activeFilterKeys={activeFilterSet} canFilter={canFilter} onSelect={(bin) => onApplyProfileFilter?.(profile, bin)} />
               ) : (
-                <button type="button" onClick={() => onProfileColumn(key)} className="flex h-[72px] w-full items-center justify-center rounded-md border border-dashed border-slate-200 bg-white text-[10px] font-semibold text-slate-400 hover:border-slate-300 hover:text-slate-600">Load histogram</button>
+                <button type="button" onClick={() => onProfileColumn(key)} className="pressable flex h-[72px] w-full items-center justify-center rounded-md border border-dashed border-slate-200 bg-white text-[10px] font-semibold text-slate-400 hover:border-slate-300 hover:text-slate-600">Load histogram</button>
               )}
-              <button type="button" onClick={() => moveColumn(key, 1)} disabled={orderedColumns.indexOf(key) === orderedColumns.length - 1} aria-label={`Move ${key} right`} title="Move column right" className="absolute -right-2.5 top-1/2 z-10 -translate-y-1/2 rounded-full border border-slate-200 bg-white p-1 text-slate-500 opacity-0 shadow-sm transition-opacity hover:bg-slate-100 disabled:hidden group-hover/column:opacity-100 focus-visible:opacity-100">
+              <button type="button" onClick={() => moveColumn(key, 1)} disabled={orderedColumns.indexOf(key) === orderedColumns.length - 1} aria-label={`Move ${key} right`} title="Move column right" className="pressable absolute -right-2.5 top-1/2 z-10 -translate-y-1/2 rounded-full border border-slate-200 bg-white p-1 text-slate-500 opacity-0 shadow-sm transition-opacity hover:bg-slate-100 disabled:hidden group-hover/column:opacity-100 focus-visible:opacity-100">
                 <ArrowRight className="h-3 w-3" />
               </button>
             </div>
@@ -390,7 +390,7 @@ export const DataTable = ({
               event.stopPropagation();
               setResizing({ column: key, startX: event.clientX, startWidth: widthForColumn(key) });
             }}
-            className="absolute -right-1 top-0 z-20 h-full w-2 cursor-col-resize opacity-0 hover:bg-slate-300/60 group-hover/column:opacity-100"
+            className="pressable absolute -right-1 top-0 z-20 h-full w-2 cursor-col-resize opacity-0 hover:bg-slate-300/60 group-hover/column:opacity-100"
           />
         </div>
       );
@@ -458,29 +458,29 @@ export const DataTable = ({
             placeholder="Search every field…"
             className="h-8 w-full rounded-md border border-slate-200 bg-white pl-7 pr-7 text-xs outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
           />
-          {search && <button type="button" onClick={() => onSearchChange('')} aria-label="Clear search" className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"><X className="h-3.5 w-3.5" /></button>}
+          {search && <button type="button" onClick={() => onSearchChange('')} aria-label="Clear search" className="pressable absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"><X className="h-3.5 w-3.5" /></button>}
         </label>
 
-        <button type="button" aria-pressed={showHistograms} onClick={() => setShowHistograms((current) => !current)} className={cn('inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-[11px] font-bold', showHistograms ? 'border-slate-800 bg-slate-800 text-white' : 'border-slate-200 bg-white text-slate-600')}>
+        <button type="button" aria-pressed={showHistograms} onClick={() => setShowHistograms((current) => !current)} className={cn('pressable inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-[11px] font-bold', showHistograms ? 'border-slate-800 bg-slate-800 text-white' : 'border-slate-200 bg-white text-slate-600')}>
           <BarChart3 className="h-3.5 w-3.5" /> Histograms
         </button>
 
         <div className="relative">
-          <button type="button" aria-expanded={showFieldMenu} onClick={() => setShowFieldMenu((current) => !current)} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[11px] font-bold text-slate-600 hover:bg-slate-100">
+          <button type="button" aria-expanded={showFieldMenu} onClick={() => setShowFieldMenu((current) => !current)} className="pressable inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[11px] font-bold text-slate-600 hover:bg-slate-100">
             <Columns3 className="h-3.5 w-3.5" /> Fields <span className="font-normal text-slate-400">{visibleColumnNames.length}/{keys.length}</span>
           </button>
           {showFieldMenu && (
             <div className="absolute right-0 top-9 z-40 w-72 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl">
               <div className="flex items-center justify-between border-b bg-slate-50 px-3 py-2">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Visible fields</span>
-                <button type="button" onClick={() => { setColumnOrder(keys); setHiddenColumns([]); setPinnedColumns([]); setColumnWidths({}); }} className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-500 hover:text-slate-800"><RotateCcw className="h-3 w-3" /> Reset</button>
+                <button type="button" onClick={() => { setColumnOrder(keys); setHiddenColumns([]); setPinnedColumns([]); setColumnWidths({}); }} className="pressable inline-flex items-center gap-1 text-[10px] font-semibold text-slate-500 hover:text-slate-800"><RotateCcw className="h-3 w-3" /> Reset</button>
               </div>
               <div className="max-h-72 overflow-auto p-1.5">
                 {orderedColumns.map((column) => {
                   const hidden = hiddenColumns.includes(column);
                   return (
                     <div key={column} className="flex items-center gap-1 rounded px-1.5 py-1 hover:bg-slate-50">
-                      <button type="button" aria-label={`${hidden ? 'Show' : 'Hide'} ${column}`} onClick={() => setHiddenColumns((current) => hidden ? current.filter((item) => item !== column) : [...current, column])} className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
+                      <button type="button" aria-label={`${hidden ? 'Show' : 'Hide'} ${column}`} onClick={() => setHiddenColumns((current) => hidden ? current.filter((item) => item !== column) : [...current, column])} className="pressable rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
                         {hidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                       </button>
                       <span className={cn('min-w-0 flex-1 truncate text-xs', hidden ? 'text-slate-400' : 'font-semibold text-slate-700')} title={column}>{column}</span>
@@ -494,18 +494,18 @@ export const DataTable = ({
 
         {onSetSelection && (
           <div className="relative">
-            <button type="button" aria-expanded={showSelectionMenu} onClick={() => setShowSelectionMenu((current) => !current)} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[11px] font-bold text-slate-600 hover:bg-slate-100">
+            <button type="button" aria-expanded={showSelectionMenu} onClick={() => setShowSelectionMenu((current) => !current)} className="pressable inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[11px] font-bold text-slate-600 hover:bg-slate-100">
               <ListChecks className="h-3.5 w-3.5" /> Select
             </button>
             {showSelectionMenu && (
               <div className="absolute right-0 top-9 z-40 w-56 rounded-lg border border-slate-200 bg-white p-1.5 shadow-xl">
-                <button type="button" onClick={() => onSetSelection([...new Set([...selectedFeatureIds, ...selectableIds])])} className="flex w-full items-center rounded px-2 py-1.5 text-left text-xs font-semibold text-slate-600 hover:bg-slate-50">Select visible page</button>
-                <button type="button" onClick={onSelectAllFiltered} disabled={isSelectionActionLoading} className="flex w-full items-center rounded px-2 py-1.5 text-left text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40">Select all filtered rows</button>
-                <button type="button" onClick={onInvertSelection} disabled={isSelectionActionLoading} className="flex w-full items-center rounded px-2 py-1.5 text-left text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40">Invert filtered selection</button>
-                <button type="button" onClick={onClearSelection} disabled={!selectedFeatureIds.length} className="flex w-full items-center rounded px-2 py-1.5 text-left text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40">Clear selection</button>
+                <button type="button" onClick={() => onSetSelection([...new Set([...selectedFeatureIds, ...selectableIds])])} className="pressable flex w-full items-center rounded px-2 py-1.5 text-left text-xs font-semibold text-slate-600 hover:bg-slate-50">Select visible page</button>
+                <button type="button" onClick={onSelectAllFiltered} disabled={isSelectionActionLoading} className="pressable flex w-full items-center rounded px-2 py-1.5 text-left text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40">Select all filtered rows</button>
+                <button type="button" onClick={onInvertSelection} disabled={isSelectionActionLoading} className="pressable flex w-full items-center rounded px-2 py-1.5 text-left text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40">Invert filtered selection</button>
+                <button type="button" onClick={onClearSelection} disabled={!selectedFeatureIds.length} className="pressable flex w-full items-center rounded px-2 py-1.5 text-left text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40">Clear selection</button>
                 <div className="my-1 border-t border-slate-100" />
-                <button type="button" onClick={onCreateSelectionLayer} disabled={!selectedFeatureIds.length} className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40"><Layers className="h-3.5 w-3.5" /> Selection as layer</button>
-                <button type="button" onClick={onCreateSelectionFilterNode} disabled={!selectedFeatureIds.length} className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40"><GitBranch className="h-3.5 w-3.5" /> Selection as filter node</button>
+                <button type="button" onClick={onCreateSelectionLayer} disabled={!selectedFeatureIds.length} className="pressable flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40"><Layers className="h-3.5 w-3.5" /> Selection as layer</button>
+                <button type="button" onClick={onCreateSelectionFilterNode} disabled={!selectedFeatureIds.length} className="pressable flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40"><GitBranch className="h-3.5 w-3.5" /> Selection as filter node</button>
               </div>
             )}
           </div>
@@ -513,7 +513,7 @@ export const DataTable = ({
 
         {onSaveView && (
           <div className="relative">
-            <button type="button" aria-expanded={showViewsMenu} onClick={() => setShowViewsMenu((current) => !current)} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[11px] font-bold text-slate-600 hover:bg-slate-100">
+            <button type="button" aria-expanded={showViewsMenu} onClick={() => setShowViewsMenu((current) => !current)} className="pressable inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[11px] font-bold text-slate-600 hover:bg-slate-100">
               <Bookmark className="h-3.5 w-3.5" /> Views {savedViews.length > 0 && <span className="text-slate-400">{savedViews.length}</span>}
             </button>
             {showViewsMenu && (
@@ -522,14 +522,14 @@ export const DataTable = ({
                   <input value={viewName} onChange={(event) => setViewName(event.target.value)} onKeyDown={(event) => {
                     if (event.key === 'Enter' && viewName.trim()) { onSaveView(viewName.trim(), currentLayout); setViewName(''); }
                   }} placeholder="Name this view…" aria-label="Table view name" className="h-7 min-w-0 flex-1 rounded border border-slate-200 px-2 text-xs outline-none focus:border-slate-400" />
-                  <button type="button" disabled={!viewName.trim()} onClick={() => { onSaveView(viewName.trim(), currentLayout); setViewName(''); }} className="inline-flex h-7 items-center gap-1 rounded bg-slate-900 px-2 text-[10px] font-bold text-white disabled:opacity-40"><Save className="h-3 w-3" /> Save</button>
+                  <button type="button" disabled={!viewName.trim()} onClick={() => { onSaveView(viewName.trim(), currentLayout); setViewName(''); }} className="pressable inline-flex h-7 items-center gap-1 rounded bg-slate-900 px-2 text-[10px] font-bold text-white disabled:opacity-40"><Save className="h-3 w-3" /> Save</button>
                 </div>
                 <div className="max-h-64 overflow-auto p-1.5">
                   {!savedViews.length && <div className="px-2 py-4 text-center text-xs italic text-slate-400">No saved views</div>}
                   {savedViews.map((view) => (
                     <div key={view.id} className="flex items-center gap-1 rounded hover:bg-slate-50">
-                      <button type="button" onClick={() => onApplyView?.(view.id)} className="min-w-0 flex-1 truncate px-2 py-1.5 text-left text-xs font-semibold text-slate-700" title={view.name}>{view.name}</button>
-                      <button type="button" onClick={() => onDeleteView?.(view.id)} aria-label={`Delete view ${view.name}`} className="rounded p-1.5 text-slate-400 hover:text-rose-600"><Trash2 className="h-3 w-3" /></button>
+                      <button type="button" onClick={() => onApplyView?.(view.id)} className="pressable min-w-0 flex-1 truncate px-2 py-1.5 text-left text-xs font-semibold text-slate-700" title={view.name}>{view.name}</button>
+                      <button type="button" onClick={() => onDeleteView?.(view.id)} aria-label={`Delete view ${view.name}`} className="pressable rounded p-1.5 text-slate-400 hover:text-rose-600"><Trash2 className="h-3 w-3" /></button>
                     </div>
                   ))}
                 </div>
@@ -542,11 +542,11 @@ export const DataTable = ({
           <div className="flex h-8 items-center overflow-hidden rounded-md border border-orange-200 bg-orange-50 text-[11px] font-bold text-orange-700">
             <span className="px-2.5">{selectedFeatureIds.length.toLocaleString()} selected</span>
             {onZoomSelection && (
-              <button type="button" onClick={onZoomSelection} disabled={isZoomingSelection} className="flex h-full items-center gap-1 border-l border-orange-200 px-2 hover:bg-orange-100 disabled:opacity-50" title="Zoom map to selected rows">
+              <button type="button" onClick={onZoomSelection} disabled={isZoomingSelection} className="pressable flex h-full items-center gap-1 border-l border-orange-200 px-2 hover:bg-orange-100 disabled:opacity-50" title="Zoom map to selected rows">
                 <LocateFixed className="h-3.5 w-3.5" /> Zoom
               </button>
             )}
-            <button type="button" onClick={onClearSelection} className="flex h-full items-center border-l border-orange-200 px-2 hover:bg-orange-100" aria-label="Clear selection" title="Clear map and table selection"><X className="h-3 w-3" /></button>
+            <button type="button" onClick={onClearSelection} className="pressable flex h-full items-center border-l border-orange-200 px-2 hover:bg-orange-100" aria-label="Clear selection" title="Clear map and table selection"><X className="h-3 w-3" /></button>
           </div>
         )}
       </div>
@@ -674,8 +674,8 @@ export const DataTable = ({
             </select>
           </label>
           <span>Page {pageIndex + 1} of {pageCount}</span>
-          <button type="button" onClick={() => onPageChange(Math.max(0, pageIndex - 1))} disabled={pageIndex === 0} className="rounded border border-slate-200 bg-white px-2 py-1 font-bold disabled:opacity-30">Prev</button>
-          <button type="button" onClick={() => onPageChange(Math.min(pageCount - 1, pageIndex + 1))} disabled={pageIndex >= pageCount - 1} className="rounded border border-slate-200 bg-white px-2 py-1 font-bold disabled:opacity-30">Next</button>
+          <button type="button" onClick={() => onPageChange(Math.max(0, pageIndex - 1))} disabled={pageIndex === 0} className="pressable rounded border border-slate-200 bg-white px-2 py-1 font-bold disabled:opacity-30">Prev</button>
+          <button type="button" onClick={() => onPageChange(Math.min(pageCount - 1, pageIndex + 1))} disabled={pageIndex >= pageCount - 1} className="pressable rounded border border-slate-200 bg-white px-2 py-1 font-bold disabled:opacity-30">Next</button>
         </div>
       </footer>
     </div>

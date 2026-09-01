@@ -137,7 +137,7 @@ const DistributionPreview = ({
             })
           }
           className={cn(
-            "grid w-full grid-cols-[minmax(0,1fr)_56px] items-center gap-2 rounded px-1 py-0.5 text-left text-[11px]",
+            "pressable grid w-full grid-cols-[minmax(0,1fr)_56px] items-center gap-2 rounded px-1 py-0.5 text-left text-[11px]",
             activeFilterKeys.has(`${field}:category:${category.value}`)
               ? "bg-orange-50 text-orange-700 ring-1 ring-orange-200"
               : "hover:bg-slate-50",
@@ -771,7 +771,7 @@ export const VisualisationPanel = ({
               <button
                 type="button"
                 onClick={onBack}
-                className="rounded-md p-1 text-slate-500 transition-colors hover:bg-slate-200/60 hover:text-slate-700"
+                className="pressable rounded-md p-1 text-slate-500 transition-colors hover:bg-slate-200/60 hover:text-slate-700"
                 title="Back to layers"
               >
                 <ChevronLeft className="h-3.5 w-3.5" />
@@ -809,7 +809,7 @@ export const VisualisationPanel = ({
                 }
                 clearLayerVisualisation(selectedLayer.id);
               }}
-              className="rounded-md border border-slate-200 bg-white p-1.5 text-slate-500 hover:bg-slate-50"
+              className="pressable rounded-md border border-slate-200 bg-white p-1.5 text-slate-500 hover:bg-slate-50"
               title="Reset style"
             >
               <Eraser className="h-3.5 w-3.5" />
@@ -1321,7 +1321,7 @@ export const VisualisationPanel = ({
                     })
                     .finally(() => setHexbinGenerating(false));
                 }}
-                className="flex h-7 w-full items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-2 text-[11px] font-semibold uppercase tracking-wide text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                className="pressable flex h-7 w-full items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-2 text-[11px] font-semibold uppercase tracking-wide text-slate-600 hover:bg-slate-50 disabled:opacity-40"
               >
                 {hexbinGenerating ? "Generating…" : "Regenerate hexbins"}
               </button>
@@ -1467,7 +1467,7 @@ export const VisualisationPanel = ({
                       .catch(() => {})
                       .finally(() => setDotDensityGenerating(false));
                   }}
-                  className="flex h-7 w-full items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-2 text-[11px] font-semibold uppercase tracking-wide text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                  className="pressable flex h-7 w-full items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-2 text-[11px] font-semibold uppercase tracking-wide text-slate-600 hover:bg-slate-50 disabled:opacity-40"
                 >
                   {dotDensityGenerating ? "Generating..." : "Regenerate dots"}
                 </button>
@@ -1649,7 +1649,7 @@ export const VisualisationPanel = ({
                       disabled={
                         !temporalField || (!temporalStart && !temporalEnd)
                       }
-                      className="mt-2 w-full rounded-md border border-slate-200 bg-slate-900 px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-white disabled:cursor-not-allowed disabled:opacity-40"
+                      className="pressable mt-2 w-full rounded-md border border-slate-200 bg-slate-900 px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-white disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       Apply Date Range
                     </button>

@@ -6,6 +6,7 @@ import { LayersTab } from './LayersTab';
 import { NodePalette } from './NodePalette';
 import { CohortPanel } from '../Visualisation/CohortPanel';
 import { ScorePanel } from '../Score/ScorePanel';
+import { ScenarioPanel } from '../Scenarios/ScenarioPanel';
 import { ToolboxPanel } from '../Operations/ToolboxPanel';
 import { cn } from '../../utils/cn';
 
@@ -74,6 +75,10 @@ export const LeftPanel = () => {
         ) : activeRailTab === 'score' ? (
           <ErrorBoundary name="Score Panel">
             <ScorePanel />
+          </ErrorBoundary>
+        ) : activeRailTab === 'scenarios' ? (
+          <ErrorBoundary name="Scenarios">
+            <ScenarioPanel />
           </ErrorBoundary>
         ) : activeRailTab === 'operations' ? (
           <ErrorBoundary>

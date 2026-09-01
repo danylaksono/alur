@@ -46,7 +46,7 @@ export const ConstraintFunnelStrip = ({ nodeId, predicates }: { nodeId: string; 
           type="button"
           onClick={run}
           disabled={busy}
-          className="flex items-center gap-1 rounded px-1 text-[10px] font-bold text-amber-700 hover:bg-amber-50 disabled:opacity-50"
+          className="pressable flex items-center gap-1 rounded px-1 text-[10px] font-bold text-amber-700 hover:bg-amber-50 disabled:opacity-50"
         >
           {busy && <Loader2 className="h-2.5 w-2.5 animate-spin" />}
           {funnel ? 'Recheck' : 'Check'}
