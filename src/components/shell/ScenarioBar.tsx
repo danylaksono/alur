@@ -97,6 +97,14 @@ export const ScenarioBar = () => {
       >
         <GitBranch className="h-3 w-3" /> Branch
       </button>
+
+      {/* A scenario with no result shows the baseline, and saying so is better
+          than letting the analyst read baseline numbers as this scenario's. */}
+      {active && !active.workflowOutputDatasetId && (
+        <span className="ml-auto shrink-0 whitespace-nowrap rounded-full bg-amber-50 px-2 py-1 text-[9px] font-semibold text-amber-700">
+          Not run — showing baseline
+        </span>
+      )}
     </div>
   );
 };

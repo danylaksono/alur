@@ -62,6 +62,7 @@ import {
   type HistoryAction,
 } from "./analysisHistory";
 import type { ProvenanceEvent } from "../types/provenance";
+import { scenarioLayerVisibility } from "../utils/scenarioResolution";
 import {
   appendProvenanceEvent,
   createProvenanceEvent,
@@ -1776,12 +1777,43 @@ export const useStore = create<AppState>()(
         })),
 
       setActiveVariant: (variantId) =>
-        set((state) => ({
-          visualAnalytics: {
-            ...state.visualAnalytics,
-            activeVariantId: variantId,
-          },
-        })),
+        set((state) => {
+          // Standing in a scenario has to be visible, or the bar is claiming a
+          // state the workspace does not actually have. The active scenario's
+          // result is shown and every other scenario's result gets out of the
+          // way; layers no scenario produced keep whatever the analyst set.
+          const changes = scenarioLayerVisibility(
+            state.mapLayers,
+            state.visualAnalytics.variants,
+            variantId,
+          );
+          const shown = new Map(changes.map((change) => [change.id, change.visible]));
+          const variant = state.visualAnalytics.variants.find(
+            (item) => item.id === variantId,
+          );
+          const output = variant?.workflowOutputDatasetId;
+
+          return {
+            visualAnalytics: {
+              ...state.visualAnalytics,
+              activeVariantId: variantId,
+            },
+            mapLayers: shown.size
+              ? state.mapLayers.map((layer) =>
+                  shown.has(layer.id)
+                    ? { ...layer, visible: shown.get(layer.id)! }
+                    : layer,
+                )
+              : state.mapLayers,
+            // Follow the result into the table and the inspector too, but only
+            // when there is one — pointing them at a scenario that has not run
+            // would empty both to make a point.
+            selectedLayerId:
+              output && state.mapLayers.some((layer) => layer.id === output)
+                ? output
+                : state.selectedLayerId,
+          };
+        }),
 
       onNodesChange: (changes) => {
         const removedNodeIds = new Set(
@@ -3503,13 +3535,42 @@ export const useStore = create<AppState>()(
             previous &&
             typeof patch.name === "string" &&
             patch.name !== previous.name;
+
+          const variants = state.visualAnalytics.variants.map((variant) =>
+            variant.id === variantId ? { ...variant, ...patch } : variant,
+          );
+
+          // A run is the only way a scenario acquires a result, and it arrives
+          // here. Reconciling now means a sweep leaves exactly the scenario
+          // being stood in on the map, rather than every run's output stacked on
+          // top of the last.
+          const gainedResult =
+            typeof patch.workflowOutputDatasetId === "string" &&
+            patch.workflowOutputDatasetId !== previous?.workflowOutputDatasetId;
+          const shown = gainedResult
+            ? new Map(
+                scenarioLayerVisibility(
+                  state.mapLayers,
+                  variants,
+                  state.visualAnalytics.activeVariantId,
+                ).map((change) => [change.id, change.visible]),
+              )
+            : new Map<string, boolean>();
+
           return {
             visualAnalytics: {
               ...state.visualAnalytics,
-              variants: state.visualAnalytics.variants.map((variant) =>
-                variant.id === variantId ? { ...variant, ...patch } : variant,
-              ),
+              variants,
             },
+            ...(shown.size
+              ? {
+                  mapLayers: state.mapLayers.map((layer) =>
+                    shown.has(layer.id)
+                      ? { ...layer, visible: shown.get(layer.id)! }
+                      : layer,
+                  ),
+                }
+              : {}),
             analysisHistory: recordCurrentAnalysis(state, {
               label: "Edit scenario",
               coalesceKey: `variant:${variantId}`,
