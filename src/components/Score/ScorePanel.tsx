@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Loader2, Plus, SlidersHorizontal, Workflow, X } from 'lucide-react';
+import { Loader2, Plus, SlidersHorizontal, X } from 'lucide-react';
 import { useStore, type WorkflowNode } from '../../store/useStore';
-import type { ScoreCriterion, ScoreModelSpec } from '../../types/visualAnalytics';
+import type { ScoreCriterion, ScoreModelSpec, VariantOperation } from '../../types/visualAnalytics';
+import { AddToScenario, scenarioBaseName } from '../Scenarios/AddToScenario';
 import {
   equalWeightedScoreModel,
   normalisedWeights,
@@ -34,7 +35,6 @@ export const ScorePanel = () => {
   const addNode = useStore((state) => state.addNode);
   const onConnect = useStore((state) => state.onConnect);
   const addToast = useStore((state) => state.addToast);
-  const navigate = useStore((state) => state.navigate);
   const mapLayers = useStore((state) => state.mapLayers);
 
   const datasetList = useMemo(() => Object.values(datasets), [datasets]);
@@ -112,28 +112,50 @@ export const ScorePanel = () => {
     setSpec((current) => ({ ...current, criteria: [...current.criteria, { field: next, weight: 1, direction: 'higher', normalisation: 'min-max' }] }));
   };
 
-  const sendToWorkflow = () => {
-    if (!dataset || errors.length) return;
+  /**
+   * Put this score on the canvas, scoped to a scenario.
+   *
+   * Returns the node id rather than toasting, because the caller owns the
+   * account of what happened — the node is half of an "added to scenario X",
+   * not an event in its own right.
+   */
+  const emitScoreNode = (variantId: string) => {
+    if (!dataset || errors.length) return null;
     const nodeId = `score-${Date.now()}`;
     const node: WorkflowNode = {
       id: nodeId,
       type: 'score',
       position: nextNodePosition(useStore.getState().nodes),
-      data: { label: 'Composite score', type: 'score', config: { scoreModel: structuredClone(spec), resultField: 'alur_score', includeContributions: true } },
+      data: {
+        label: 'Composite score',
+        type: 'score',
+        config: { scoreModel: structuredClone(spec), resultField: 'alur_score', includeContributions: true, variantId },
+      },
     } as WorkflowNode;
     addNode(node);
     const sourceNodeId = dataset.source.kind === 'workflow-node'
       ? dataset.source.nodeId
       : mapLayers.find((layer) => layer.id === dataset.id)?.sourceNodeId;
     if (sourceNodeId) onConnect({ source: sourceNodeId, target: nodeId, sourceHandle: null, targetHandle: null });
-    navigate('workflow');
-    addToast({
-      type: sourceNodeId ? 'success' : 'warning',
-      message: sourceNodeId
-        ? 'Added this score to the workflow. Run it to keep the result.'
-        : 'Added this score to the workflow, but its source node could not be found — connect it by hand.',
-    });
+    // A node with no upstream cannot run, and that is worth saying now rather
+    // than at execution time.
+    if (!sourceNodeId) {
+      addToast({ type: 'warning', message: 'The score node could not find its source — connect it by hand.' });
+    }
+    return nodeId;
   };
+
+  const scoreOperation = (): VariantOperation => ({
+    id: `operation-${Date.now()}`,
+    type: 'weighted-score',
+    parameters: { scoreModel: structuredClone(spec), resultField: 'alur_score' },
+    assumptions: [
+      `Weighted across ${spec.criteria.length} ${spec.criteria.length === 1 ? 'criterion' : 'criteria'}.`,
+      spec.missingValueTreatment === 'zero'
+        ? 'Missing numeric values contribute zero.'
+        : 'Missing numeric values are substituted with the column mean.',
+    ],
+  });
 
   if (!datasetList.length) {
     return <div className="p-4 text-xs leading-5 text-slate-500">Load a dataset to build a score.</div>;
@@ -387,17 +409,14 @@ export const ScorePanel = () => {
       </div>
 
       <div className="shrink-0 border-t bg-slate-50 p-3">
-        <button
-          type="button"
-          onClick={sendToWorkflow}
+        <AddToScenario
           disabled={Boolean(errors.length) || !dataset}
-          className="pressable flex w-full items-center justify-center gap-1.5 rounded-lg bg-slate-900 py-2 text-[10px] font-bold text-white hover:bg-black disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          <Workflow className="h-3.5 w-3.5" /> Add this score to the workflow
-        </button>
-        <p className="mt-1.5 text-center text-[9px] leading-4 text-slate-500">
-          The panel previews; the workflow node keeps the result and feeds the rest of the pipeline.
-        </p>
+          baselineDatasetId={dataset?.id || ''}
+          defaultName={dataset ? `${scenarioBaseName(dataset.name)} prioritisation` : 'Prioritisation'}
+          buildOperation={scoreOperation}
+          emitNode={emitScoreNode}
+          hint="The panel previews; the scenario keeps the result."
+        />
       </div>
     </div>
   );

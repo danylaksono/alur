@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Bookmark, Copy, GitBranch, Loader2, Plus, Save, Trash2, Users, X } from 'lucide-react';
+import { Bookmark, Copy, Loader2, Plus, Save, Trash2, Users, X } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { materializeLayerSelection, queryCohortComparison } from '../../services/visualAnalyticsService';
 import type { AnalyticalBookmark, CohortComparisonResult, CohortSpec } from '../../types/visualAnalytics';
 import { nextNodePosition } from '../../utils/nodePlacement';
 import { compileVisualFiltersWhereClause } from '../../utils/visualFilterSql';
+import { AddToScenario } from '../Scenarios/AddToScenario';
 
 const COHORT_COLOURS = ['#0284c7', '#f97316', '#16a34a', '#db2777', '#7c3aed', '#0891b2'];
 const format = (value: number | null, digits = 2) => value === null ? 'n/a' : value.toLocaleString(undefined, { maximumFractionDigits: digits });
@@ -68,6 +69,9 @@ export const CohortPanel = () => {
   const [isSavingSelection, setSavingSelection] = useState(false);
   const [comparisonResult, setComparisonResult] = useState<CohortComparisonResult | null>(null);
   const [comparisonError, setComparisonError] = useState<string | null>(null);
+  const [addCohortId, setAddCohortId] = useState('');
+  const filterCohorts = cohorts.filter((cohort) => cohort.definition.kind === 'filters');
+  const cohortToAdd = filterCohorts.find((cohort) => cohort.id === addCohortId) || filterCohorts[0];
   const [isComparing, setComparing] = useState(false);
   const [bookmarkName, setBookmarkName] = useState('');
   const [bookmarkNote, setBookmarkNote] = useState('');
@@ -121,13 +125,19 @@ export const CohortPanel = () => {
     setComparison({ datasetId: layer.id, cohortAId, cohortBId: cohortBId === 'remainder' ? undefined : cohortBId, compareToRemainder: cohortBId === 'remainder' });
   };
 
-  const createFilterNode = (cohort: CohortSpec) => {
-    if (cohort.definition.kind !== 'filters') return;
+  /**
+   * Put a cohort on the canvas as a filter, scoped to a scenario.
+   *
+   * Returns the node id and says nothing: the node is half of "added cohort X to
+   * scenario Y", and the footer owns that sentence.
+   */
+  const emitFilterNode = (cohort: CohortSpec, variantId: string) => {
+    if (cohort.definition.kind !== 'filters') return null;
     const id = `filter-${Date.now()}`;
     const condition = compileVisualFiltersWhereClause(cohort.definition.filters).replace(/^WHERE\s+/i, '') || 'TRUE';
-    addNode({ id, type: 'filter', position: nextNodePosition(useStore.getState().nodes), data: { label: cohort.name, type: 'filter', config: { condition, cohortId: cohort.id } } });
+    addNode({ id, type: 'filter', position: nextNodePosition(useStore.getState().nodes), data: { label: cohort.name, type: 'filter', config: { condition, cohortId: cohort.id, variantId } } });
     if (layer?.sourceNodeId) onConnect({ source: layer.sourceNodeId, target: id, sourceHandle: null, targetHandle: null });
-    addToast({ type: 'success', message: `Created a workflow filter node from ${cohort.name}` });
+    return id;
   };
 
   const saveBookmark = () => {
@@ -166,7 +176,6 @@ export const CohortPanel = () => {
           <input type="color" value={cohort.colour} onChange={(event) => updateCohort(cohort.id, { colour: event.target.value })} className="h-5 w-5 cursor-pointer border-0 bg-transparent p-0" aria-label={`Colour for ${cohort.name}`} />
           <input value={cohort.name} onChange={(event) => updateCohort(cohort.id, { name: event.target.value })} className="min-w-0 flex-1 bg-transparent text-[10px] font-semibold text-slate-600 outline-none" aria-label="Cohort name" />
           <span className="rounded bg-slate-100 px-1 text-[8px] uppercase text-slate-400">{cohort.definition.kind === 'filters' ? 'filters' : 'selection'}</span>
-          {cohort.definition.kind === 'filters' && <button type="button" onClick={() => createFilterNode(cohort)} className="pressable rounded p-1 text-slate-400 hover:bg-slate-100" title="Create workflow filter node"><GitBranch className="h-3 w-3" /></button>}
           <button type="button" onClick={() => duplicateCohort(cohort.id)} className="pressable rounded p-1 text-slate-400 hover:bg-slate-100" title="Duplicate cohort"><Copy className="h-3 w-3" /></button>
           <button type="button" onClick={() => removeCohort(cohort.id)} className="pressable rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600" title="Remove cohort"><Trash2 className="h-3 w-3" /></button>
         </div>)}
@@ -181,6 +190,25 @@ export const CohortPanel = () => {
         {comparisonError && <div className="rounded bg-rose-50 px-2 py-1.5 text-[10px] text-rose-600">{comparisonError}</div>}
       </div>}
       {comparisonResult && cohortA && <ComparisonResult result={comparisonResult} cohortA={cohortA} cohortB={cohortB} />}
+
+      {filterCohorts.length > 0 && layer && <div className="space-y-1.5 border-t bg-slate-50/60 px-3 py-2.5">
+        <select value={addCohortId} onChange={(event) => setAddCohortId(event.target.value)} aria-label="Cohort to add" className="h-7 w-full rounded border border-slate-200 bg-white px-1.5 text-[10px] text-slate-700">
+          {filterCohorts.map((cohort) => <option key={cohort.id} value={cohort.id}>{cohort.name}</option>)}
+        </select>
+        <AddToScenario
+          disabled={!cohortToAdd}
+          baselineDatasetId={layer.id}
+          defaultName={cohortToAdd ? `${cohortToAdd.name} scenario` : 'Cohort scenario'}
+          buildOperation={() => ({
+            id: `operation-${Date.now()}`,
+            type: 'ranked-selection',
+            parameters: { cohortId: cohortToAdd!.id, cohortName: cohortToAdd!.name, datasetId: layer.id },
+            assumptions: [`Restricted to ${cohortToAdd!.name}.`],
+          })}
+          emitNode={(variantId) => (cohortToAdd ? emitFilterNode(cohortToAdd, variantId) : null)}
+          hint="Adds the cohort to the scenario as a filter step."
+        />
+      </div>}
 
       <div className="border-t px-3 py-2"><h3 className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500"><Bookmark className="h-3.5 w-3.5" /> Bookmarks</h3></div>
       <div className="space-y-2 px-3 pb-3">
