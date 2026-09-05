@@ -1,4 +1,4 @@
-import { BoxSelect, Camera, Check, Crosshair, Expand, Home, Loader2, LocateFixed, Map as MapIcon, Minus, MousePointer2, Plus } from 'lucide-react';
+import { BoxSelect, Camera, Check, Crosshair, Expand, Home, Loader2, LocateFixed, Map as MapIcon, Minus, MousePointer2, Navigation, Plus, Scan } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '../../utils/cn';
 import { BASEMAPS } from '../../utils/basemaps';
@@ -8,9 +8,14 @@ import { pinMapEvidence } from '../../services/explainCapture';
 export const MapInteractionToolbar = ({
   selectionMode,
   hasLayer,
+  hasSelection,
   coordinates,
+  bearing,
+  pitch,
   onToggleSelection,
   onHome,
+  onZoomSelection,
+  onResetNorth,
   onCopyCoordinates,
   onZoomIn,
   onZoomOut,
@@ -19,9 +24,14 @@ export const MapInteractionToolbar = ({
 }: {
   selectionMode: boolean;
   hasLayer: boolean;
+  hasSelection: boolean;
   coordinates: string;
+  bearing: number;
+  pitch: number;
   onToggleSelection: () => void;
   onHome: () => void;
+  onZoomSelection: () => void;
+  onResetNorth: () => void;
   onCopyCoordinates: () => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
@@ -30,6 +40,9 @@ export const MapInteractionToolbar = ({
 }) => {
   const [basemapsOpen, setBasemapsOpen] = useState(false);
   const [isPinning, setPinning] = useState(false);
+  // Only surfaced once the map is actually off north or tilted: an always-on
+  // compass reading 0° is chrome that never earns its square.
+  const isOriented = Math.abs(bearing) >= 0.5 || pitch >= 0.5;
   const selectedBasemapId = useStore((state) => state.selectedBasemapId);
   const setSelectedBasemapId = useStore((state) => state.setSelectedBasemapId);
   return (
@@ -43,6 +56,22 @@ export const MapInteractionToolbar = ({
       <button type="button" onClick={onHome} disabled={!hasLayer} aria-label="Zoom to active layer" title="Zoom to active layer" className="pressable flex h-9 w-9 items-center justify-center border-b border-slate-100 text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-35">
         <Home className="h-4 w-4" />
       </button>
+      <button type="button" onClick={onZoomSelection} disabled={!hasSelection} aria-label="Zoom to selection" title="Zoom to selection" className="pressable flex h-9 w-9 items-center justify-center border-b border-slate-100 text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-35">
+        <Scan className="h-4 w-4" />
+      </button>
+      {isOriented && (
+        <button
+          type="button"
+          onClick={onResetNorth}
+          aria-label={`Reset bearing to north (currently ${Math.round(bearing)} degrees)`}
+          title={`${Math.round(Math.abs(bearing))}° ${bearing >= 0 ? 'east' : 'west'} of north${pitch >= 0.5 ? `, tilted ${Math.round(pitch)}°` : ''} — click to reset`}
+          className="pressable flex h-9 w-9 items-center justify-center border-b border-slate-100 text-slate-600 hover:bg-slate-50"
+        >
+          {/* Rotated against the bearing, so the needle keeps pointing at true
+              north while the map turns underneath it. */}
+          <Navigation className="h-4 w-4 fill-current text-orange-600" style={{ transform: `rotate(${-bearing}deg)` }} />
+        </button>
+      )}
       <button type="button" onClick={onGeolocate} aria-label="Find my location" className="pressable flex h-9 w-9 items-center justify-center border-b border-slate-100 text-slate-600 hover:bg-slate-50"><LocateFixed className="h-4 w-4" /></button>
       <button type="button" onClick={onFullscreen} aria-label="Toggle map fullscreen" className="pressable flex h-9 w-9 items-center justify-center border-b border-slate-100 text-slate-600 hover:bg-slate-50"><Expand className="h-4 w-4" /></button>
       <button
@@ -64,7 +93,7 @@ export const MapInteractionToolbar = ({
       </div>
     )}
     {coordinates && (
-      <button type="button" onClick={onCopyCoordinates} className="pressable pointer-events-auto absolute bottom-9 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-md border border-slate-200 bg-white/90 px-2 py-1 font-mono text-[10px] tabular-nums text-slate-500 shadow-sm backdrop-blur hover:bg-white hover:text-slate-800 md:bottom-2.5" title="Copy pointer coordinates">
+      <button type="button" onClick={onCopyCoordinates} style={{ bottom: 'calc(0.625rem + var(--alur-map-chrome-bottom, 0px))' }} className="pressable pointer-events-auto absolute left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-md border border-slate-200 bg-white/90 px-2 py-1 font-mono text-[10px] tabular-nums text-slate-500 shadow-sm backdrop-blur hover:bg-white hover:text-slate-800" title="Copy pointer coordinates">
         <Crosshair className="h-3 w-3" /> {coordinates}
       </button>
     )}

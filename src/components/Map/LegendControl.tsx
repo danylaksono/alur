@@ -41,18 +41,23 @@ export const LegendControl = ({
   );
   const [searches, setSearches] = useState<Record<string, string>>({});
   const [panelCollapsed, setPanelCollapsed] = useState(false);
-  const hasSelection = Object.values(visualAnalytics.datasets).some(
-    (dataset) => dataset.selectedFeatureIds.length > 0,
-  );
   if (!legends.length) return null;
 
+  // Sits above the selection sheet rather than hiding behind it. The legend
+  // used to remove itself whenever anything was selected, which took the colour
+  // key off screen at the one moment it is being read.
   return (
     <aside
       className={cn(
-        "pointer-events-auto absolute bottom-3 left-3 z-10 max-h-[52%] overflow-y-auto rounded-lg border border-slate-200 bg-white/95 text-[11px] shadow-lg backdrop-blur",
-        hasSelection && "max-xl:hidden",
+        "pointer-events-auto absolute left-3 z-10 overflow-y-auto rounded-lg border border-slate-200 bg-white/95 text-[11px] shadow-lg backdrop-blur",
         panelCollapsed ? "w-auto p-1.5" : "w-72 p-3",
       )}
+      style={{
+        bottom: "calc(0.75rem + var(--alur-map-chrome-bottom, 0px))",
+        // Floored, or an expanded selection sheet squeezes the legend to a
+        // couple of rows. Past that floor it scrolls rather than shrinking.
+        maxHeight: "max(7rem, calc(52% - var(--alur-map-chrome-bottom, 0px)))",
+      }}
       aria-label="Map legends"
     >
       <button

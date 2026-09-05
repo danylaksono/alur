@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useStore } from "../../store/useStore";
+import { useAnalyticsCommands } from "../../hooks/useAnalyticsCommands";
 import { getBasemap } from "../../utils/basemaps";
 import {
   compileLayerStyle,
@@ -248,7 +249,18 @@ export const MapView = () => {
   const [selectionBox, setSelectionBox] = useState<
     [[number, number], [number, number]] | null
   >(null);
+  const executeAnalyticsCommand = useAnalyticsCommands();
+  const runAnalyticsCommand = async (
+    command: Parameters<typeof executeAnalyticsCommand>[0],
+  ) => {
+    const result = await executeAnalyticsCommand(command);
+    if (!result.ok) addToast({ type: "warning", message: result.message });
+  };
   const [coordinates, setCoordinates] = useState("");
+  // Bearing and pitch drive the compass. Tracked locally rather than read from
+  // the store's mapCamera, which only updates on moveend — a compass that
+  // catches up after the gesture ends reads as broken.
+  const [orientation, setOrientation] = useState({ bearing: 0, pitch: 0 });
   const visibleLegends = mapLayers
     .filter((layer) => layer.visible && layer.legend)
     .map((layer) => ({
@@ -320,6 +332,21 @@ export const MapView = () => {
     const clearCoordinates = () => setCoordinates("");
     m.on("mousemove", updateCoordinates);
     m.on("mouseout", clearCoordinates);
+    const updateOrientation = () => {
+      // Normalise to (-180, 180] so the compass needle takes the short way
+      // round and the "off north" test is a simple magnitude check.
+      const raw = m.getBearing() % 360;
+      const bearing = raw > 180 ? raw - 360 : raw <= -180 ? raw + 360 : raw;
+      setOrientation((current) =>
+        Math.abs(current.bearing - bearing) < 0.01 &&
+        Math.abs(current.pitch - m.getPitch()) < 0.01
+          ? current
+          : { bearing, pitch: m.getPitch() },
+      );
+    };
+    m.on("rotate", updateOrientation);
+    m.on("pitch", updateOrientation);
+    updateOrientation();
     const storeCamera = () => {
       const center = m.getCenter();
       useStore.getState().setMapCamera({
@@ -367,6 +394,8 @@ export const MapView = () => {
       cancelAnimationFrame(coordinateFrame);
       m.off("mousemove", updateCoordinates);
       m.off("mouseout", clearCoordinates);
+      m.off("rotate", updateOrientation);
+      m.off("pitch", updateOrientation);
       m.off("moveend", storeCamera);
       locationMarker.current?.remove();
       locationMarker.current = null;
@@ -1554,13 +1583,30 @@ export const MapView = () => {
       <MapInteractionToolbar
         selectionMode={selectionMode}
         hasLayer={mapLayers.some((layer) => layer.visible)}
+        hasSelection={Boolean(
+          selectedLayerId &&
+            visualAnalytics.datasets[selectedLayerId]?.selectedFeatureIds
+              .length,
+        )}
         coordinates={coordinates}
+        bearing={orientation.bearing}
+        pitch={orientation.pitch}
         onToggleSelection={() => setSelectionMode((current) => !current)}
         onHome={() => {
           const layerId =
             selectedLayerId || mapLayers.find((layer) => layer.visible)?.id;
           if (layerId) focusLayer(layerId);
         }}
+        onZoomSelection={() => {
+          if (!selectedLayerId) return;
+          void runAnalyticsCommand({
+            type: "focus-selection",
+            datasetId: selectedLayerId,
+          });
+        }}
+        onResetNorth={() =>
+          map.current?.easeTo({ bearing: 0, pitch: 0, duration: 400 })
+        }
         onZoomIn={() => map.current?.zoomIn({ duration: 180 })}
         onZoomOut={() => map.current?.zoomOut({ duration: 180 })}
         onGeolocate={() => {

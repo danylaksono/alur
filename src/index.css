@@ -184,3 +184,16 @@ body {
     opacity: 0;
   }
 }
+
+/**
+ * MapLibre's own bottom-anchored controls — the scale bar and the attribution —
+ * are positioned by the library inside the map container, so they cannot be
+ * moved from the component that owns the overlay stack. They read the same
+ * offset the legend and coordinate readout do, published by the selection sheet
+ * whenever it is docked over the bottom of the map.
+ */
+.maplibregl-ctrl-bottom-left,
+.maplibregl-ctrl-bottom-right {
+  transition: bottom var(--dur-surface) var(--ease-out);
+  bottom: var(--alur-map-chrome-bottom, 0px);
+}
