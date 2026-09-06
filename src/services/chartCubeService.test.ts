@@ -36,6 +36,7 @@ describe('sliceCube', () => {
       10, 20, // active bin 1
       100, 200, // active bin 2
     ]),
+    scale: 1,
   };
 
   it('sums only the brushed columns', () => {
@@ -51,6 +52,12 @@ describe('sliceCube', () => {
 
   it('does not care which way the brush was dragged', () => {
     expect(sliceCube(cube, 29, 0)).toEqual(sliceCube(cube, 0, 29));
+  });
+
+  it('scales a sampled cube back up to the population', () => {
+    const sampled = { ...cube, scale: 10 };
+    expect(sliceCube(sampled, 0, 9)).toEqual([10, 20]);
+    expect(sliceCube(sampled, 0, 29)).toEqual([1110, 2220]);
   });
 
   it('totals the whole cube when the brush covers everything', () => {

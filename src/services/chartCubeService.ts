@@ -34,7 +34,22 @@ export type ChartCube = {
   activeMax: number;
   /** Row-major: counts[activeBin * passiveBins + passiveBin]. */
   counts: Uint32Array;
+  /**
+   * What to multiply a count by to estimate the population.
+   *
+   * 1 for an exact cube. Above 1 when the cube was built from a sample: a drag
+   * needs the shape of the answer within a frame, not the answer, and the exact
+   * numbers arrive from the ordinary query the moment the brush is committed.
+   */
+  scale: number;
 };
+
+/**
+ * Bins a histogram draws for a chart. The cube must use exactly this, or a
+ * sliced column would land on the wrong bar.
+ */
+export const histogramBinCount = (chart: { maxCategories?: number }) =>
+  Math.max(4, Math.min(24, chart.maxCategories || 12));
 
 const quote = (value: string) => `"${value.replace(/"/g, '""')}"`;
 
@@ -62,18 +77,37 @@ export const sliceCube = (cube: ChartCube, min: number, max: number): number[] =
       out[passive] += cube.counts[row + passive];
     }
   }
-  return out;
+  return cube.scale === 1 ? out : out.map((value) => Math.round(value * cube.scale));
 };
 
-/** Extent of a numeric column, needed before either axis can be binned. */
-const extentOf = async (table: string, field: string, where: string) => {
-  const value = `TRY_CAST(${quote(field)} AS DOUBLE)`;
+/**
+ * Extents for every field at once.
+ *
+ * One pass rather than one per field: the table is the expensive part, and at
+ * five million rows each extra scan was costing as much as the cube itself.
+ */
+const extentsOf = async (table: string, fields: string[], where: string) => {
+  const projections = fields
+    .map((field, index) => {
+      const value = `TRY_CAST(${quote(field)} AS DOUBLE)`;
+      return `MIN(${value}) AS lo_${index}, MAX(${value}) AS hi_${index}`;
+    })
+    .join(', ');
   const result = await duckdbService.query(
-    `SELECT MIN(${value}) AS lo, MAX(${value}) AS hi FROM ${quote(table)} ${where};`,
+    `SELECT ${projections} FROM ${quote(table)} ${where};`,
   );
-  const row = result.toArray()[0];
-  const json = typeof row?.toJSON === 'function' ? row.toJSON() : row;
-  return { min: Number(json?.lo ?? 0), max: Number(json?.hi ?? 0) };
+  const raw = result.toArray()[0];
+  const row = typeof raw?.toJSON === 'function' ? raw.toJSON() : raw;
+  return fields.map((_, index) => ({
+    min: Number(row?.[`lo_${index}`] ?? 0),
+    max: Number(row?.[`hi_${index}`] ?? 0),
+  }));
+};
+
+const binExpression = (field: string, extent: { min: number; max: number }, bins: number) => {
+  const value = `TRY_CAST(${quote(field)} AS DOUBLE)`;
+  const width = extent.max === extent.min ? 1 : (extent.max - extent.min) / bins;
+  return `LEAST(${bins - 1}, GREATEST(0, CAST(FLOOR((${value} - ${extent.min}) / ${width || 1}) AS INTEGER)))`;
 };
 
 /**
@@ -90,7 +124,8 @@ export const buildChartCubes = async ({
   passiveCharts,
   filters,
   activeBins = 64,
-  passiveBins = 24,
+  passiveBins,
+  sampleRate,
 }: {
   tableName: string;
   activeChart: VisualChartSpec;
@@ -98,6 +133,13 @@ export const buildChartCubes = async ({
   filters: VisualFilter[];
   activeBins?: number;
   passiveBins?: number;
+  /** Overrides the per-chart bin count; normally left to histogramBinCount. */
+  /**
+   * Percent of rows to read, 0-100. Omitted reads all of them. A drag wants
+   * the shape within a frame; a few percent gives that for a fraction of the
+   * scan, and the committed brush re-queries exactly regardless.
+   */
+  sampleRate?: number;
 }): Promise<ChartCube[]> => {
   if (!passiveCharts.length) return [];
 
@@ -107,51 +149,62 @@ export const buildChartCubes = async ({
     .filter((item): item is string => Boolean(item));
   const where = fixed.length ? `WHERE ${fixed.join(' AND ')}` : '';
 
-  const activeExtent = await extentOf(tableName, activeChart.dimensionField, where);
+  const fields = [activeChart.dimensionField, ...passiveCharts.map((c) => c.dimensionField)];
+  const [activeExtent, ...passiveExtents] = await extentsOf(tableName, fields, where);
+
   const activeValue = `TRY_CAST(${quote(activeChart.dimensionField)} AS DOUBLE)`;
-  const activeWidth =
-    activeExtent.max === activeExtent.min ? 1 : (activeExtent.max - activeExtent.min) / activeBins;
-  const activeBinExpr = `LEAST(${activeBins - 1}, GREATEST(0, CAST(FLOOR((${activeValue} - ${activeExtent.min}) / ${activeWidth || 1}) AS INTEGER)))`;
+  const activeBinExpr = binExpression(activeChart.dimensionField, activeExtent, activeBins);
+  const binsPerPassive = passiveCharts.map((chart) => passiveBins ?? histogramBinCount(chart));
+  const passiveBinExprs = passiveCharts.map((chart, index) =>
+    binExpression(chart.dimensionField, passiveExtents[index], binsPerPassive[index]),
+  );
 
-  const cubes: ChartCube[] = [];
-  for (const passive of passiveCharts) {
-    const passiveExtent = await extentOf(tableName, passive.dimensionField, where);
-    const passiveValue = `TRY_CAST(${quote(passive.dimensionField)} AS DOUBLE)`;
-    const passiveWidth =
-      passiveExtent.max === passiveExtent.min ? 1 : (passiveExtent.max - passiveExtent.min) / passiveBins;
-    const passiveBinExpr = `LEAST(${passiveBins - 1}, GREATEST(0, CAST(FLOOR((${passiveValue} - ${passiveExtent.min}) / ${passiveWidth || 1}) AS INTEGER)))`;
-
-    const predicates = [
-      `${activeValue} IS NOT NULL`,
-      `${passiveValue} IS NOT NULL`,
-      ...fixed,
-    ];
-    const result = await duckdbService.query(
-      `SELECT ${activeBinExpr} AS active_bin, ${passiveBinExpr} AS passive_bin, COUNT(*) AS n
+  // Every cube in one scan. GROUPING SETS asks for a separate (active, passive)
+  // grouping per chart, so the table is read once no matter how many charts are
+  // on screen — the alternative was a scan each, and the scan is the cost.
+  const projections = passiveBinExprs.map((expr, index) => `${expr} AS p_${index}`).join(', ');
+  const groupingSets = passiveCharts.map((_, index) => `(active_bin, p_${index})`).join(', ');
+  const result = await duckdbService.query(
+    `WITH binned AS (
+       SELECT ${activeBinExpr} AS active_bin, ${projections}
        FROM ${quote(tableName)}
-       WHERE ${predicates.join(' AND ')}
-       GROUP BY active_bin, passive_bin;`,
-    );
+       WHERE ${[`${activeValue} IS NOT NULL`, ...fixed].join(' AND ')}${
+         // The sample clause follows the filter, so it draws from the rows that
+         // survive it rather than from the whole table.
+         sampleRate ? `\n       USING SAMPLE ${sampleRate} PERCENT (bernoulli)` : ''
+       }
+     )
+     SELECT active_bin, ${passiveCharts.map((_, i) => `p_${i}`).join(', ')}, COUNT(*) AS n
+     FROM binned
+     GROUP BY GROUPING SETS (${groupingSets});`,
+  );
 
-    const counts = new Uint32Array(activeBins * passiveBins);
-    for (const raw of result.toArray()) {
-      const row = typeof raw?.toJSON === 'function' ? raw.toJSON() : raw;
-      const a = Number(row.active_bin);
-      const p = Number(row.passive_bin);
-      if (a >= 0 && a < activeBins && p >= 0 && p < passiveBins) {
-        counts[a * passiveBins + p] = Number(row.n ?? 0);
-      }
+  const cubes = passiveCharts.map((passive, index) => ({
+    activeChartId: activeChart.id,
+    passiveChartId: passive.id,
+    activeBins,
+    passiveBins: binsPerPassive[index],
+    activeMin: activeExtent.min,
+    activeMax: activeExtent.max,
+    counts: new Uint32Array(activeBins * binsPerPassive[index]),
+    scale: sampleRate ? 100 / sampleRate : 1,
+  }));
+
+  for (const raw of result.toArray()) {
+    const row = typeof raw?.toJSON === 'function' ? raw.toJSON() : raw;
+    const active = Number(row.active_bin);
+    if (!Number.isFinite(active) || active < 0 || active >= activeBins) continue;
+    // A grouping set leaves every column outside it null, so the one non-null
+    // passive column says which cube this row belongs to.
+    for (let index = 0; index < cubes.length; index += 1) {
+      const value = row[`p_${index}`];
+      if (value === null || value === undefined) continue;
+      const passive = Number(value);
+      const bins = cubes[index].passiveBins;
+      if (passive < 0 || passive >= bins) continue;
+      cubes[index].counts[active * bins + passive] = Number(row.n ?? 0);
+      break;
     }
-
-    cubes.push({
-      activeChartId: activeChart.id,
-      passiveChartId: passive.id,
-      activeBins,
-      passiveBins,
-      activeMin: activeExtent.min,
-      activeMax: activeExtent.max,
-      counts,
-    });
   }
   return cubes;
 };
