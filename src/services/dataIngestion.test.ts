@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   detectIngestionFormat,
   h3CellColumnScore,
+  isIngestableFile,
   ingestClipboardText,
   looksLikeH3Cell,
   parseJsonDataset,
@@ -70,5 +71,32 @@ describe("data ingestion detection and JSON normalisation", () => {
     await expect(ingestClipboardText("just a sentence")).rejects.toThrow(
       /CSV, or TSV/,
     );
+  });
+});
+
+describe("spatial formats via GDAL", () => {
+  it("recognises the formats DuckDB's spatial extension can open", () => {
+    expect(detectIngestionFormat("wards.shp")).toBe("spatial");
+    expect(detectIngestionFormat("BOUNDARIES.ZIP")).toBe("spatial");
+    expect(detectIngestionFormat("survey.gpkg")).toBe("spatial");
+    expect(detectIngestionFormat("route.gpx")).toBe("spatial");
+    expect(detectIngestionFormat("places.kml")).toBe("spatial");
+    expect(detectIngestionFormat("buildings.fgb")).toBe("spatial");
+  });
+
+  it("still prefers the native readers where one exists", () => {
+    // GeoJSON is parsed in JS with a size guard rather than handed to GDAL.
+    expect(detectIngestionFormat("areas.geojson")).toBe("geojson");
+    expect(detectIngestionFormat("rows.parquet")).toBe("parquet");
+  });
+
+  it("accepts them as droppable", () => {
+    expect(isIngestableFile("wards.shp")).toBe(true);
+    expect(isIngestableFile("boundaries.zip")).toBe(true);
+    expect(isIngestableFile("notes.txt")).toBe(false);
+  });
+
+  it("ignores query strings on a URL", () => {
+    expect(detectIngestionFormat("https://x.com/wards.gpkg?token=abc")).toBe("spatial");
   });
 });

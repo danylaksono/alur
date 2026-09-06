@@ -70,7 +70,7 @@ export const AppShell = () => {
     setIsDragOver(false);
     const files = Array.from(e.dataTransfer.files).filter((file) => isIngestableFile(file.name));
     if (!files.length) {
-      useStore.getState().addToast({ type: 'error', message: 'Drop a Parquet, CSV, JSON, or GeoJSON file to load it.' });
+      useStore.getState().addToast({ type: 'error', message: 'Drop a Parquet, CSV, JSON, GeoJSON, or spatial file (Shapefile .zip, GeoPackage, KML, GPX) to load it.' });
       return;
     }
     for (const file of files) {
@@ -129,7 +129,7 @@ export const AppShell = () => {
                   {isDragOver && (
                     <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center border-2 border-dashed border-primary bg-primary/5">
                       <span className="rounded-lg bg-white px-4 py-2 text-xs font-semibold text-primary shadow">
-                        Drop Parquet / CSV / JSON / GeoJSON to add it to the map
+                        Drop Parquet, CSV, JSON, GeoJSON or a spatial file to add it to the map
                       </span>
                     </div>
                   )}

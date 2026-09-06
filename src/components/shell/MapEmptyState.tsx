@@ -63,7 +63,7 @@ export const MapEmptyState = () => {
           ref={fileInputRef}
           type="file"
           multiple
-          accept=".parquet,.csv,.json,.geojson,application/json,application/geo+json"
+          accept=".parquet,.csv,.json,.geojson,.shp,.zip,.gpkg,.kml,.gpx,.fgb,.gml,.tab,.topojson,application/json,application/geo+json"
           className="hidden"
           onChange={handleFileChange}
         />

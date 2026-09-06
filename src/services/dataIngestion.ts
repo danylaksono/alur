@@ -26,6 +26,31 @@ export const tableNameForFile = (fileName: string) => {
   return tableName || `data_${Date.now()}`;
 };
 
+/**
+ * Formats DuckDB's spatial extension reads through GDAL.
+ *
+ * The extension bundles GDAL, so this costs no dependency — ST_Read opens all
+ * of them and works out which is which. `.zip` is here because that is how a
+ * Shapefile actually arrives: it is several files that have to travel together,
+ * and the archive is unpacked before DuckDB sees it.
+ */
+const SPATIAL_EXTENSIONS = [
+  '.shp',
+  '.zip',
+  '.gpkg',
+  '.kml',
+  '.gpx',
+  '.fgb',
+  '.gml',
+  '.tab',
+  '.topojson',
+  '.geojsonl',
+  '.geojsons',
+];
+
+/** The member of an unpacked archive worth opening, in order of preference. */
+const ARCHIVE_PRIMARY_EXTENSIONS = ['.shp', '.gpkg', '.gml', '.tab', '.kml', '.geojson', '.fgb'];
+
 export const detectIngestionFormat = (
   fileName: string,
   mimeType = "",
@@ -37,11 +62,59 @@ export const detectIngestionFormat = (
   if (lower.endsWith(".geojson") || mimeType.includes("geo+json"))
     return "geojson";
   if (lower.endsWith(".json") || mimeType.includes("json")) return "json";
+  if (SPATIAL_EXTENSIONS.some((ext) => lower.endsWith(ext))) return "spatial";
   return null;
 };
 
 export const isIngestableFile = (fileName: string) =>
   detectIngestionFormat(fileName) !== null;
+
+/**
+ * Registers a GDAL-readable file and returns the SQL that opens it.
+ *
+ * A Shapefile is not one file: the geometry is in `.shp`, the index in `.shx`
+ * and the attributes in `.dbf`, and GDAL needs all three side by side. It finds
+ * them by basename, so an archive is unpacked and its members are registered
+ * flat under one prefix — collisions between two uploads are what the prefix is
+ * for. GDAL's own `/vsizip/` cannot be used: it reads the real filesystem and
+ * cannot see anything DuckDB has registered in memory.
+ */
+const registerSpatialFile = async (file: File): Promise<string> => {
+  const prefix = `spatial_${Date.now()}_${Math.random().toString(36).slice(2, 7)}_`;
+  const safe = (name: string) => prefix + name.replace(/[^a-zA-Z0-9._-]/g, "_");
+
+  if (!file.name.toLowerCase().endsWith(".zip")) {
+    const path = safe(file.name);
+    await duckdbService.registerFileBuffer(
+      path,
+      new Uint8Array(await file.arrayBuffer()),
+    );
+    return `ST_Read('${escapeSqlString(path)}')`;
+  }
+
+  const { unzipSync } = await import("fflate");
+  const members = unzipSync(new Uint8Array(await file.arrayBuffer()));
+  // Flattened: GDAL matches sidecars on basename, and a nested archive would
+  // otherwise separate a .shp from the .dbf that belongs to it.
+  const registered = new Map<string, string>();
+  for (const [entry, bytes] of Object.entries(members)) {
+    const base = entry.split("/").pop();
+    if (!base || !bytes.length) continue;
+    const path = safe(base);
+    await duckdbService.registerFileBuffer(path, bytes);
+    registered.set(base.toLowerCase(), path);
+  }
+
+  const primary = ARCHIVE_PRIMARY_EXTENSIONS.flatMap((ext) =>
+    [...registered.entries()].filter(([name]) => name.endsWith(ext)),
+  )[0];
+  if (!primary) {
+    throw new Error(
+      `${file.name} contains no spatial file this can open. Expected one of ${ARCHIVE_PRIMARY_EXTENSIONS.join(", ")} inside the archive.`,
+    );
+  }
+  return `ST_Read('${escapeSqlString(primary[1])}')`;
+};
 
 // --- H3 cell detection ------------------------------------------------------
 
@@ -416,7 +489,7 @@ export const ingestFile = async (
   if (!detectedFormat) {
     addToast({
       type: "error",
-      message: `Unsupported file type: ${file.name}. Use Parquet, CSV, JSON, or GeoJSON.`,
+      message: `Unsupported file type: ${file.name}. Use Parquet, CSV, JSON, GeoJSON, or a spatial file (Shapefile .zip, GeoPackage, KML, GPX, FlatGeobuf).`,
     });
     return null;
   }
@@ -494,6 +567,13 @@ export const ingestFile = async (
         32,
       );
       await registerJsonDataset(tableName, parsed);
+    } else if (detectedFormat === "spatial") {
+      updateStage("Reading the spatial file…", 18);
+      const scanSql = await registerSpatialFile(file);
+      updateStage("Opening the dataset…", 32);
+      await duckdbService.query(
+        `CREATE OR REPLACE VIEW ${quotedTableName} AS SELECT * FROM ${scanSql};`,
+      );
     } else {
       updateStage("Registering the file with DuckDB…", 12);
       const normalizedFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");

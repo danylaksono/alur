@@ -1,4 +1,9 @@
-export type IngestionFormat = 'parquet' | 'csv' | 'json' | 'geojson';
+/**
+ * 'spatial' is every format GDAL reads through DuckDB's spatial extension —
+ * Shapefile, GeoPackage, KML, GPX, FlatGeobuf and the rest. They share one
+ * path because ST_Read tells them apart itself.
+ */
+export type IngestionFormat = 'parquet' | 'csv' | 'json' | 'geojson' | 'spatial';
 /**
  * `url` downloads the whole file and then reads it; `remote` leaves the file
  * where it is and reads parts of it over HTTP range requests. They are kept
