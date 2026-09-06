@@ -328,6 +328,21 @@ export function buildWorkflowSQL(
     );
     const parentAliases = parentEdges.map((edge) => cteAlias(edge.source));
 
+    // A bypassed step still emits a CTE, so anything downstream keeps its
+    // source alias and the graph shape is unchanged — it just passes its first
+    // input through untouched, carrying that input's geometry and style with
+    // it. A source node has nothing to pass through, so it is never bypassed.
+    if (node.data.disabled && parentAliases.length) {
+      const source = parentAliases[0];
+      ctes.push(`${alias} AS (\n  SELECT * FROM ${source}\n)`);
+      const inheritedMeta = nodeMetadata.get(source);
+      if (inheritedMeta) nodeMetadata.set(alias, inheritedMeta);
+      const inheritedVis = visualisationMetadata.get(source);
+      if (inheritedVis) visualisationMetadata.set(alias, inheritedVis);
+      lastAlias = alias;
+      continue;
+    }
+
     if (type === "input" || type === "geometry" || type === "calculation") {
       const tableName = config?.tableName;
       if (!tableName) {

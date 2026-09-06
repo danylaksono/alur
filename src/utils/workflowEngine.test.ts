@@ -1472,3 +1472,75 @@ describe("h3 node", () => {
     expect(result.needsH3).toBe(true);
   });
 });
+
+describe("circular connections", () => {
+  const chain = (): { nodes: WorkflowNode[]; edges: Edge[] } => ({
+    nodes: [
+      makeNode({ id: "src", data: { label: "Src", type: "input", config: { tableName: "london" } } }),
+      makeNode({ id: "a1", data: { label: "A1", type: "attribute", config: { expression: "1" } } }),
+      makeNode({ id: "a2", data: { label: "A2", type: "attribute", config: { expression: "2" } } }),
+    ],
+    edges: [
+      { id: "e1", source: "src", target: "a1" },
+      { id: "e2", source: "a1", target: "a2" },
+    ],
+  });
+
+  it("compiles every step of an acyclic chain", () => {
+    const { nodes, edges } = chain();
+    const sql = buildWorkflowSQL(nodes, edges).sql;
+    expect(sql).toContain(cteAlias("a1"));
+    expect(sql).toContain(cteAlias("a2"));
+  });
+
+  it("refuses rather than silently dropping the looped steps", () => {
+    const { nodes, edges } = chain();
+    edges.push({ id: "loop", source: "a2", target: "a1" });
+    // Previously this returned a successful build containing only the input.
+    expect(() => buildWorkflowSQL(nodes, edges)).toThrow(/Circular connection/);
+    expect(() => buildWorkflowSQL(nodes, edges)).toThrow(/A1, A2/);
+  });
+});
+
+describe("bypassed steps", () => {
+  it("passes its input through instead of applying itself", () => {
+    const nodes: WorkflowNode[] = [
+      makeNode({ id: "src", data: { label: "Src", type: "input", config: { tableName: "london" } } }),
+      makeNode({
+        id: "buf",
+        data: { label: "Buffer", type: "analysis", config: { operation: "ST_Buffer", distance: 500 }, disabled: true },
+      }),
+    ];
+    const edges: Edge[] = [{ id: "e1", source: "src", target: "buf" }];
+    const result = buildWorkflowSQL(nodes, edges);
+
+    // The step is still a CTE, so anything downstream keeps its source alias…
+    expect(result.sql).toContain(`${cteAlias("buf")} AS (`);
+    expect(result.sql).toContain(`SELECT * FROM ${cteAlias("src")}`);
+    // …but its own operation is gone.
+    expect(result.sql).not.toContain("ST_Buffer");
+  });
+
+  it("keeps the upstream geometry column so downstream steps still work", () => {
+    const nodes: WorkflowNode[] = [
+      makeNode({ id: "src", data: { label: "Src", type: "input", config: { tableName: "london" } } }),
+      makeNode({ id: "skip", data: { label: "Skip", type: "attribute", config: { expression: "1" }, disabled: true } }),
+      makeNode({ id: "buf", data: { label: "Buffer", type: "analysis", config: { operation: "ST_Buffer", distance: 250 } } }),
+    ];
+    const edges: Edge[] = [
+      { id: "e1", source: "src", target: "skip" },
+      { id: "e2", source: "skip", target: "buf" },
+    ];
+    const result = buildWorkflowSQL(nodes, edges);
+    expect(result.sql).toContain("ST_Buffer");
+    expect(result.geomColumn).toBe("geom_buffered");
+  });
+
+  it("does not bypass a source node, which has nothing to pass through", () => {
+    const nodes: WorkflowNode[] = [
+      makeNode({ id: "src", data: { label: "Src", type: "input", config: { tableName: "london" }, disabled: true } }),
+    ];
+    const result = buildWorkflowSQL(nodes, []);
+    expect(result.sql).toContain('FROM "london"');
+  });
+});

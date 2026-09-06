@@ -1,5 +1,5 @@
 import { type ReactNode } from 'react';
-import { AlertTriangle, type LucideIcon } from 'lucide-react';
+import { AlertTriangle, CircleDashed, type LucideIcon } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { cn } from '../../utils/cn';
 import { NodeActions } from './NodeActions';
@@ -46,20 +46,31 @@ export const FlowNodeShell = ({
   // The compiler stops at the first problem, so at most one node carries an
   // issue at a time — which is also the only one worth acting on.
   const issue = useStore((state) => (state.workflowIssue?.nodeId === id ? state.workflowIssue.message : null));
+  const disabled = useStore((state) => Boolean(state.nodes.find((node) => node.id === id)?.data.disabled));
+  const readiness = useStore((state) => state.workflowReadiness[id]);
+  // An unfinished step reads as unfinished before it is ever run. The issue
+  // badge outranks it: that one is the compiler actually refusing.
+  const needsSetup = !disabled && !issue && readiness && !readiness.ready ? readiness.reason : null;
 
   return (
     <div
       className={cn(
-        'group relative box-border rounded-lg border bg-white transition-shadow',
+        'group relative box-border rounded-lg transition-shadow',
+        // Dashed while unfinished, solid once the step can do its job — the
+        // border carries the state so it survives being zoomed out.
+        needsSetup ? 'border-2 border-dashed bg-slate-50/80' : 'border bg-white',
+        disabled && 'opacity-55 grayscale',
         issue
           ? 'border-amber-400 shadow-md ring-1 ring-amber-300'
           : selected
             ? 'border-slate-900 shadow-md ring-1 ring-slate-900'
-            : 'border-slate-200 shadow-sm hover:shadow-md',
+            : needsSetup
+              ? 'border-slate-300 shadow-sm hover:shadow-md'
+              : 'border-slate-200 shadow-sm hover:shadow-md',
         widthClassName
       )}
     >
-      <div className={cn('h-1 rounded-t-[7px]', styles.bar)} />
+      <div className={cn('h-1 rounded-t-[7px]', needsSetup || disabled ? 'bg-slate-300' : styles.bar)} />
       <NodeActions id={id} selected={selected} helperContent={helperContent} />
       <div className="flex items-center gap-2 border-b border-slate-100 px-3 py-2 pr-12">
         <div className={cn('shrink-0 rounded-md p-1', styles.icon)}>
@@ -79,6 +90,20 @@ export const FlowNodeShell = ({
       <div className="space-y-2 px-3 pb-2.5 pt-2">
         {children}
       </div>
+      {disabled && (
+        <div className="rounded-b-lg border-t border-slate-200 bg-slate-100 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
+          Bypassed — passes its input straight through
+        </div>
+      )}
+      {needsSetup && (
+        <div
+          className="flex items-start gap-1.5 rounded-b-lg border-t border-slate-200 bg-white/70 px-3 py-2 text-[11px] font-medium leading-snug text-slate-600"
+          role="status"
+        >
+          <CircleDashed className="mt-px h-3 w-3 shrink-0 text-slate-500" aria-hidden="true" />
+          <span>{needsSetup}</span>
+        </div>
+      )}
       {issue && (
         <div
           className="flex items-start gap-1.5 rounded-b-lg border-t border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-medium leading-snug text-amber-900"

@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect, type ReactNode } from 'react';
-import { Copy, Trash2, Info, Play, Download, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
+import { Copy, Trash2, Info, Play, Download, Loader2, CheckCircle, AlertCircle, CircleSlash, PlayCircle } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { buildUpToSQL } from '../../utils/workflowEngine';
 import { duckdbService } from '../../services/duckdb';
 import { materializeWorkflowOutput } from '../../services/layerMaterialization';
 import { registerWorkflowResult } from '../../services/workflowRun';
+import { isSourceNode } from '../../utils/nodeReadiness';
 import { cn } from '../../utils/cn';
 
 interface NodeActionsProps {
@@ -21,6 +22,10 @@ export const NodeActions = ({ id, selected = false, helperContent }: NodeActions
   const nodeExecutionStates = useStore((s) => s.nodeExecutionStates);
   const setNodeExecutionState = useStore((s) => s.setNodeExecutionState);
   const addToast = useStore((s) => s.addToast);
+  const toggleNodeDisabled = useStore((s) => s.toggleNodeDisabled);
+  const node = useStore((s) => s.nodes.find((item) => item.id === id));
+  const isDisabled = Boolean(node?.data.disabled);
+  const isSource = node ? isSourceNode(node.data.type) : false;
   const [showHelper, setShowHelper] = useState(false);
   const [exporting, setExporting] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -187,6 +192,20 @@ export const NodeActions = ({ id, selected = false, helperContent }: NodeActions
                 </div>
               )}
             </div>
+          )}
+
+          {/* A source node has no input to pass through, so bypassing one is
+              meaningless and the control is not offered. */}
+          {!isSource && (
+            <button
+              type="button"
+              onClick={() => toggleNodeDisabled(id)}
+              aria-pressed={isDisabled}
+              title={isDisabled ? 'Re-enable this step' : 'Bypass this step, keeping its settings'}
+              className={cn(actionButtonClass, isDisabled && 'bg-slate-900 text-white hover:bg-slate-900 hover:text-white')}
+            >
+              {isDisabled ? <PlayCircle className="h-3.5 w-3.5" /> : <CircleSlash className="h-3.5 w-3.5" />}
+            </button>
           )}
 
           <button

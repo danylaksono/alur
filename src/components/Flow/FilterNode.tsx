@@ -290,7 +290,9 @@ export const FilterNode = ({ data, id, selected }: any) => {
         </>
       )}
 
-      {error && <div className="mt-1 text-[11px] font-medium text-red-500">{error}</div>}
+      {/* The message itself now lives in the node's readiness footer, which every
+          node type shares. What stays here is the field-level highlight above,
+          which says which input is the problem rather than repeating what it is. */}
       <Handle type="target" position={Position.Left} className={nodeHandleClass('amber')} />
       <Handle type="source" position={Position.Right} className={nodeHandleClass('amber')} />
     </FlowNodeShell>

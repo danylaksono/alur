@@ -50,6 +50,7 @@ import {
 import { migrateLocalStorageKey } from "../utils/storageMigration";
 import type { WorkflowFragment } from "../utils/workflowFragments";
 import { wouldCreateCycle } from "../utils/workflowGraph";
+import type { NodeReadiness } from "../utils/nodeReadiness";
 import { assumptionsBehindDatasets } from "../utils/variantLineage";
 import type { AlurStory } from "../types/story";
 import {
@@ -151,6 +152,13 @@ export type WorkflowNode = Node & {
       | "h3"
       | "calculation";
     config: any;
+    /**
+     * A bypassed step: kept on the canvas with its configuration intact, but
+     * compiled as a pass-through so the workflow runs as if it were not there.
+     * Answering "what does this look like without the filter?" should not cost
+     * you the filter.
+     */
+    disabled?: boolean;
   };
 };
 
@@ -390,6 +398,8 @@ export interface AppState {
    * first problem — the node wears the message instead of the console eating it.
    */
   workflowIssue: { nodeId: string | null; message: string } | null;
+  /** Per-node "has what it needs" state, recomputed whenever the graph changes. */
+  workflowReadiness: Record<string, NodeReadiness>;
   nodeExecutionStates: Record<string, NodeExecutionState>;
   visualAnalytics: HydratedVisualAnalyticsState;
   toasts: Toast[];
@@ -446,6 +456,8 @@ export interface AppState {
   focusLayerBounds: (layerId: string, bounds: LayerBounds) => void;
   setNodeSchema: (id: string, schema: any[]) => void;
   setWorkflowIssue: (issue: { nodeId: string | null; message: string } | null) => void;
+  setWorkflowReadiness: (readiness: Record<string, NodeReadiness>) => void;
+  toggleNodeDisabled: (id: string) => void;
   setNodeExecutionState: (id: string, state: NodeExecutionState) => void;
   resetNodeExecutionStates: () => void;
   resetWorkspace: () => void;
@@ -1131,6 +1143,7 @@ export const useStore = create<AppState>()(
       workflowFitRequest: 0,
       nodeSchemas: {},
       workflowIssue: null,
+      workflowReadiness: {},
       nodeExecutionStates: {},
       visualAnalytics: emptyVisualAnalytics(),
       toasts: [],
@@ -1430,6 +1443,19 @@ export const useStore = create<AppState>()(
             layerFocusRequest: { layerId, bounds, requestedAt: Date.now() },
           };
         }),
+      toggleNodeDisabled: (id) =>
+        set((state) => ({
+          nodes: state.nodes.map((node) =>
+            node.id === id
+              ? { ...node, data: { ...node.data, disabled: !node.data.disabled } }
+              : node,
+          ),
+          // A bypassed step's last run described a different workflow.
+          nodeExecutionStates: removeRecordKeys(state.nodeExecutionStates, new Set([id])),
+        })),
+
+      setWorkflowReadiness: (readiness) => set({ workflowReadiness: readiness }),
+
       setWorkflowIssue: (issue) =>
         set((state) =>
           state.workflowIssue?.message === issue?.message &&
