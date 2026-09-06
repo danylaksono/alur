@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -7,6 +7,7 @@ import {
   BackgroundVariant,
   ConnectionLineType,
   Panel,
+  MiniMap,
   useReactFlow,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
@@ -50,6 +51,38 @@ const nodeTypes = {
   calculation: CalculationNode,
 };
 
+/**
+ * Minimap swatch per node, matching the tone bar on the card so the overview
+ * reads as the same graph. A step that is unfinished or bypassed goes grey
+ * there exactly as it does here.
+ */
+const MINIMAP_TONES: Record<string, string> = {
+  input: '#60a5fa',
+  geometry: '#60a5fa',
+  calculation: '#22d3ee',
+  analysis: '#c084fc',
+  h3: '#c084fc',
+  attribute: '#34d399',
+  aggregate: '#34d399',
+  allocate: '#34d399',
+  score: '#a78bfa',
+  filter: '#fb923c',
+  join: '#fbbf24',
+  fragment: '#a78bfa',
+  visualisation: '#22d3ee',
+  output: '#94a3b8',
+};
+
+const miniMapNodeColor = (node: { id: string; data?: unknown }) => {
+  const state = useStore.getState();
+  const workflowNode = state.nodes.find((item) => item.id === node.id);
+  if (!workflowNode) return '#cbd5e1';
+  if (workflowNode.data.disabled) return '#cbd5e1';
+  if (state.workflowIssue?.nodeId === node.id) return '#fbbf24';
+  if (state.workflowReadiness[node.id]?.ready === false) return '#cbd5e1';
+  return MINIMAP_TONES[workflowNode.data.type] ?? '#94a3b8';
+};
+
 /** Honours fit requests from the node palette, which lives outside this provider. */
 const FitRequestListener = () => {
   const fitRequest = useStore((s) => s.workflowFitRequest);
@@ -62,6 +95,37 @@ const FitRequestListener = () => {
     );
     return () => window.clearTimeout(timer);
   }, [fitRequest, fitView]);
+  return null;
+};
+
+/**
+ * Re-fit when the canvas changes size.
+ *
+ * Maximising the drawer used to hand you three times the room with the graph
+ * still parked wherever it was — often off the right-hand edge, which is where
+ * a node carrying an error tends to be. The surface only grows or shrinks when
+ * the user asks it to, so re-framing the graph is what they were asking for.
+ */
+const RefitOnResize = () => {
+  const dockSide = useStore((s) => s.ui.dockSide);
+  const drawerMode = useStore((s) => s.ui.drawerMode);
+  const { fitView } = useReactFlow();
+  const isFirstRun = useRef(true);
+
+  useEffect(() => {
+    // The mount fit is React Flow's own; re-running it here would fight it.
+    if (isFirstRun.current) {
+      isFirstRun.current = false;
+      return;
+    }
+    // After the drawer's own size transition, or the fit measures the old box.
+    const timer = window.setTimeout(
+      () => fitView({ duration: 240, padding: 0.2, maxZoom: 1 }),
+      260,
+    );
+    return () => window.clearTimeout(timer);
+  }, [dockSide, drawerMode, fitView]);
+
   return null;
 };
 
@@ -143,7 +207,26 @@ export const WorkflowTab = () => {
               color="#cbd5e1"
             />
             <Controls />
+            {/* Only earns its corner once the graph outgrows the viewport —
+                below that it is a picture of what you can already see. The
+                node colours match the cards, including the grey an unfinished
+                or bypassed step wears, so the overview carries state too. */}
+            {nodes.length > 3 && (
+              <MiniMap
+                pannable
+                zoomable
+                ariaLabel="Workflow overview"
+                nodeColor={miniMapNodeColor}
+                nodeStrokeWidth={2}
+                maskColor="rgba(148, 163, 184, 0.18)"
+                // Kept small: the drawer's default height is ~280px, and an
+                // overview that eats a third of it is competing with the thing
+                // it is an overview of.
+                className="!bottom-2 !right-2 !h-20 !w-36 !rounded-lg !border !border-slate-200 !bg-white/90 !shadow-md"
+              />
+            )}
             <FitRequestListener />
+            <RefitOnResize />
             {selectedIds.length > 1 && (
               <Panel position="top-center">
                 <button
