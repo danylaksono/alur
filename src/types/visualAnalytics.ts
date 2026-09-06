@@ -443,7 +443,7 @@ export type KpiResult = {
   comparisonNote?: string;
 };
 
-export type VisualChartType = 'bar' | 'donut' | 'rose' | 'histogram' | 'scatter' | 'line' | 'area' | 'box';
+export type VisualChartType = 'bar' | 'donut' | 'rose' | 'histogram' | 'scatter' | 'line' | 'area' | 'box' | 'violin';
 
 export type TimeGrain = 'auto' | 'hour' | 'day' | 'week' | 'month' | 'quarter' | 'year';
 
@@ -501,6 +501,13 @@ export type VisualChartDatum = {
     upper: number;
     max: number;
   };
+  /**
+   * Violin only: how many observations fall in each bin, over bins shared by
+   * every group so widths compare. Binned density rather than a kernel
+   * estimate — the bins are what DuckDB can count in one pass, and a smoothed
+   * curve over them would imply a precision the binning does not have.
+   */
+  density?: number[];
 };
 
 export type VisualChartResult = {

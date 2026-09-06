@@ -41,7 +41,8 @@ import type {
 const EXCLUDED_FIELDS = new Set(['geojson', 'geometry', 'geom', 'wkb_geometry', '__alur_tile_geom', '_alur_feature_id']);
 
 /** Types that read a numeric column directly rather than aggregating it. */
-const usesRawMeasure = (type: VisualChartType) => type === 'scatter' || type === 'box';
+const usesRawMeasure = (type: VisualChartType) =>
+  type === 'scatter' || type === 'box' || type === 'violin';
 
 const CHART_TYPES: Array<{ id: VisualChartType; label: string }> = [
   { id: 'bar', label: 'Bar' },
@@ -49,6 +50,7 @@ const CHART_TYPES: Array<{ id: VisualChartType; label: string }> = [
   { id: 'rose', label: 'Rose' },
   { id: 'histogram', label: 'Histogram' },
   { id: 'box', label: 'Box plot' },
+  { id: 'violin', label: 'Violin' },
   { id: 'scatter', label: 'Scatter' },
   { id: 'line', label: 'Line' },
   { id: 'area', label: 'Area' },
@@ -230,6 +232,93 @@ const BoxPlot = ({
                 style={{ left: `${pct(d.median)}%` }}
               />
             </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+};
+
+/**
+ * Violins: the same rows as a box plot, with the shape drawn instead of the
+ * quartiles. Each group is normalised to its own widest bin, so the outline
+ * says where a group's values concentrate rather than how many rows it has —
+ * a group with a tenth of the data still shows its shape. The median stays,
+ * because a shape without a location is hard to compare across rows.
+ */
+const Violins = ({
+  data,
+  activeKeys,
+  onHover,
+  onLeave,
+  onClick,
+}: {
+  data: VisualChartDatum[];
+  activeKeys: Set<string>;
+  onHover: (datum: VisualChartDatum) => void;
+  onLeave: () => void;
+  onClick: (datum: VisualChartDatum) => void;
+}) => {
+  const shapes = data.filter((datum) => datum.distribution && datum.density?.length);
+  if (!shapes.length) {
+    return <div className="py-4 text-center text-[11px] text-slate-500">no distribution</div>;
+  }
+  const low = Math.min(...shapes.map((d) => d.distribution!.min));
+  const high = Math.max(...shapes.map((d) => d.distribution!.max));
+  const span = high - low || 1;
+  const format = (value: number) => value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+
+  return (
+    <div className="space-y-1.5">
+      {shapes.map((datum) => {
+        const d = datum.distribution!;
+        const bins = datum.density!;
+        const peak = Math.max(...bins, 1);
+        const active = activeKeys.has(datum.key);
+        // Bin i covers an equal slice of [low, high]; its centre is the x, and
+        // half the normalised count is the distance from the midline.
+        const x = (i: number) => ((i + 0.5) / bins.length) * 100;
+        const y = (count: number) => (count / peak) * 45;
+        const top = bins.map((c, i) => `${x(i)},${50 - y(c)}`).join(' ');
+        const bottom = bins.map((c, i) => `${x(i)},${50 + y(c)}`).reverse().join(' ');
+
+        return (
+          <button
+            key={datum.key}
+            type="button"
+            onMouseEnter={() => onHover(datum)}
+            onMouseLeave={onLeave}
+            onFocus={() => onHover(datum)}
+            onBlur={onLeave}
+            onClick={() => onClick(datum)}
+            title={`${datum.label} — median ${format(d.median)}, IQR ${format(d.q1)}–${format(d.q3)}, range ${format(d.min)}–${format(d.max)} (${datum.count.toLocaleString()} rows)`}
+            className={cn(
+              'pressable block w-full rounded-sm px-px text-left outline-none focus-visible:ring-2 focus-visible:ring-orange-400',
+              active ? 'opacity-100' : 'opacity-90 hover:opacity-100',
+            )}
+          >
+            <span className="flex items-baseline justify-between gap-2 text-[11px] text-slate-600">
+              <span className="truncate font-medium">{datum.label}</span>
+              <span className="shrink-0 font-mono tabular-nums text-slate-500">{format(d.median)}</span>
+            </span>
+            <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="mt-1 block h-8 w-full" aria-hidden="true">
+              <polygon
+                points={`${top} ${bottom}`}
+                fill={datum.color}
+                stroke={active ? '#0f172a' : 'none'}
+                strokeWidth={active ? 1 : 0}
+                vectorEffect="non-scaling-stroke"
+              />
+              <line
+                x1={((d.median - low) / span) * 100}
+                x2={((d.median - low) / span) * 100}
+                y1={8}
+                y2={92}
+                stroke="#0f172a"
+                strokeWidth={1}
+                vectorEffect="non-scaling-stroke"
+              />
+            </svg>
           </button>
         );
       })}
@@ -1249,7 +1338,7 @@ const ChartCard = ({
               const nextType = event.target.value as VisualChartType;
               onUpdate({
                 type: nextType,
-                ...(nextType === 'scatter' || nextType === 'box'
+                ...(usesRawMeasure(nextType)
                   ? { facetField: undefined, ...(chart.measureField ? {} : { measureField: numericFields[0]?.name }) }
                   : isTemporalChart(nextType)
                     ? { facetField: undefined, dimensionField: temporalFields[0]?.name || chart.dimensionField, timeGrain: chart.timeGrain || 'auto' }
@@ -1508,6 +1597,14 @@ const ChartCard = ({
                 onLeave={onLeaveDatum}
                 onBrushRange={onBrushRange}
                 onClearRange={onClearRange}
+              />
+            ) : chart.type === 'violin' ? (
+              <Violins
+                data={result.data}
+                activeKeys={activeKeys}
+                onHover={onHoverDatum}
+                onLeave={onLeaveDatum}
+                onClick={onToggleFilter}
               />
             ) : chart.type === 'box' ? (
               <BoxPlot

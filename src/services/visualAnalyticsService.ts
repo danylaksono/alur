@@ -1507,7 +1507,7 @@ const runChartQuery = async ({
   const totalRaw = normalizeRows(totalResult.toArray())[0] || {};
   const filteredRaw = normalizeRows(filteredResult.toArray())[0] || {};
 
-  if (chart.type === "box") {
+  if (chart.type === "box" || chart.type === "violin") {
     // One box per category, over the distribution of the measure field. The
     // whiskers are Tukey's: the join back to the rows finds the most extreme
     // observation still inside 1.5 IQR, which a single pass of quantiles
@@ -1549,6 +1549,32 @@ const runChartQuery = async ({
     const rows = normalizeRows(result.toArray());
     const colors = chartPalette(chart, rows.length || 1);
 
+    // A violin needs the shape as well as the summary. Bins are shared across
+    // every group and span the same extent the summaries do, so one group being
+    // wider than another means more observations, not a different scale.
+    const densityByKey = new Map<string, number[]>();
+    const DENSITY_BINS = 24;
+    if (chart.type === "violin" && rows.length) {
+      const low = Math.min(...rows.map((row) => Number(row.min_value ?? 0)));
+      const high = Math.max(...rows.map((row) => Number(row.max_value ?? 0)));
+      const width = high === low ? 1 : (high - low) / DENSITY_BINS;
+      const keys = rows.map((row) => String(row.bucket_key ?? ""));
+      const keyList = keys.map((key) => `'${key.replace(/'/g, "''")}'`).join(", ");
+      const binExpr = `LEAST(${DENSITY_BINS - 1}, GREATEST(0, CAST(FLOOR((${value} - ${low}) / ${width || 1}) AS INTEGER)))`;
+      const densityResult = await duckdbService.query(
+        `SELECT CAST(${field} AS VARCHAR) AS bucket_key, ${binExpr} AS bin, COUNT(*) AS bin_count
+         FROM ${table}
+         WHERE ${rowPredicates.join(" AND ")} AND CAST(${field} AS VARCHAR) IN (${keyList})
+         GROUP BY bucket_key, bin;`,
+      );
+      keys.forEach((key) => densityByKey.set(key, new Array(DENSITY_BINS).fill(0)));
+      normalizeRows(densityResult.toArray()).forEach((row) => {
+        const bins = densityByKey.get(String(row.bucket_key ?? ""));
+        const bin = Number(row.bin ?? -1);
+        if (bins && bin >= 0 && bin < DENSITY_BINS) bins[bin] = Number(row.bin_count ?? 0);
+      });
+    }
+
     return {
       chartId: chart.id,
       totalRows: Number(totalRaw.row_count ?? 0),
@@ -1556,6 +1582,7 @@ const runChartQuery = async ({
       data: rows.map((row, index) => {
         const count = Number(row.row_count ?? 0);
         const median = Number(row.median_value ?? 0);
+        const density = densityByKey.get(String(row.bucket_key ?? ""));
         return {
           key: String(row.bucket_key ?? ""),
           label: String(row.bucket_key ?? "—"),
@@ -1583,6 +1610,7 @@ const runChartQuery = async ({
             upper: Number(row.upper_value ?? row.max_value ?? 0),
             max: Number(row.max_value ?? 0),
           },
+          ...(density ? { density } : {}),
         };
       }),
     };
