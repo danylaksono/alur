@@ -28,6 +28,7 @@ import { OutputNode } from "../Flow/OutputNode";
 import { VisualisationNode } from "../Flow/VisualisationNode";
 import { H3Node } from "../Flow/H3Node";
 import { CalculationNode } from "../Flow/CalculationNode";
+import { GroupNode } from "../Flow/GroupNode";
 import { Package } from "lucide-react";
 import { ErrorBoundary } from "../ErrorBoundary";
 
@@ -49,6 +50,7 @@ const nodeTypes = {
   fragment: FragmentNode,
   h3: H3Node,
   calculation: CalculationNode,
+  group: GroupNode,
 };
 
 /**
@@ -71,6 +73,8 @@ const MINIMAP_TONES: Record<string, string> = {
   fragment: '#a78bfa',
   visualisation: '#22d3ee',
   output: '#94a3b8',
+  // Faint: in the overview a box is the ground the steps sit on, not a step.
+  group: '#e9eef4',
 };
 
 const miniMapNodeColor = (node: { id: string; data?: unknown }) => {
@@ -137,13 +141,57 @@ export const WorkflowTab = () => {
   const onConnect = useStore((s) => s.onConnect);
   const setSelectedNodeId = useStore((s) => s.setSelectedNodeId);
   const setSelectedLayerId = useStore((s) => s.setSelectedLayerId);
+  const setNodePositions = useStore((s) => s.setNodePositions);
   const [savingFragment, setSavingFragment] = useState<string[] | null>(null);
+
+  // Captured when a group's drag starts: which nodes were sitting on it, and
+  // where. A group owns nothing in the graph, so carrying its contents along is
+  // done here in canvas coordinates rather than by React Flow parenting — which
+  // would rewrite every child's position as relative and change what a saved
+  // project means.
+  const groupDrag = useRef<{
+    origin: { x: number; y: number };
+    members: Array<{ id: string; x: number; y: number }>;
+  } | null>(null);
+
+  const handleNodeDragStart = (_: unknown, node: { id: string; type?: string; position: { x: number; y: number }; measured?: { width?: number; height?: number }; width?: number; height?: number; style?: { width?: number | string; height?: number | string } }) => {
+    if (node.type !== 'group') return;
+    // Measured first, so a box resized by hand carries what it now covers
+    // rather than what it covered when it was created. Bail on a zero-sized
+    // rectangle: it contains nothing, and the box would travel alone.
+    const width = node.measured?.width ?? node.width ?? 0;
+    const height = node.measured?.height ?? node.height ?? 0;
+    if (!width || !height) return;
+    const inside = (candidate: (typeof nodes)[number]) => {
+      if (candidate.id === node.id || candidate.data.type === 'group') return false;
+      const cx = candidate.position.x + (candidate.measured?.width ?? 120) / 2;
+      const cy = candidate.position.y + (candidate.measured?.height ?? 40) / 2;
+      return (
+        cx >= node.position.x &&
+        cx <= node.position.x + width &&
+        cy >= node.position.y &&
+        cy <= node.position.y + height
+      );
+    };
+    groupDrag.current = {
+      origin: { x: node.position.x, y: node.position.y },
+      members: nodes.filter(inside).map((item) => ({ id: item.id, x: item.position.x, y: item.position.y })),
+    };
+  };
+
+  const handleNodeDrag = (_: unknown, node: { id: string; type?: string; position: { x: number; y: number } }) => {
+    const drag = groupDrag.current;
+    if (node.type !== 'group' || !drag) return;
+    const dx = node.position.x - drag.origin.x;
+    const dy = node.position.y - drag.origin.y;
+    setNodePositions(drag.members.map((member) => ({ id: member.id, position: { x: member.x + dx, y: member.y + dy } })));
+  };
 
   // A saved operation has to be a run of steps, so the offer only appears once
   // there is more than one thing selected — and never for a data source, which
   // would bake one file into a supposedly reusable operation.
   const selectedIds = nodes
-    .filter((node) => node.selected && node.data.type !== "input")
+    .filter((node) => node.selected && node.data.type !== "input" && node.data.type !== "group")
     .map((node) => node.id);
 
   return (
@@ -170,7 +218,14 @@ export const WorkflowTab = () => {
               Boolean(connection.target) &&
               !wouldCreateCycle(edges, connection.source!, connection.target!)
             }
+            onNodeDragStart={handleNodeDragStart}
+            onNodeDrag={handleNodeDrag}
+            onNodeDragStop={() => {
+              groupDrag.current = null;
+            }}
             onNodeClick={(_, node) => {
+              // A box is not a step; selecting one must not aim the table at it.
+              if (node.type === "group") return;
               setSelectedNodeId(node.id);
               setSelectedLayerId(null);
             }}

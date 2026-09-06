@@ -128,6 +128,8 @@ const configReadiness = (node: WorkflowNode): NodeReadiness => {
  * caller already knows from the graph.
  */
 export const nodeReadiness = (node: WorkflowNode, incoming: number): NodeReadiness => {
+  // A group is a label on the canvas, not a step. It has nothing to be ready for.
+  if (node.data.type === 'group') return READY;
   if (node.data.disabled) return READY;
 
   const needed = requiredInputs(node);

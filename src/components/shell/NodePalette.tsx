@@ -6,6 +6,7 @@ import {
   Database,
   Eye,
   Filter,
+  Frame,
   Gauge,
   GitBranch,
   GitMerge,
@@ -24,7 +25,7 @@ import {
 } from "lucide-react";
 import { useStore } from "../../store/useStore";
 import { buildWorkflowSQL } from "../../utils/workflowEngine";
-import { nextNodePosition } from "../../utils/nodePlacement";
+import { groupBoxPosition, nextNodePosition } from "../../utils/nodePlacement";
 import { spatialFunctions } from "../../utils/spatialFunctions";
 import { materializeWorkflowOutput } from "../../services/layerMaterialization";
 import { registerWorkflowResult } from "../../services/workflowRun";
@@ -92,10 +93,11 @@ type NodeType =
   | "output"
   | "fragment"
   | "h3"
-  | "calculation";
+  | "calculation"
+  | "group";
 
 /** Logical buckets used to group the palette cards. */
-type NodeGroupId = "source" | "transform" | "analyse" | "output";
+type NodeGroupId = "source" | "transform" | "analyse" | "output" | "annotate";
 
 type NodeCard = {
   type: NodeType;
@@ -118,6 +120,7 @@ const nodeGroups: Array<{
   { id: "transform", title: "Transform" },
   { id: "analyse", title: "Analyse" },
   { id: "output", title: "Output" },
+  { id: "annotate", title: "Annotate" },
 ];
 
 const nodeCards: NodeCard[] = [
@@ -245,6 +248,15 @@ const nodeCards: NodeCard[] = [
     label: "Layer Output",
     group: "output",
   },
+  {
+    type: "group",
+    icon: Frame,
+    title: "Group Box",
+    desc: "Title a region of the workflow",
+    color: "slate",
+    label: "",
+    group: "annotate",
+  },
 ];
 
 const nodeLabels: Record<NodeType, string> = {
@@ -262,6 +274,7 @@ const nodeLabels: Record<NodeType, string> = {
   output: "Layer Output",
   h3: "H3 Op",
   calculation: "Calculation",
+  group: "",
 };
 
 /** One palette card. Shared by grouped and search-flattened lists. */
@@ -320,7 +333,8 @@ export const NodePalette = () => {
   const duckdbReady = useStore((s) => s.duckdbReady);
   const addToast = useStore((s) => s.addToast);
   const requestWorkflowFit = useStore((s) => s.requestWorkflowFit);
-  const nodeCount = useStore((s) => s.nodes.length);
+  // Boxes are annotation, so they are not steps and are not counted as such.
+  const nodeCount = useStore((s) => s.nodes.filter((node) => node.data.type !== "group").length);
   const fragments = useStore((s) => s.fragments);
   const removeFragment = useStore((s) => s.removeFragment);
   const navigate = useStore((s) => s.navigate);
@@ -361,12 +375,22 @@ export const NodePalette = () => {
     config: Record<string, unknown> = {},
     label?: string,
   ) => {
+    const isGroup = type === "group";
     addNode({
       id: `${type}-${Date.now()}`,
       type,
-      position: nextNodePosition(useStore.getState().nodes),
+      // A box is placed around where the work is rather than after it, and
+      // starts large enough to hold a couple of steps.
+      position: isGroup
+        ? groupBoxPosition(useStore.getState().nodes)
+        : nextNodePosition(useStore.getState().nodes),
+      // React Flow v12 takes a node's size as top-level width/height; putting it
+      // in `style` is silently ignored, which renders the box at its content
+      // width and leaves it containing nothing.
+      // zIndex keeps it behind the graph, so steps stay clickable through it.
+      ...(isGroup ? { width: 620, height: 300, zIndex: -1 } : {}),
       data: {
-        label: label || nodeLabels[type],
+        label: label ?? nodeLabels[type],
         type,
         config,
       },

@@ -115,3 +115,9 @@ describe('workflowReadiness', () => {
     expect(result.f).toEqual({ ready: false, reason: 'Write a WHERE condition' });
   });
 });
+
+describe('group boxes', () => {
+  it('are never unfinished — they are a label, not a step', () => {
+    expect(reason(node('group', {}), 0)).toBeNull();
+  });
+});

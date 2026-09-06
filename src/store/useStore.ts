@@ -150,7 +150,10 @@ export type WorkflowNode = Node & {
       | "output"
       | "fragment"
       | "h3"
-      | "calculation";
+      | "calculation"
+      // Canvas furniture, not a step: a titled box drawn behind the graph to
+      // say what a region of it is for. The compiler never sees one.
+      | "group";
     config: any;
     /**
      * A bypassed step: kept on the canvas with its configuration intact, but
@@ -470,6 +473,8 @@ export interface AppState {
   toggleNodeDisabled: (id: string) => void;
   toggleNodeCollapsed: (id: string) => void;
   setNodeNote: (id: string, note: string) => void;
+  updateNodeLabel: (id: string, label: string) => void;
+  setNodePositions: (updates: Array<{ id: string; position: { x: number; y: number } }>) => void;
   setNoteEditorNodeId: (id: string | null) => void;
   setNodeExecutionState: (id: string, state: NodeExecutionState) => void;
   resetNodeExecutionStates: () => void;
@@ -1463,6 +1468,24 @@ export const useStore = create<AppState>()(
             node.id === id
               ? { ...node, data: { ...node.data, collapsed: !node.data.collapsed } }
               : node,
+          ),
+        })),
+
+      setNodePositions: (updates) =>
+        set((state) => {
+          const byId = new Map(updates.map((update) => [update.id, update.position]));
+          if (!byId.size) return {};
+          return {
+            nodes: state.nodes.map((node) =>
+              byId.has(node.id) ? { ...node, position: byId.get(node.id)! } : node,
+            ),
+          };
+        }),
+
+      updateNodeLabel: (id, label) =>
+        set((state) => ({
+          nodes: state.nodes.map((node) =>
+            node.id === id ? { ...node, data: { ...node.data, label } } : node,
           ),
         })),
 

@@ -1544,3 +1544,41 @@ describe("bypassed steps", () => {
     expect(result.sql).toContain('FROM "london"');
   });
 });
+
+describe("group boxes", () => {
+  const withGroup = (): { nodes: WorkflowNode[]; edges: Edge[] } => ({
+    nodes: [
+      makeNode({ id: "src", data: { label: "Src", type: "input", config: { tableName: "london" } } }),
+      makeNode({ id: "a1", data: { label: "A1", type: "attribute", config: { expression: "1" } } }),
+      makeNode({ id: "box", data: { label: "Cleaning", type: "group", config: {} } }),
+    ],
+    edges: [{ id: "e1", source: "src", target: "a1" }],
+  });
+
+  it("compiles to exactly the same SQL with or without a box on the canvas", () => {
+    const { nodes, edges } = withGroup();
+    const annotated = buildWorkflowSQL(nodes, edges).sql;
+    const plain = buildWorkflowSQL(nodes.filter((n) => n.data.type !== "group"), edges).sql;
+    expect(annotated).toBe(plain);
+  });
+
+  it("never emits a CTE for a box", () => {
+    const { nodes, edges } = withGroup();
+    expect(buildWorkflowSQL(nodes, edges).sql).not.toContain(cteAlias("box"));
+  });
+
+  it("does not let a box become the terminal step", () => {
+    const { nodes, edges } = withGroup();
+    expect(buildWorkflowSQL(nodes, edges).terminalNodeId).toBe("a1");
+  });
+
+  it("reports an empty workflow when the canvas holds only boxes", () => {
+    const nodes = [makeNode({ id: "box", data: { label: "Empty", type: "group", config: {} } })];
+    expect(() => buildWorkflowSQL(nodes, [])).toThrow("No nodes in the workflow.");
+  });
+
+  it("is invisible to a run-up-to-here as well", () => {
+    const { nodes, edges } = withGroup();
+    expect(buildUpToSQL(nodes, edges, "a1").sql).not.toContain(cteAlias("box"));
+  });
+});

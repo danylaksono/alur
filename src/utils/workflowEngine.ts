@@ -226,6 +226,14 @@ function isBooleanPredicate(operation: string): boolean {
  * the window was too short to notice, but a remote read is bounded by the
  * network and a failed one never loads at all.
  */
+/**
+ * Groups are canvas furniture — a titled box saying what a region of the graph
+ * is for. Dropped before anything reads the graph, so annotating a workflow can
+ * never change what it compiles to.
+ */
+export const withoutAnnotations = (nodes: WorkflowNode[]) =>
+  nodes.filter((node) => node.data.type !== "group");
+
 export const unloadedSourceNodes = (nodes: WorkflowNode[]) =>
   nodes.filter(
     (node) =>
@@ -286,6 +294,7 @@ export function buildWorkflowSQL(
   edges: Edge[],
   options?: WorkflowBuildOptions,
 ): WorkflowResult {
+  nodes = withoutAnnotations(nodes);
   if (!nodes.length) {
     throw new Error("No nodes in the workflow.");
   }
@@ -829,6 +838,7 @@ export function buildUpToSQL(
   targetNodeId: string,
   options?: WorkflowBuildOptions,
 ): WorkflowResult {
+  nodes = withoutAnnotations(nodes);
   if (!nodes.length) throw new Error("No nodes in the workflow.");
   if (!nodes.some((node) => node.id === targetNodeId)) {
     throw new Error(`Target node "${targetNodeId}" does not exist.`);
