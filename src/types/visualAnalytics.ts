@@ -443,7 +443,7 @@ export type KpiResult = {
   comparisonNote?: string;
 };
 
-export type VisualChartType = 'bar' | 'donut' | 'rose' | 'histogram' | 'scatter' | 'line' | 'area';
+export type VisualChartType = 'bar' | 'donut' | 'rose' | 'histogram' | 'scatter' | 'line' | 'area' | 'box';
 
 export type TimeGrain = 'auto' | 'hour' | 'day' | 'week' | 'month' | 'quarter' | 'year';
 
@@ -487,6 +487,20 @@ export type VisualChartDatum = {
   color: string;
   filter: VisualFilter;
   featureIds: string[];
+  /**
+   * Five-number summary, present only on box charts. Whiskers are Tukey: the
+   * most extreme observation still inside 1.5 IQR, so a gap between a whisker
+   * and the true extreme is the outliers making themselves known.
+   */
+  distribution?: {
+    min: number;
+    lower: number;
+    q1: number;
+    median: number;
+    q3: number;
+    upper: number;
+    max: number;
+  };
 };
 
 export type VisualChartResult = {

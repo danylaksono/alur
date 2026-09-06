@@ -40,11 +40,15 @@ import type {
 
 const EXCLUDED_FIELDS = new Set(['geojson', 'geometry', 'geom', 'wkb_geometry', '__alur_tile_geom', '_alur_feature_id']);
 
+/** Types that read a numeric column directly rather than aggregating it. */
+const usesRawMeasure = (type: VisualChartType) => type === 'scatter' || type === 'box';
+
 const CHART_TYPES: Array<{ id: VisualChartType; label: string }> = [
   { id: 'bar', label: 'Bar' },
   { id: 'donut', label: 'Donut' },
   { id: 'rose', label: 'Rose' },
   { id: 'histogram', label: 'Histogram' },
+  { id: 'box', label: 'Box plot' },
   { id: 'scatter', label: 'Scatter' },
   { id: 'line', label: 'Line' },
   { id: 'area', label: 'Area' },
@@ -132,6 +136,105 @@ const arcPath = (cx: number, cy: number, inner: number, outer: number, startAngl
     `A ${inner} ${inner} 0 ${largeArc} 1 ${innerEnd.x} ${innerEnd.y}`,
     'Z',
   ].join(' ');
+};
+
+/**
+ * Horizontal box plots, one row per category, on a shared scale.
+ *
+ * The scale is shared deliberately: the whole reason to draw boxes rather than
+ * a bar of means is to compare spread between groups, and per-row scales would
+ * make every group look alike. Whiskers are Tukey, so a mark drawn beyond one
+ * is an observation outside 1.5 IQR rather than the end of the data.
+ */
+const BoxPlot = ({
+  data,
+  activeKeys,
+  onHover,
+  onLeave,
+  onClick,
+}: {
+  data: VisualChartDatum[];
+  activeKeys: Set<string>;
+  onHover: (datum: VisualChartDatum) => void;
+  onLeave: () => void;
+  onClick: (datum: VisualChartDatum) => void;
+}) => {
+  const summaries = data.filter((datum) => datum.distribution);
+  if (!summaries.length) {
+    return <div className="py-4 text-center text-[11px] text-slate-500">no distribution</div>;
+  }
+  const low = Math.min(...summaries.map((d) => d.distribution!.min));
+  const high = Math.max(...summaries.map((d) => d.distribution!.max));
+  const span = high - low || 1;
+  const pct = (value: number) => ((value - low) / span) * 100;
+  const format = (value: number) =>
+    value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+
+  return (
+    <div className="space-y-1.5">
+      {summaries.map((datum) => {
+        const d = datum.distribution!;
+        const active = activeKeys.has(datum.key);
+        return (
+          <button
+            key={datum.key}
+            type="button"
+            onMouseEnter={() => onHover(datum)}
+            onMouseLeave={onLeave}
+            onFocus={() => onHover(datum)}
+            onBlur={onLeave}
+            onClick={() => onClick(datum)}
+            title={`${datum.label} — median ${format(d.median)}, IQR ${format(d.q1)}–${format(d.q3)}, range ${format(d.min)}–${format(d.max)} (${datum.count.toLocaleString()} rows)`}
+            className={cn(
+              'pressable block w-full rounded-sm px-px text-left outline-none focus-visible:ring-2 focus-visible:ring-orange-400',
+              active ? 'opacity-100' : 'opacity-90 hover:opacity-100',
+            )}
+          >
+            <span className="flex items-baseline justify-between gap-2 text-[11px] text-slate-600">
+              <span className="truncate font-medium">{datum.label}</span>
+              <span className="shrink-0 font-mono tabular-nums text-slate-500">{format(d.median)}</span>
+            </span>
+            <span className="relative mt-1 block h-5">
+              {/* Whisker span */}
+              <span
+                className="absolute top-1/2 h-px -translate-y-1/2 bg-slate-400"
+                style={{ left: `${pct(d.lower)}%`, width: `${Math.max(pct(d.upper) - pct(d.lower), 0.5)}%` }}
+              />
+              {/* Whisker caps */}
+              {[d.lower, d.upper].map((value, i) => (
+                <span
+                  key={i}
+                  className="absolute top-1/2 h-2.5 w-px -translate-y-1/2 bg-slate-400"
+                  style={{ left: `${pct(value)}%` }}
+                />
+              ))}
+              {/* Outlier reach: where the data goes past the fence */}
+              {d.min < d.lower && (
+                <span className="absolute top-1/2 h-1 w-1 -translate-y-1/2 rounded-full bg-slate-400" style={{ left: `${pct(d.min)}%` }} />
+              )}
+              {d.max > d.upper && (
+                <span className="absolute top-1/2 h-1 w-1 -translate-y-1/2 rounded-full bg-slate-400" style={{ left: `${pct(d.max)}%` }} />
+              )}
+              {/* The box: the middle half of the data */}
+              <span
+                className={cn('absolute top-1/2 h-4 -translate-y-1/2 rounded-sm border', active ? 'border-slate-900' : 'border-transparent')}
+                style={{
+                  left: `${pct(d.q1)}%`,
+                  width: `${Math.max(pct(d.q3) - pct(d.q1), 0.75)}%`,
+                  backgroundColor: datum.color,
+                }}
+              />
+              {/* Median */}
+              <span
+                className="absolute top-1/2 h-4 w-0.5 -translate-y-1/2 bg-white mix-blend-difference"
+                style={{ left: `${pct(d.median)}%` }}
+              />
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
 };
 
 const Bars = ({
@@ -1146,7 +1249,7 @@ const ChartCard = ({
               const nextType = event.target.value as VisualChartType;
               onUpdate({
                 type: nextType,
-                ...(nextType === 'scatter'
+                ...(nextType === 'scatter' || nextType === 'box'
                   ? { facetField: undefined, ...(chart.measureField ? {} : { measureField: numericFields[0]?.name }) }
                   : isTemporalChart(nextType)
                     ? { facetField: undefined, dimensionField: temporalFields[0]?.name || chart.dimensionField, timeGrain: chart.timeGrain || 'auto' }
@@ -1181,14 +1284,14 @@ const ChartCard = ({
             {chart.type === 'scatter' ? 'Y field' : 'Value'}
           </span>
           <select
-            value={chart.type === 'scatter'
+            value={usesRawMeasure(chart.type)
               ? chart.measureField || ''
               : chart.aggregation === 'count' ? '' : chart.measureField || ''}
-            disabled={chart.type !== 'scatter' && chart.aggregation === 'count'}
+            disabled={!usesRawMeasure(chart.type) && chart.aggregation === 'count'}
             onChange={(event) => onUpdate({ measureField: event.target.value || undefined })}
             className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] outline-none disabled:bg-slate-100 disabled:text-slate-400"
           >
-            {chart.type !== 'scatter' && <option value="">Rows</option>}
+            {!usesRawMeasure(chart.type) && <option value="">Rows</option>}
             {numericFields.map((field) => (
               <option key={field.name} value={field.name}>{field.name}</option>
             ))}
@@ -1199,7 +1302,7 @@ const ChartCard = ({
           <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Aggregate</span>
           <select
             value={chart.aggregation}
-            disabled={chart.type === 'scatter'}
+            disabled={usesRawMeasure(chart.type)}
             onChange={(event) => onUpdate({ aggregation: event.target.value as VisualChartAggregation })}
             className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] outline-none focus:border-slate-400 disabled:bg-slate-100 disabled:text-slate-400"
           >
@@ -1405,6 +1508,14 @@ const ChartCard = ({
                 onLeave={onLeaveDatum}
                 onBrushRange={onBrushRange}
                 onClearRange={onClearRange}
+              />
+            ) : chart.type === 'box' ? (
+              <BoxPlot
+                data={result.data}
+                activeKeys={activeKeys}
+                onHover={onHoverDatum}
+                onLeave={onLeaveDatum}
+                onClick={onToggleFilter}
               />
             ) : chart.type === 'donut' || chart.type === 'rose' ? (
               <RadialChart

@@ -1507,6 +1507,87 @@ const runChartQuery = async ({
   const totalRaw = normalizeRows(totalResult.toArray())[0] || {};
   const filteredRaw = normalizeRows(filteredResult.toArray())[0] || {};
 
+  if (chart.type === "box") {
+    // One box per category, over the distribution of the measure field. The
+    // whiskers are Tukey's: the join back to the rows finds the most extreme
+    // observation still inside 1.5 IQR, which a single pass of quantiles
+    // cannot do, because the fence is not known until the quartiles are.
+    const measure = quoteIdentifier(chart.measureField || chart.dimensionField);
+    const value = `TRY_CAST(${measure} AS DOUBLE)`;
+    const rowPredicates = [`${value} IS NOT NULL`, facetWhere, contextPredicate].filter(Boolean);
+    const limit = Math.max(2, Math.min(24, chart.maxCategories || 8));
+
+    const result = await duckdbService.query(
+      `WITH observations AS (
+         SELECT CAST(${field} AS VARCHAR) AS bucket_key,
+                ${value} AS measure_value,
+                CAST(${featureIdExpression} AS VARCHAR) AS feature_id
+         FROM ${table}
+         WHERE ${rowPredicates.join(" AND ")}
+       ),
+       quartiles AS (
+         SELECT bucket_key,
+                COUNT(*) AS row_count,
+                quantile_cont(measure_value, 0.25) AS q1,
+                quantile_cont(measure_value, 0.5) AS median_value,
+                quantile_cont(measure_value, 0.75) AS q3
+         FROM observations GROUP BY bucket_key
+       )
+       SELECT q.bucket_key, q.row_count, q.q1, q.median_value, q.q3,
+              MIN(o.measure_value) AS min_value,
+              MAX(o.measure_value) AS max_value,
+              MIN(o.measure_value) FILTER (
+                WHERE o.measure_value >= q.q1 - 1.5 * (q.q3 - q.q1)) AS lower_value,
+              MAX(o.measure_value) FILTER (
+                WHERE o.measure_value <= q.q3 + 1.5 * (q.q3 - q.q1)) AS upper_value,
+              STRING_AGG(o.feature_id, '') AS feature_ids
+       FROM quartiles q JOIN observations o USING (bucket_key)
+       GROUP BY q.bucket_key, q.row_count, q.q1, q.median_value, q.q3
+       ORDER BY q.row_count DESC
+       LIMIT ${limit};`,
+    );
+    const rows = normalizeRows(result.toArray());
+    const colors = chartPalette(chart, rows.length || 1);
+
+    return {
+      chartId: chart.id,
+      totalRows: Number(totalRaw.row_count ?? 0),
+      filteredRows: Number(filteredRaw.row_count ?? 0),
+      data: rows.map((row, index) => {
+        const count = Number(row.row_count ?? 0);
+        const median = Number(row.median_value ?? 0);
+        return {
+          key: String(row.bucket_key ?? ""),
+          label: String(row.bucket_key ?? "—"),
+          // The median is the headline number, so it is what a tooltip, an
+          // export or a KPI built from this chart reads as the value.
+          value: median,
+          count,
+          totalValue: median,
+          totalCount: count,
+          color: colors[index % colors.length],
+          filter: {
+            kind: "category" as const,
+            field: chart.dimensionField,
+            values: [String(row.bucket_key ?? "")],
+          },
+          featureIds: String(row.feature_ids ?? "")
+            .split("")
+            .filter(Boolean),
+          distribution: {
+            min: Number(row.min_value ?? 0),
+            lower: Number(row.lower_value ?? row.min_value ?? 0),
+            q1: Number(row.q1 ?? 0),
+            median,
+            q3: Number(row.q3 ?? 0),
+            upper: Number(row.upper_value ?? row.max_value ?? 0),
+            max: Number(row.max_value ?? 0),
+          },
+        };
+      }),
+    };
+  }
+
   if (chart.type === "histogram") {
     // Bin over the unfiltered extent so bins stay stable while brushing and filtering.
     const statsResult = await duckdbService.query(
