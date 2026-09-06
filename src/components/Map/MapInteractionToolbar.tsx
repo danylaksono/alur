@@ -1,4 +1,4 @@
-import { BoxSelect, Camera, Check, Crosshair, Expand, Home, Loader2, LocateFixed, Map as MapIcon, Minus, MousePointer2, Navigation, Plus, Scan, Trash2 } from 'lucide-react';
+import { BoxSelect, Camera, Check, Crosshair, Expand, Home, Loader2, LocateFixed, Map as MapIcon, Minus, MousePointer2, Navigation, Plus, Scan, Trash2, Aperture } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '../../utils/cn';
 import { BASEMAPS, attributionFor, basemapStyleFromUrl, defaultTileSourceName, detectTileSourceKind } from '../../utils/basemaps';
@@ -7,6 +7,8 @@ import { pinMapEvidence } from '../../services/explainCapture';
 
 export const MapInteractionToolbar = ({
   selectionMode,
+  lensMode,
+  onToggleLens,
   hasLayer,
   hasSelection,
   coordinates,
@@ -24,6 +26,8 @@ export const MapInteractionToolbar = ({
   onFullscreen,
 }: {
   selectionMode: boolean;
+  lensMode: boolean;
+  onToggleLens: () => void;
   hasLayer: boolean;
   hasSelection: boolean;
   coordinates: string;
@@ -61,6 +65,9 @@ export const MapInteractionToolbar = ({
       <button type="button" onClick={onZoomOut} aria-label="Zoom out" className="pressable flex h-9 w-9 items-center justify-center border-b border-slate-100 text-slate-600 hover:bg-slate-50"><Minus className="h-4 w-4" /></button>
       <button type="button" onClick={onToggleSelection} disabled={!hasLayer} aria-pressed={selectionMode} aria-label={selectionMode ? 'Return to map navigation' : 'Box select features'} title={selectionMode ? 'Navigation mode (Esc)' : 'Box select features'} className={cn('pressable flex h-9 w-9 items-center justify-center border-b border-slate-100 text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-35', selectionMode && 'bg-orange-50 text-orange-700')}>
         {selectionMode ? <MousePointer2 className="h-4 w-4" /> : <BoxSelect className="h-4 w-4" />}
+      </button>
+      <button type="button" onClick={onToggleLens} disabled={!hasLayer} aria-pressed={lensMode} aria-label={lensMode ? 'Put the lens away' : 'Place a multivariate lens'} title={lensMode ? 'Click the map to place or move the lens · Esc to exit' : 'Lens: summarise what is around a point'} className={cn('pressable flex h-9 w-9 items-center justify-center border-b border-slate-100 text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-35', lensMode && 'bg-violet-50 text-violet-700')}>
+        <Aperture className="h-4 w-4" />
       </button>
       <button type="button" onClick={onHome} disabled={!hasLayer} aria-label="Zoom to active layer" title="Zoom to active layer" className="pressable flex h-9 w-9 items-center justify-center border-b border-slate-100 text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-35">
         <Home className="h-4 w-4" />

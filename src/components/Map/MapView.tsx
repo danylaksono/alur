@@ -269,6 +269,19 @@ export const MapView = () => {
     const result = await executeAnalyticsCommand(command);
     if (!result.ok) addToast({ type: "warning", message: result.message });
   };
+  // A lens is a tool, not a layer style: you turn it on, put it somewhere, and
+  // it reports on what is under it. Same shape as selection mode above.
+  const [lensMode, setLensMode] = useState(false);
+  const lensOverlay = useRef<{ setCenter: (c: [number, number]) => void; destroy: () => void } | null>(null);
+  /**
+   * True while a tool is reading map clicks for itself.
+   *
+   * A ref rather than a dependency because the layer click handlers are built
+   * once per layer sync; re-syncing every layer to toggle a mode would rebuild
+   * sources and lose the popup.
+   */
+  const toolOwnsClick = useRef(false);
+  toolOwnsClick.current = lensMode || Boolean(drawing) || Boolean(placement);
   const [coordinates, setCoordinates] = useState("");
   // Bearing and pitch drive the compass, zoom the readout. Tracked locally
   // rather than read from the store's mapCamera, which only updates on moveend
@@ -940,6 +953,11 @@ export const MapView = () => {
             features?: maplibregl.MapGeoJSONFeature[];
           },
         ) => {
+          // A tool that reads clicks owns them entirely: a click meant to place
+          // a lens, add a vertex or site a change must not also select a
+          // feature and open a popup over the thing being placed.
+          if (toolOwnsClick.current) return;
+
           if (isClustered && e.features?.[0]?.properties?.cluster) {
             const clusterId = e.features[0].properties.cluster_id;
             (m.getSource(sourceId) as maplibregl.GeoJSONSource)
@@ -1194,6 +1212,90 @@ export const MapView = () => {
     setHoveredFeature,
     toggleSelectedFeature,
   ]);
+
+  // Lens tool: click to place a multivariate lens on the active layer's points.
+  useEffect(() => {
+    const m = map.current;
+    if (!m) return;
+
+    const teardown = () => {
+      try {
+        lensOverlay.current?.destroy();
+      } catch {
+        /* the style may already have gone */
+      }
+      lensOverlay.current = null;
+    };
+
+    const canvas = m.getCanvas();
+    if (!lensMode) {
+      teardown();
+      canvas.style.cursor = "";
+      return;
+    }
+    canvas.style.cursor = "crosshair";
+
+    let cancelled = false;
+    const place = async (event: maplibregl.MapMouseEvent) => {
+      const centre: [number, number] = [event.lngLat.lng, event.lngLat.lat];
+      // Moving an existing lens is just a new centre — no re-query, because the
+      // points under it have not changed, only which of them are in range.
+      if (lensOverlay.current) {
+        lensOverlay.current.setCenter(centre);
+        return;
+      }
+
+      const state = useStore.getState();
+      const layer =
+        state.mapLayers.find((item) => item.id === state.selectedLayerId) ||
+        state.mapLayers.find((item) => item.visible);
+      if (!layer) {
+        addToast({ type: "warning", message: "Add a layer before placing a lens." });
+        return;
+      }
+
+      try {
+        const [{ lensPointsForLayer, lensOptionsFor }, { addLens }] = await Promise.all([
+          import("../../services/lensService"),
+          import("glyphlens/maplibre"),
+        ]);
+        const filters = state.visualAnalytics.datasets[layer.id]?.filters || [];
+        const data = await lensPointsForLayer(layer, filters);
+        if (cancelled) return;
+        if (!data.points.length) {
+          addToast({ type: "warning", message: `"${layer.name}" has no points a lens can read.` });
+          return;
+        }
+        // The lens sizes itself in screen pixels, so it needs the scale of the
+        // view it is being put down on to express its disc in metres.
+        // zoom + 1 because MapLibre's zoom is defined against 512px tiles, not
+        // the 256px the constant assumes — without it the disc comes out twice
+        // the size it was asked for.
+        const metresPerPixel =
+          (156543.03392 * Math.cos((event.lngLat.lat * Math.PI) / 180)) /
+          2 ** (m.getZoom() + 1);
+        lensOverlay.current = addLens(m, lensOptionsFor(centre, metresPerPixel, data));
+      } catch (error) {
+        addToast({
+          type: "error",
+          message: `Could not place a lens: ${error instanceof Error ? error.message : "unknown error"}`,
+        });
+      }
+    };
+
+    const leaveOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setLensMode(false);
+    };
+    m.on("click", place);
+    window.addEventListener("keydown", leaveOnEscape);
+    return () => {
+      cancelled = true;
+      m.off("click", place);
+      window.removeEventListener("keydown", leaveOnEscape);
+      canvas.style.cursor = "";
+      teardown();
+    };
+  }, [lensMode, addToast]);
 
   // Cartogram layers: geo-morpher morph layers over a gridmapper allocation.
   //
@@ -1733,7 +1835,9 @@ export const MapView = () => {
         bearing={orientation.bearing}
         pitch={orientation.pitch}
         zoom={orientation.zoom}
-        onToggleSelection={() => setSelectionMode((current) => !current)}
+        lensMode={lensMode}
+        onToggleLens={() => { setSelectionMode(false); setLensMode((current) => !current); }}
+        onToggleSelection={() => { setLensMode(false); setSelectionMode((current) => !current); }}
         onHome={() => {
           const layerId =
             selectedLayerId || mapLayers.find((layer) => layer.visible)?.id;

@@ -11,3 +11,18 @@ working tree.
 
 When an equivalent or newer release is published, replace the `file:` dependency
 with the registry version, run `npm install`, and remove the tarball.
+
+## Glyphlens 0.1.0
+
+`glyphlens-0.1.0.tgz` is an unpublished local build of Glyphlens from commit
+`b6f2ed3` (`main`), created with `npm pack --ignore-scripts` — the
+publish script rebuilds and tests, and the `dist/` in the tree is already the
+built output. Its own suite passes at this commit (116 tests).
+
+- SHA-256: `b7f21ca43df8182f881eb86b5e7ca7479cba3b61a64f426d0983877897b9a350`
+- Used through `file:vendor/glyphlens-0.1.0.tgz` in `package.json`.
+
+Pinned deliberately. The library is v0.1 and its README says the API will move;
+a snapshot means that happens on our schedule rather than on every install.
+When it is published, replace the `file:` dependency with the registry version,
+run `npm install`, and remove the tarball.

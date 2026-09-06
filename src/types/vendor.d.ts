@@ -31,3 +31,25 @@ declare module 'gridmapper' {
 }
 
 declare module 'glpk.js';
+
+/**
+ * glyphlens ships no typings at v0.1. Only the lens surface ALUR uses is
+ * declared, so the call is still checked rather than waved through.
+ */
+declare module 'glyphlens/maplibre' {
+  export type LensOverlay = {
+    setCenter: (centre: [number, number]) => void;
+    setRadius: (metres: number) => void;
+    setMorph: (u: number) => void;
+    update: (patch: Record<string, unknown>) => void;
+    state: () => {
+      center: [number, number];
+      radius?: number;
+      stats?: unknown;
+      bins?: unknown;
+    };
+    destroy: () => void;
+  };
+  export function addLens(map: unknown, options: Record<string, unknown>): LensOverlay;
+  export function addField(map: unknown, options: Record<string, unknown>): LensOverlay;
+}
