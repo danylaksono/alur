@@ -12,6 +12,7 @@ export const MapInteractionToolbar = ({
   coordinates,
   bearing,
   pitch,
+  zoom,
   onToggleSelection,
   onHome,
   onZoomSelection,
@@ -28,6 +29,7 @@ export const MapInteractionToolbar = ({
   coordinates: string;
   bearing: number;
   pitch: number;
+  zoom: number;
   onToggleSelection: () => void;
   onHome: () => void;
   onZoomSelection: () => void;
@@ -92,11 +94,16 @@ export const MapInteractionToolbar = ({
         Drag to select · Shift add · Alt subtract · Esc exit
       </div>
     )}
-    {coordinates && (
-      <button type="button" onClick={onCopyCoordinates} style={{ bottom: 'calc(0.625rem + var(--alur-map-chrome-bottom, 0px))' }} className="pressable pointer-events-auto absolute left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-md border border-slate-200 bg-white/90 px-2 py-1 font-mono text-[11px] tabular-nums text-slate-500 shadow-sm backdrop-blur hover:bg-white hover:text-slate-800" title="Copy pointer coordinates">
-        <Crosshair className="h-3 w-3" /> {coordinates}
-      </button>
-    )}
+    {/* Zoom and CRS stay put when the pointer leaves the map; only the
+        coordinates come and go with it. The scale *bar* is MapLibre's, bottom
+        right — this is the numeric half it does not report. */}
+    <button type="button" onClick={onCopyCoordinates} disabled={!coordinates} style={{ bottom: 'calc(0.625rem + var(--alur-map-chrome-bottom, 0px))' }} className="pressable pointer-events-auto absolute left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-md border border-slate-200 bg-white/90 px-2 py-1 font-mono text-[11px] tabular-nums text-slate-500 shadow-sm backdrop-blur enabled:hover:bg-white enabled:hover:text-slate-800" title={coordinates ? 'Copy pointer coordinates' : 'Move the pointer over the map to read a coordinate'}>
+      <Crosshair className="h-3 w-3" />
+      <span title="Coordinates are WGS 84 longitude and latitude">EPSG:4326</span>
+      {coordinates && <span className="text-slate-700">{coordinates}</span>}
+      <span className="text-slate-400" aria-hidden="true">·</span>
+      <span title="Zoom level">z{zoom.toFixed(1)}</span>
+    </button>
   </>
   );
 };

@@ -257,10 +257,10 @@ export const MapView = () => {
     if (!result.ok) addToast({ type: "warning", message: result.message });
   };
   const [coordinates, setCoordinates] = useState("");
-  // Bearing and pitch drive the compass. Tracked locally rather than read from
-  // the store's mapCamera, which only updates on moveend — a compass that
-  // catches up after the gesture ends reads as broken.
-  const [orientation, setOrientation] = useState({ bearing: 0, pitch: 0 });
+  // Bearing and pitch drive the compass, zoom the readout. Tracked locally
+  // rather than read from the store's mapCamera, which only updates on moveend
+  // — a compass that catches up after the gesture ends reads as broken.
+  const [orientation, setOrientation] = useState({ bearing: 0, pitch: 0, zoom: 0 });
   const visibleLegends = mapLayers
     .filter((layer) => layer.visible && layer.legend)
     .map((layer) => ({
@@ -339,13 +339,15 @@ export const MapView = () => {
       const bearing = raw > 180 ? raw - 360 : raw <= -180 ? raw + 360 : raw;
       setOrientation((current) =>
         Math.abs(current.bearing - bearing) < 0.01 &&
-        Math.abs(current.pitch - m.getPitch()) < 0.01
+        Math.abs(current.pitch - m.getPitch()) < 0.01 &&
+        Math.abs(current.zoom - m.getZoom()) < 0.01
           ? current
-          : { bearing, pitch: m.getPitch() },
+          : { bearing, pitch: m.getPitch(), zoom: m.getZoom() },
       );
     };
     m.on("rotate", updateOrientation);
     m.on("pitch", updateOrientation);
+    m.on("zoom", updateOrientation);
     updateOrientation();
     const storeCamera = () => {
       const center = m.getCenter();
@@ -396,6 +398,7 @@ export const MapView = () => {
       m.off("mouseout", clearCoordinates);
       m.off("rotate", updateOrientation);
       m.off("pitch", updateOrientation);
+      m.off("zoom", updateOrientation);
       m.off("moveend", storeCamera);
       locationMarker.current?.remove();
       locationMarker.current = null;
@@ -1591,6 +1594,7 @@ export const MapView = () => {
         coordinates={coordinates}
         bearing={orientation.bearing}
         pitch={orientation.pitch}
+        zoom={orientation.zoom}
         onToggleSelection={() => setSelectionMode((current) => !current)}
         onHome={() => {
           const layerId =
