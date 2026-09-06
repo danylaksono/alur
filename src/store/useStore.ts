@@ -159,6 +159,14 @@ export type WorkflowNode = Node & {
      * you the filter.
      */
     disabled?: boolean;
+    /** Folded to its header, so a long step stops dominating the canvas. */
+    collapsed?: boolean;
+    /**
+     * Why this step is here, in the author's words. The graph records what
+     * happens; a month later the argument for it is the part nobody can
+     * reconstruct from the SQL.
+     */
+    note?: string;
   };
 };
 
@@ -291,6 +299,8 @@ export type UIState = {
   isSettingsOpen: boolean;
   isAboutOpen: boolean;
   isCommandPaletteOpen: boolean;
+  /** The node whose note is open for editing, if any. */
+  noteEditorNodeId: string | null;
   datasetOverviewLayerId: string | null;
   layerStyleRequest?: { layerId: string; field?: string; requestedAt: number };
   /**
@@ -458,6 +468,9 @@ export interface AppState {
   setWorkflowIssue: (issue: { nodeId: string | null; message: string } | null) => void;
   setWorkflowReadiness: (readiness: Record<string, NodeReadiness>) => void;
   toggleNodeDisabled: (id: string) => void;
+  toggleNodeCollapsed: (id: string) => void;
+  setNodeNote: (id: string, note: string) => void;
+  setNoteEditorNodeId: (id: string | null) => void;
   setNodeExecutionState: (id: string, state: NodeExecutionState) => void;
   resetNodeExecutionStates: () => void;
   resetWorkspace: () => void;
@@ -766,6 +779,7 @@ const initialUIState: UIState = {
   isSettingsOpen: false,
   isAboutOpen: false,
   isCommandPaletteOpen: false,
+  noteEditorNodeId: null,
   datasetOverviewLayerId: null,
   layerStyleRequest: undefined,
   recoverySave: { status: "idle" },
@@ -1443,6 +1457,25 @@ export const useStore = create<AppState>()(
             layerFocusRequest: { layerId, bounds, requestedAt: Date.now() },
           };
         }),
+      toggleNodeCollapsed: (id) =>
+        set((state) => ({
+          nodes: state.nodes.map((node) =>
+            node.id === id
+              ? { ...node, data: { ...node.data, collapsed: !node.data.collapsed } }
+              : node,
+          ),
+        })),
+
+      setNodeNote: (id, note) =>
+        set((state) => ({
+          nodes: state.nodes.map((node) =>
+            node.id === id ? { ...node, data: { ...node.data, note } } : node,
+          ),
+        })),
+
+      setNoteEditorNodeId: (id) =>
+        set((state) => ({ ui: { ...state.ui, noteEditorNodeId: id } })),
+
       toggleNodeDisabled: (id) =>
         set((state) => ({
           nodes: state.nodes.map((node) =>

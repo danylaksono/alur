@@ -14,6 +14,12 @@ const JOIN_PREDICATE_OPTIONS = [
 
 const EXCLUDED_COLUMNS = new Set(['geometry', 'geom', 'geojson']);
 
+/** A keeps its rows and geometry; B's attributes are appended to them. */
+const JOIN_PORTS = [
+  { letter: 'A', role: 'left', top: '38%' },
+  { letter: 'B', role: 'right', top: '62%' },
+];
+
 export const JoinNode = ({ data, id, selected }: any) => {
   const updateNode = useStore((s) => s.updateNode);
   const edges = useStore((s) => s.edges);
@@ -60,6 +66,7 @@ export const JoinNode = ({ data, id, selected }: any) => {
       label="Join"
       title={title}
       helperContent={helperContent}
+      ports={JOIN_PORTS}
     >
       <div className="grid grid-cols-2 gap-2">
         <div>
@@ -174,8 +181,6 @@ export const JoinNode = ({ data, id, selected }: any) => {
         className={nodeHandleClass('cyan')}
         style={{ top: '62%' }}
       />
-      <span className="pointer-events-none absolute left-1.5 top-[38%] -translate-y-1/2 text-[11px] font-bold uppercase text-slate-500">A</span>
-      <span className="pointer-events-none absolute left-1.5 top-[62%] -translate-y-1/2 text-[11px] font-bold uppercase text-slate-500">B</span>
       <Handle type="source" position={Position.Right} className={nodeHandleClass('cyan')} />
     </FlowNodeShell>
   );

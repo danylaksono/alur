@@ -9,6 +9,12 @@ import { TypeaheadSelect } from './TypeaheadSelect';
 
 const EPSG_PATTERN = /^EPSG:\d{1,6}$/i;
 
+/** Argument order, not left/right: ST_Difference(A, B) is A minus B. */
+const ANALYSIS_PORTS = [
+  { letter: 'A', role: 'first', top: '38%' },
+  { letter: 'B', role: 'second', top: '62%' },
+];
+
 export const AnalysisNode = ({ data, id, selected }: any) => {
   const updateNode = useStore((s) => s.updateNode);
   const operation = data.config?.operation || 'ST_Buffer';
@@ -61,6 +67,7 @@ export const AnalysisNode = ({ data, id, selected }: any) => {
       label="Spatial Op"
       title={operation}
       helperContent={selectedFnMeta}
+      ports={requiredInputCount > 1 ? ANALYSIS_PORTS : undefined}
     >
         <div>
           <label className={cn(fieldLabelClass, 'mb-1')}>
@@ -146,8 +153,6 @@ export const AnalysisNode = ({ data, id, selected }: any) => {
             className={nodeHandleClass('purple')}
             style={{ top: '62%' }}
           />
-          <span className="pointer-events-none absolute left-1.5 top-[38%] -translate-y-1/2 text-[11px] font-bold uppercase text-slate-500">A</span>
-          <span className="pointer-events-none absolute left-1.5 top-[62%] -translate-y-1/2 text-[11px] font-bold uppercase text-slate-500">B</span>
         </>
       )}
       <Handle type="source" position={Position.Right} className={nodeHandleClass('purple')} />

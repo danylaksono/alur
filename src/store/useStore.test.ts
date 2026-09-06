@@ -914,3 +914,54 @@ describe('calculation setups', () => {
     expect(saved()).toEqual([]);
   });
 });
+
+describe('node annotation and folding', () => {
+  beforeEach(() => {
+    useStore.setState({
+      nodes: [node('input-a', 'wards'), node('step-b')],
+      edges: [],
+      nodeExecutionStates: {},
+      toasts: [],
+    });
+  });
+
+  it('records a note against the node without touching its config', () => {
+    useStore.getState().setNodeNote('step-b', 'Excluded pre-1930 stock: EPC data unreliable');
+    const [, stepB] = useStore.getState().nodes;
+    expect(stepB.data.note).toBe('Excluded pre-1930 stock: EPC data unreliable');
+    expect(stepB.data.config).toEqual({});
+    // The other node is untouched.
+    expect(useStore.getState().nodes[0].data.note).toBeUndefined();
+  });
+
+  it('folds and unfolds a node', () => {
+    const { toggleNodeCollapsed } = useStore.getState();
+    toggleNodeCollapsed('step-b');
+    expect(useStore.getState().nodes[1].data.collapsed).toBe(true);
+    toggleNodeCollapsed('step-b');
+    expect(useStore.getState().nodes[1].data.collapsed).toBe(false);
+  });
+
+  it('keeps a note and a fold independent of each other', () => {
+    useStore.getState().setNodeNote('step-b', 'why');
+    useStore.getState().toggleNodeCollapsed('step-b');
+    const stepB = useStore.getState().nodes[1];
+    expect(stepB.data.note).toBe('why');
+    expect(stepB.data.collapsed).toBe(true);
+  });
+
+  it('drops the stale run badge when a step is bypassed', () => {
+    useStore.getState().setNodeExecutionState('step-b', { status: 'done', featureCount: 42 });
+    expect(useStore.getState().nodeExecutionStates['step-b']).toBeTruthy();
+    useStore.getState().toggleNodeDisabled('step-b');
+    expect(useStore.getState().nodes[1].data.disabled).toBe(true);
+    expect(useStore.getState().nodeExecutionStates['step-b']).toBeUndefined();
+  });
+
+  it('tracks which node has its note open', () => {
+    useStore.getState().setNoteEditorNodeId('step-b');
+    expect(useStore.getState().ui.noteEditorNodeId).toBe('step-b');
+    useStore.getState().setNoteEditorNodeId(null);
+    expect(useStore.getState().ui.noteEditorNodeId).toBeNull();
+  });
+});

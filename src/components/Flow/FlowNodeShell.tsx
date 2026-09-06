@@ -1,5 +1,5 @@
 import { type ReactNode } from 'react';
-import { AlertTriangle, CircleDashed, type LucideIcon } from 'lucide-react';
+import { AlertTriangle, CircleDashed, StickyNote, type LucideIcon } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { cn } from '../../utils/cn';
 import { NodeActions } from './NodeActions';
@@ -26,6 +26,12 @@ interface FlowNodeShellProps {
   selected?: boolean;
   helperContent?: ReactNode;
   widthClassName?: string;
+  /**
+   * Named input ports, for nodes that take more than one and where the order
+   * changes the answer. The shell draws them and reserves the gutter they sit
+   * in, so the labels cannot land on top of the node's own fields.
+   */
+  ports?: Array<{ letter: string; role: string; top: string }>;
   children: ReactNode;
 }
 
@@ -40,13 +46,20 @@ export const FlowNodeShell = ({
   selected = false,
   helperContent,
   widthClassName = 'w-60',
+  ports,
   children,
 }: FlowNodeShellProps) => {
   const styles = toneStyles[tone];
   // The compiler stops at the first problem, so at most one node carries an
   // issue at a time — which is also the only one worth acting on.
   const issue = useStore((state) => (state.workflowIssue?.nodeId === id ? state.workflowIssue.message : null));
-  const disabled = useStore((state) => Boolean(state.nodes.find((node) => node.id === id)?.data.disabled));
+  const node = useStore((state) => state.nodes.find((item) => item.id === id));
+  const setNodeNote = useStore((state) => state.setNodeNote);
+  const disabled = Boolean(node?.data.disabled);
+  const collapsed = Boolean(node?.data.collapsed);
+  const note = node?.data.note ?? '';
+  const editingNote = useStore((state) => state.ui.noteEditorNodeId === id);
+  const setNoteEditor = useStore((state) => state.setNoteEditorNodeId);
   const readiness = useStore((state) => state.workflowReadiness[id]);
   // An unfinished step reads as unfinished before it is ever run. The issue
   // badge outranks it: that one is the compiler actually refusing.
@@ -87,9 +100,64 @@ export const FlowNodeShell = ({
           )}
         </div>
       </div>
-      <div className="space-y-2 px-3 pb-2.5 pt-2">
+      {/* Collapsed keeps the header, the state footers and every handle, so a
+          folded step still shows what it is and stays wired into the graph.
+          Each node passes its Handles among these children, so the fields are
+          hidden one by one rather than by dropping the whole block — unmounting
+          it would take the handles with it and cut the node out of the graph. */}
+      <div
+        className={cn(
+          collapsed
+            ? '[&>*:not(.react-flow__handle)]:hidden'
+            : cn('space-y-2 pb-2.5 pr-3 pt-2', ports?.length ? 'pl-11' : 'pl-3'),
+        )}
+      >
         {children}
       </div>
+
+      {ports?.map((port) => (
+        <span
+          key={port.letter}
+          className="pointer-events-none absolute left-1.5 z-10 flex -translate-y-1/2 flex-col items-start leading-none"
+          style={{ top: port.top }}
+          title={`${port.letter} — ${port.role}`}
+        >
+          <span className="text-[11px] font-bold uppercase text-slate-600">{port.letter}</span>
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+            {port.role}
+          </span>
+        </span>
+      ))}
+      {(note || editingNote) && (
+        <div className="border-t border-amber-100 bg-amber-50/60 px-3 py-2">
+          {editingNote ? (
+            <textarea
+              autoFocus
+              value={note}
+              onChange={(event) => setNodeNote(id, event.target.value)}
+              onBlur={() => setNoteEditor(null)}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') setNoteEditor(null);
+              }}
+              placeholder="Why is this step here?"
+              aria-label="Note"
+              // nodrag/nowheel, or typing in the box pans the canvas instead.
+              className="nodrag nowheel w-full resize-none rounded border border-amber-200 bg-white px-2 py-1 text-[11px] leading-snug text-slate-700 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
+              rows={3}
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setNoteEditor(id)}
+              title="Edit note"
+              className="nodrag flex w-full items-start gap-1.5 text-left text-[11px] leading-snug text-amber-900"
+            >
+              <StickyNote className="mt-px h-3 w-3 shrink-0 text-amber-600" aria-hidden="true" />
+              <span className="whitespace-pre-wrap">{note}</span>
+            </button>
+          )}
+        </div>
+      )}
       {disabled && (
         <div className="rounded-b-lg border-t border-slate-200 bg-slate-100 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
           Bypassed — passes its input straight through

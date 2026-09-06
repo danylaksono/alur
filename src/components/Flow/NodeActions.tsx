@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, type ReactNode } from 'react';
-import { Copy, Trash2, Info, Play, Download, Loader2, CheckCircle, AlertCircle, CircleSlash, PlayCircle } from 'lucide-react';
+import { Copy, Trash2, Info, Play, Download, Loader2, CheckCircle, AlertCircle, CircleSlash, PlayCircle, StickyNote, ChevronsDownUp, ChevronsUpDown } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { buildUpToSQL } from '../../utils/workflowEngine';
 import { duckdbService } from '../../services/duckdb';
@@ -26,6 +26,11 @@ export const NodeActions = ({ id, selected = false, helperContent }: NodeActions
   const node = useStore((s) => s.nodes.find((item) => item.id === id));
   const isDisabled = Boolean(node?.data.disabled);
   const isSource = node ? isSourceNode(node.data.type) : false;
+  const isCollapsed = Boolean(node?.data.collapsed);
+  const hasNote = Boolean(node?.data.note?.trim());
+  const toggleNodeCollapsed = useStore((s) => s.toggleNodeCollapsed);
+  const setNodeNote = useStore((s) => s.setNodeNote);
+  const setNoteEditorNodeId = useStore((s) => s.setNoteEditorNodeId);
   const [showHelper, setShowHelper] = useState(false);
   const [exporting, setExporting] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -193,6 +198,31 @@ export const NodeActions = ({ id, selected = false, helperContent }: NodeActions
               )}
             </div>
           )}
+
+          <button
+            type="button"
+            onClick={() => {
+              // Opening the editor on a node with no note yet has to create one,
+              // or the footer it lives in never renders.
+              if (!node?.data.note) setNodeNote(id, '');
+              setNoteEditorNodeId(id);
+            }}
+            aria-pressed={hasNote}
+            title={hasNote ? 'Edit note' : 'Add a note explaining this step'}
+            className={cn(actionButtonClass, hasNote && 'text-amber-600 hover:bg-amber-50 hover:text-amber-700')}
+          >
+            <StickyNote className="h-3.5 w-3.5" />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => toggleNodeCollapsed(id)}
+            aria-pressed={isCollapsed}
+            title={isCollapsed ? 'Expand this step' : 'Collapse to its header'}
+            className={actionButtonClass}
+          >
+            {isCollapsed ? <ChevronsUpDown className="h-3.5 w-3.5" /> : <ChevronsDownUp className="h-3.5 w-3.5" />}
+          </button>
 
           {/* A source node has no input to pass through, so bypassing one is
               meaningless and the control is not offered. */}
