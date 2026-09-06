@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useStore } from "../../store/useStore";
@@ -30,6 +30,14 @@ import {
   queryLayerGlyphPoints,
   type GlyphPoint,
 } from "../../services/glyphGridService";
+// The field list is needed before a lens exists, to offer the choice; only
+// glyphlens itself waits for a lens to actually be placed.
+import {
+  activeLensLayer,
+  lensBinningFor,
+  lensFieldsForLayer,
+  type LensPoints,
+} from "../../services/lensService";
 import type { CartogramVisualisation, GlyphGridVisualisation } from "../../types/visualisation";
 import type { H3GridVisualisation } from "../../types/visualisation";
 import {
@@ -272,7 +280,31 @@ export const MapView = () => {
   // A lens is a tool, not a layer style: you turn it on, put it somewhere, and
   // it reports on what is under it. Same shape as selection mode above.
   const [lensMode, setLensMode] = useState(false);
-  const lensOverlay = useRef<{ setCenter: (c: [number, number]) => void; destroy: () => void } | null>(null);
+  const lensOverlay = useRef<{
+    setCenter: (c: [number, number]) => void;
+    update: (patch: Record<string, unknown>) => void;
+    destroy: () => void;
+  } | null>(null);
+  const lensFields = useMemo(() => {
+    const layer = activeLensLayer(mapLayers, selectedLayerId);
+    return layer ? lensFieldsForLayer(layer) : [];
+  }, [mapLayers, selectedLayerId]);
+  /** Which field the bars measure. Null reads point density instead. */
+  const [chosenLensField, setLensField] = useState<string | null>(null);
+  // Derived rather than reset, so switching to a layer without the field falls
+  // back to density instead of leaving a choice that reads nothing.
+  const lensField = chosenLensField && lensFields.includes(chosenLensField) ? chosenLensField : null;
+  // Read inside the click handler, which is registered once per arming and so
+  // cannot close over the current choice.
+  const lensFieldRef = useRef<string | null>(null);
+  lensFieldRef.current = lensField;
+  /**
+   * The points the placed lens is reading.
+   *
+   * Kept so changing the field re-bins what is already in hand rather than
+   * going back to the database — every field came out of the one query.
+   */
+  const lensData = useRef<LensPoints | null>(null);
   /**
    * True while a tool is reading map clicks for itself.
    *
@@ -1225,6 +1257,7 @@ export const MapView = () => {
         /* the style may already have gone */
       }
       lensOverlay.current = null;
+      lensData.current = null;
     };
 
     const canvas = m.getCanvas();
@@ -1246,9 +1279,7 @@ export const MapView = () => {
       }
 
       const state = useStore.getState();
-      const layer =
-        state.mapLayers.find((item) => item.id === state.selectedLayerId) ||
-        state.mapLayers.find((item) => item.visible);
+      const layer = activeLensLayer(state.mapLayers, state.selectedLayerId);
       if (!layer) {
         addToast({ type: "warning", message: "Add a layer before placing a lens." });
         return;
@@ -1266,6 +1297,7 @@ export const MapView = () => {
           addToast({ type: "warning", message: `"${layer.name}" has no points a lens can read.` });
           return;
         }
+        lensData.current = data;
         // The lens sizes itself in screen pixels, so it needs the scale of the
         // view it is being put down on to express its disc in metres.
         // zoom + 1 because MapLibre's zoom is defined against 512px tiles, not
@@ -1274,7 +1306,10 @@ export const MapView = () => {
         const metresPerPixel =
           (156543.03392 * Math.cos((event.lngLat.lat * Math.PI) / 180)) /
           2 ** (m.getZoom() + 1);
-        lensOverlay.current = addLens(m, lensOptionsFor(centre, metresPerPixel, data));
+        lensOverlay.current = addLens(
+          m,
+          lensOptionsFor(centre, metresPerPixel, data, lensFieldRef.current),
+        );
       } catch (error) {
         addToast({
           type: "error",
@@ -1296,6 +1331,20 @@ export const MapView = () => {
       teardown();
     };
   }, [lensMode, addToast]);
+
+  /**
+   * Changing what the bars measure re-bins the points already in hand.
+   *
+   * Every field came out of the one extraction, so this is arithmetic over an
+   * array the lens is already holding — it does not go back to the database,
+   * and glyphlens animates between the two layouts.
+   */
+  useEffect(() => {
+    const overlay = lensOverlay.current;
+    const data = lensData.current;
+    if (!overlay || !data) return;
+    overlay.update({ binning: lensBinningFor(data, lensField) });
+  }, [lensField]);
 
   // Cartogram layers: geo-morpher morph layers over a gridmapper allocation.
   //
@@ -1836,6 +1885,9 @@ export const MapView = () => {
         pitch={orientation.pitch}
         zoom={orientation.zoom}
         lensMode={lensMode}
+        lensFields={lensFields}
+        lensField={lensField}
+        onLensFieldChange={setLensField}
         onToggleLens={() => { setSelectionMode(false); setLensMode((current) => !current); }}
         onToggleSelection={() => { setLensMode(false); setSelectionMode((current) => !current); }}
         onHome={() => {

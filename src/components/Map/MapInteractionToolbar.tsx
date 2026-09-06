@@ -8,6 +8,9 @@ import { pinMapEvidence } from '../../services/explainCapture';
 export const MapInteractionToolbar = ({
   selectionMode,
   lensMode,
+  lensFields,
+  lensField,
+  onLensFieldChange,
   onToggleLens,
   hasLayer,
   hasSelection,
@@ -27,6 +30,9 @@ export const MapInteractionToolbar = ({
 }: {
   selectionMode: boolean;
   lensMode: boolean;
+  lensFields: string[];
+  lensField: string | null;
+  onLensFieldChange: (field: string | null) => void;
   onToggleLens: () => void;
   hasLayer: boolean;
   hasSelection: boolean;
@@ -69,6 +75,36 @@ export const MapInteractionToolbar = ({
       <button type="button" onClick={onToggleLens} disabled={!hasLayer} aria-pressed={lensMode} aria-label={lensMode ? 'Put the lens away' : 'Place a multivariate lens'} title={lensMode ? 'Click the map to place or move the lens · Esc to exit' : 'Lens: summarise what is around a point'} className={cn('pressable flex h-9 w-9 items-center justify-center border-b border-slate-100 text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-35', lensMode && 'bg-violet-50 text-violet-700')}>
         <Aperture className="h-4 w-4" />
       </button>
+      {/* Only while the tool is armed: this is the lens's own setting, so it
+          appears with the lens and leaves with it rather than living as a
+          panel that is empty most of the time. */}
+      {lensMode && lensFields.length > 0 && (
+        <div className="absolute right-11 top-[4.5rem] w-52 rounded-lg border border-violet-200 bg-white p-1 shadow-lg">
+          <p className="px-2 py-1 text-[11px] font-bold uppercase tracking-wider text-violet-700">Lens reads</p>
+          <div role="radiogroup" aria-label="What the lens bars measure">
+            {[null, ...lensFields].map((field) => (
+              <button
+                key={field ?? '__count'}
+                type="button"
+                role="radio"
+                aria-checked={lensField === field}
+                onClick={() => onLensFieldChange(field)}
+                title={field ? `Total ${field} in each compass sector` : 'How many points lie in each compass sector'}
+                className={cn(
+                  'pressable flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-[11px] font-semibold text-slate-600 hover:bg-slate-50',
+                  lensField === field && 'bg-violet-50 text-violet-700',
+                )}
+              >
+                <span className="truncate">{field ?? 'Point density'}</span>
+                {lensField === field && <Check className="h-3 w-3 shrink-0" />}
+              </button>
+            ))}
+          </div>
+          <p className="px-2 pb-1 pt-1 text-[10px] leading-snug text-slate-500">
+            {lensField ? 'Total per compass sector.' : 'Points per compass sector.'}
+          </p>
+        </div>
+      )}
       <button type="button" onClick={onHome} disabled={!hasLayer} aria-label="Zoom to active layer" title="Zoom to active layer" className="pressable flex h-9 w-9 items-center justify-center border-b border-slate-100 text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-35">
         <Home className="h-4 w-4" />
       </button>
