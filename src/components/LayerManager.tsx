@@ -107,18 +107,28 @@ export const LayerManager = ({ onEditStyle }: { onEditStyle?: (layerId: string) 
                   )}
                 >
                   <div className="flex items-center gap-1.5">
-                    <span
+                    {/* A button, not a span: reordering was drag-only, which
+                        left it unreachable from the keyboard. The list is drawn
+                        top-of-map first, so Up means later in mapLayers. */}
+                    <button
+                      type="button"
                       draggable
                       onDragStart={(event) => {
                         setDraggedLayerId(layer.id);
                         event.dataTransfer.effectAllowed = 'move';
                         event.dataTransfer.setData('text/plain', layer.id);
                       }}
+                      onKeyDown={(event) => {
+                        if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+                        reorderMapLayer(layer.id, index + (event.key === 'ArrowUp' ? 1 : -1));
+                        event.preventDefault();
+                      }}
                       className="flex h-7 w-3.5 shrink-0 cursor-grab items-center justify-center rounded text-slate-400 hover:bg-slate-100 hover:text-slate-500 active:cursor-grabbing"
-                      title="Drag to reorder layer"
+                      title="Drag to reorder, or use the arrow keys"
+                      aria-label={`Reorder ${layer.name}, ${mapLayers.length - index} of ${mapLayers.length}. Use the arrow keys to move it.`}
                     >
                       <GripVertical className="h-3.5 w-3.5" />
-                    </span>
+                    </button>
                     <button
                       type="button"
                       onClick={() => selectLayer(isSelected ? null : layer.id)}

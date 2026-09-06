@@ -5,6 +5,7 @@ import { useAttributeTable } from '../../hooks/useAttributeTable';
 import { TableTab } from './TableTab';
 import { SqlTab } from './SqlTab';
 import { cn } from '../../utils/cn';
+import { separatorKeyDown } from '../../utils/resizeSeparator';
 
 const WorkflowTab = lazy(() => import('./WorkflowTab').then((module) => ({ default: module.WorkflowTab })));
 
@@ -99,17 +100,24 @@ export const BottomDrawer = () => {
       {drawerMode === 'open' && (
         <div
           className={cn(
-            'shrink-0 bg-slate-100 transition-colors hover:bg-slate-300',
+            'shrink-0 bg-slate-100 transition-colors hover:bg-slate-300 focus-visible:bg-slate-400',
             horizontal ? 'h-1.5 cursor-row-resize' : 'w-1.5 cursor-col-resize',
           )}
           onPointerDown={(e) => {
             e.preventDefault();
             setIsResizing(true);
           }}
-          title="Drag to resize"
+          onKeyDown={
+            horizontal
+              ? separatorKeyDown('horizontal', drawerHeight, setDrawerHeight)
+              : separatorKeyDown('vertical', drawerWidth, setDrawerWidth)
+          }
+          tabIndex={0}
+          title="Drag to resize, or use the arrow keys"
           role="separator"
           aria-orientation={horizontal ? 'horizontal' : 'vertical'}
           aria-label="Resize data panel"
+          aria-valuenow={Math.round(horizontal ? drawerHeight : drawerWidth)}
         />
       )}
 

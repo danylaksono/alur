@@ -9,6 +9,7 @@ import { ScorePanel } from '../Score/ScorePanel';
 import { ScenarioPanel } from '../Scenarios/ScenarioPanel';
 import { ToolboxPanel } from '../Operations/ToolboxPanel';
 import { cn } from '../../utils/cn';
+import { separatorKeyDown } from '../../utils/resizeSeparator';
 
 const Chat = lazy(() => import('../Chat').then((module) => ({ default: module.Chat })));
 
@@ -96,15 +97,18 @@ export const LeftPanel = () => {
       </div>
 
       <div
-        className="absolute inset-y-0 right-0 z-10 w-1.5 cursor-col-resize bg-transparent transition-colors hover:bg-slate-300 max-md:hidden"
+        className="absolute inset-y-0 right-0 z-10 w-1.5 cursor-col-resize bg-transparent transition-colors hover:bg-slate-300 focus-visible:bg-slate-400 max-md:hidden"
         onPointerDown={(event) => {
           event.preventDefault();
           setIsResizing(true);
         }}
-        title="Drag to resize"
+        onKeyDown={separatorKeyDown('vertical', panelWidth, setPanelWidth)}
+        tabIndex={0}
+        title="Drag to resize, or use the arrow keys"
         role="separator"
         aria-orientation="vertical"
         aria-label="Resize side panel"
+        aria-valuenow={Math.round(panelWidth)}
       />
     </aside>
   );
