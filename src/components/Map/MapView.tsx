@@ -30,7 +30,7 @@ import {
   queryLayerGlyphPoints,
   type GlyphPoint,
 } from "../../services/glyphGridService";
-import type { GlyphGridVisualisation } from "../../types/visualisation";
+import type { CartogramVisualisation, GlyphGridVisualisation } from "../../types/visualisation";
 import type { H3GridVisualisation } from "../../types/visualisation";
 import {
   buildH3GridLayerProps,
@@ -203,6 +203,17 @@ export const MapView = () => {
   >(new Map());
   const glyphPointCache = useRef<
     Map<string, { key: string; promise: Promise<GlyphPoint[]> }>
+  >(new Map());
+  /** geo-morpher handles, one per visible cartogram layer. */
+  const cartogramHandles = useRef<
+    Map<
+      string,
+      {
+        updateMorphFactor: (factor: number) => unknown;
+        setLayerVisibility: (v: Record<string, boolean>) => void;
+        remove: () => void;
+      }
+    >
   >(new Map());
   const deckOverlayRef = useRef<any>(null);
   const deckPopupRef = useRef<maplibregl.Popup | null>(null);
@@ -1134,6 +1145,7 @@ export const MapView = () => {
           // instead; hiding the base layer keeps feature clicks from competing.
           const glyphActive =
             layer.visualisation?.kind === "glyph_grid" ||
+            layer.visualisation?.kind === "cartogram" ||
             layer.visualisation?.kind === "h3grid";
           m.setLayoutProperty(
             layerId,
@@ -1166,6 +1178,115 @@ export const MapView = () => {
     setHoveredFeature,
     toggleSelectedFeature,
   ]);
+
+  // Cartogram layers: geo-morpher morph layers over a gridmapper allocation.
+  //
+  // The allocation is a mixed-integer program, so it is computed once per layer
+  // and cached; dragging the morph factor only pushes a new interpolation
+  // through the handle rather than re-solving the grid.
+  useEffect(() => {
+    const m = map.current;
+    if (!m) return;
+    let cancelled = false;
+
+    const syncCartograms = async () => {
+      if (!styleReady.current) {
+        m.once("style.load", () => {
+          if (!cancelled) syncCartograms();
+        });
+        return;
+      }
+
+      const wanted = mapLayers.filter(
+        (layer) => layer.visible && layer.visualisation?.kind === "cartogram",
+      );
+      const wantedIds = new Set(wanted.map((layer) => layer.id));
+
+      cartogramHandles.current.forEach((handle, layerId) => {
+        if (wantedIds.has(layerId)) return;
+        try {
+          handle.remove();
+        } catch {
+          /* the style may already have dropped it */
+        }
+        cartogramHandles.current.delete(layerId);
+      });
+
+      for (const layer of wanted) {
+        const vis = layer.visualisation as CartogramVisualisation;
+        const existing = cartogramHandles.current.get(layer.id);
+        if (existing) {
+          existing.updateMorphFactor(vis.morphFactor);
+          continue;
+        }
+
+        try {
+          useStore.getState().setLayerRestyling(layer.id, true);
+          const { buildCartogramPair } = await import(
+            "../../services/cartogramService"
+          );
+          const pair = await buildCartogramPair(layer, {
+            compactness: vis.compactness,
+            gridType: vis.gridType,
+          });
+          if (cancelled) return;
+
+          const { GeoMorpher, createMapLibreMorphLayers } = await import(
+            "geo-morpher"
+          );
+          const morpher = new GeoMorpher({
+            regularGeoJSON: pair.regularGeoJSON,
+            cartogramGeoJSON: pair.cartogramGeoJSON,
+            // Defaults to "code". A mismatch here joins nothing and morphs an
+            // empty collection, so the id column the layer actually uses is
+            // carried back from the builder rather than assumed.
+            geoJSONJoinColumn: pair.joinProperty,
+          });
+          await morpher.prepare();
+          if (cancelled) return;
+
+          const handle = await createMapLibreMorphLayers({
+            morpher,
+            map: m,
+            morphFactor: vis.morphFactor,
+            idBase: `cartogram-${layer.id}`,
+            interpolatedStyle: {
+              paint: {
+                "fill-color": vis.fillColor,
+                "fill-opacity": vis.opacity,
+                "fill-outline-color": "#ffffff",
+              },
+            },
+          });
+          if (cancelled) {
+            handle.remove();
+            return;
+          }
+          // geo-morpher draws all three states; only the interpolated one is
+          // the answer, and the other two would sit under it at every factor.
+          handle.setLayerVisibility({ regular: false, cartogram: false });
+          cartogramHandles.current.set(layer.id, handle);
+        } catch (error) {
+          // The cap and the "no geometry" case both land here with a message
+          // written for the user, so it is worth showing rather than logging.
+          addToast({
+            type: "warning",
+            message:
+              error instanceof Error
+                ? error.message
+                : `Could not build a cartogram for "${layer.name}".`,
+          });
+        } finally {
+          useStore.getState().setLayerRestyling(layer.id, false);
+        }
+      }
+    };
+
+    void syncCartograms();
+    return () => {
+      cancelled = true;
+    };
+  }, [mapLayers, addToast]);
 
   // Glyph-grid layers: screengrid custom canvas layers fed from DuckDB points.
   useEffect(() => {
@@ -1433,6 +1554,7 @@ export const MapView = () => {
       const isInactive = Boolean(activeLayerId && layer.id !== activeLayerId);
       const glyphActive =
         layer.visualisation?.kind === "glyph_grid" ||
+        layer.visualisation?.kind === "cartogram" ||
         layer.visualisation?.kind === "h3grid";
 
       m.setLayoutProperty(

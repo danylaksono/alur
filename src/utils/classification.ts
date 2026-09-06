@@ -441,6 +441,27 @@ export const buildLegend = (
     };
   }
 
+  if (visualisation.kind === "cartogram") {
+    // A cartogram re-shapes geometry rather than encoding a value in colour, so
+    // the key describes where on the morph the map currently sits.
+    const percent = Math.round(visualisation.morphFactor * 100);
+    return {
+      title: "Grid cartogram",
+      kind: "simple",
+      items: [
+        {
+          label:
+            percent === 0
+              ? "Geography"
+              : percent === 100
+                ? "Equal-area grid"
+                : `${percent}% toward the grid`,
+          color: visualisation.fillColor,
+        },
+      ],
+    };
+  }
+
   if (visualisation.kind === "dot_density") {
     return {
       title: visualisation.field,

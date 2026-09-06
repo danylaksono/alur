@@ -19,6 +19,7 @@ export type VisualisationKind =
   | "hexbin"
   | "bivariate"
   | "glyph_grid"
+  | "cartogram"
   | "h3grid";
 
 export type LegendItem = {
@@ -224,6 +225,22 @@ export type H3GridVisualisation = {
   elevationScale: number;
 };
 
+/**
+ * Grid cartogram: every area drawn as an equal cell, with a factor that morphs
+ * between the real geography and the grid. Equal visual weight per place, which
+ * a choropleth cannot give when the areas differ wildly in size.
+ */
+export type CartogramVisualisation = {
+  kind: "cartogram";
+  /** 0 = real geography, 1 = the grid. Anything between is interpolated. */
+  morphFactor: number;
+  /** Higher pulls cells tighter together; passed to the allocator. */
+  compactness: number;
+  gridType: "rect" | "hex";
+  fillColor: string;
+  opacity: number;
+};
+
 export type LayerVisualisation =
   | SimpleVisualisation
   | ChoroplethVisualisation
@@ -237,4 +254,5 @@ export type LayerVisualisation =
   | HexbinVisualisation
   | BivariateVisualisation
   | GlyphGridVisualisation
+  | CartogramVisualisation
   | H3GridVisualisation;

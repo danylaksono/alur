@@ -24,6 +24,7 @@ const legendKindLabel: Record<LegendSpec["kind"], string> = {
   hexbin: "Hexbin",
   bivariate: "Bivariate",
   glyph_grid: "Glyphs",
+  cartogram: "Cartogram",
   h3grid: "H3 grid",
 };
 

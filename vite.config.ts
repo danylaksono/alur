@@ -5,6 +5,16 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   base: '/',
   plugins: [react()],
+  resolve: {
+    alias: {
+      // geo-morpher's package entry is raw source, and its core does a default
+      // import of flubber, which only has named exports — esbuild refuses it.
+      // The published ESM bundle has flubber inlined and no external imports at
+      // all, so the runtime comes from there while TypeScript still reads the
+      // package's own type declarations.
+      'geo-morpher': 'geo-morpher/dist/geo-morpher.esm.js'
+    }
+  },
   optimizeDeps: {
     exclude: ['@duckdb/duckdb-wasm']
   },

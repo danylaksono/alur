@@ -22,6 +22,7 @@ import {
 import type {
   GlyphGridGlyph,
   HexbinAggregate,
+  LayerVisualisation,
   VisualisationKind,
 } from "../../types/visualisation";
 import { geometryKindForLayer } from "../../utils/mapStyleCompiler";
@@ -247,6 +248,10 @@ export const VisualisationPanel = ({
   const [glyphAggregate, setGlyphAggregate] = useState<"count" | "sum" | "avg">(
     "count",
   );
+  // 0 = real geography, 1 = the grid. The allocation is solved once per layer;
+  // this only moves the interpolation between the two.
+  const [cartogramMorph, setCartogramMorph] = useState(1);
+  const [cartogramCompactness, setCartogramCompactness] = useState(0.6);
   const [h3CellColumn, setH3CellColumn] = useState<string | null>(null);
   const [h3Extruded, setH3Extruded] = useState(false);
   const [h3ElevationScale, setH3ElevationScale] = useState(1);
@@ -417,6 +422,9 @@ export const VisualisationPanel = ({
       (kind === "hexbin" &&
         geometryKind === "point" &&
         (hexAggregate === "count" || profile?.kind === "numeric")) ||
+      // A cartogram encodes no field — it re-shapes the areas themselves — so
+      // having polygons is the whole requirement.
+      (kind === "cartogram" && geometryKind === "polygon") ||
       (kind === "h3grid" && Boolean(h3CellColumn)) ||
       (kind === "glyph_grid" &&
         (["pie", "donut", "bars", "radial"].includes(glyphType)
@@ -458,6 +466,24 @@ export const VisualisationPanel = ({
           ? CATEGORICAL_PALETTE
           : getPalette(paletteId).colors,
       });
+      updateLayerVisualisation(
+        selectedLayer.id,
+        visualisation,
+        buildLegend(visualisation),
+      );
+      return;
+    }
+
+    if (kind === "cartogram") {
+      if (!canApply) return;
+      const visualisation: LayerVisualisation = {
+        kind: "cartogram",
+        morphFactor: cartogramMorph,
+        compactness: cartogramCompactness,
+        gridType: "rect",
+        fillColor: getPalette(paletteId).colors.at(-1) || "#0f766e",
+        opacity: 0.85,
+      };
       updateLayerVisualisation(
         selectedLayer.id,
         visualisation,
@@ -718,6 +744,8 @@ export const VisualisationPanel = ({
     glyphCellSize,
     glyphAggregate,
     glyphFields.join("|"),
+    cartogramMorph,
+    cartogramCompactness,
     canApply,
     profile,
     profileY,
@@ -866,6 +894,9 @@ export const VisualisationPanel = ({
                   <option value="glyph_grid">Glyph grid</option>
                   {h3CellColumn && (
                     <option value="h3grid">H3 grid (deck)</option>
+                  )}
+                  {geometryKind === "polygon" && (
+                    <option value="cartogram">Grid cartogram</option>
                   )}
                   {geometryKind === "polygon" && (
                     <option value="extrusion">3D extrusion</option>
@@ -1045,6 +1076,58 @@ export const VisualisationPanel = ({
                 Drawn by deck.gl on its own canvas — analysis-only, not part of
                 the exported map style.
               </p>
+            )}
+
+            {kind === "cartogram" && (
+              <div className="space-y-2">
+                <label className="space-y-1">
+                  <span className="flex items-baseline justify-between text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                    Morph
+                    <span className="font-mono tabular-nums text-slate-600">
+                      {Math.round(cartogramMorph * 100)}%
+                    </span>
+                  </span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.02}
+                    value={cartogramMorph}
+                    onChange={(event) =>
+                      setCartogramMorph(Number(event.target.value))
+                    }
+                    className="w-full accent-teal-700"
+                  />
+                  <span className="flex justify-between text-[11px] text-slate-500">
+                    <span>Geography</span>
+                    <span>Grid</span>
+                  </span>
+                </label>
+                <label className="space-y-1">
+                  <span className="flex items-baseline justify-between text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                    Compactness
+                    <span className="font-mono tabular-nums text-slate-600">
+                      {cartogramCompactness.toFixed(2)}
+                    </span>
+                  </span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={cartogramCompactness}
+                    onChange={(event) =>
+                      setCartogramCompactness(Number(event.target.value))
+                    }
+                    className="w-full accent-teal-700"
+                  />
+                </label>
+                <p className="text-[11px] leading-tight text-slate-500">
+                  Every area gets one equal cell, so small places carry the same
+                  weight as large ones. Changing compactness re-solves the
+                  layout; the morph only moves between the two shapes.
+                </p>
+              </div>
             )}
 
             {kind === "glyph_grid" && (
