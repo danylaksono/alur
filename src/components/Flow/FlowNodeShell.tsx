@@ -58,6 +58,7 @@ export const FlowNodeShell = ({
   const disabled = Boolean(node?.data.disabled);
   const collapsed = Boolean(node?.data.collapsed);
   const note = node?.data.note ?? '';
+  const isResult = Boolean(node?.data.isResult);
   const editingNote = useStore((state) => state.ui.noteEditorNodeId === id);
   const setNoteEditor = useStore((state) => state.setNoteEditorNodeId);
   const readiness = useStore((state) => state.workflowReadiness[id]);
@@ -90,8 +91,16 @@ export const FlowNodeShell = ({
           <Icon className="h-3.5 w-3.5" />
         </div>
         <div className="min-w-0">
-          <div className="text-[11px] font-semibold uppercase leading-tight tracking-wide text-slate-600">
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase leading-tight tracking-wide text-slate-600">
             {label}
+            {isResult && (
+              <span
+                className="rounded bg-emerald-100 px-1 py-px text-[10px] font-bold tracking-wide text-emerald-700"
+                title="A full run returns this step's output"
+              >
+                Result
+              </span>
+            )}
           </div>
           {title && (
             <div className="truncate text-xs font-semibold leading-tight text-slate-800">

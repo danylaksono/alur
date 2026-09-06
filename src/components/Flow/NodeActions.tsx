@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, type ReactNode } from 'react';
-import { Copy, Trash2, Info, Play, Download, Loader2, CheckCircle, AlertCircle, CircleSlash, PlayCircle, StickyNote, ChevronsDownUp, ChevronsUpDown } from 'lucide-react';
+import { Copy, Trash2, Info, Play, Download, Loader2, CheckCircle, AlertCircle, CircleSlash, PlayCircle, StickyNote, ChevronsDownUp, ChevronsUpDown, Flag } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { buildUpToSQL } from '../../utils/workflowEngine';
 import { duckdbService } from '../../services/duckdb';
@@ -31,6 +31,8 @@ export const NodeActions = ({ id, selected = false, helperContent }: NodeActions
   const toggleNodeCollapsed = useStore((s) => s.toggleNodeCollapsed);
   const setNodeNote = useStore((s) => s.setNodeNote);
   const setNoteEditorNodeId = useStore((s) => s.setNoteEditorNodeId);
+  const setResultNode = useStore((s) => s.setResultNode);
+  const isResult = Boolean(node?.data.isResult);
   const [showHelper, setShowHelper] = useState(false);
   const [exporting, setExporting] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -197,6 +199,20 @@ export const NodeActions = ({ id, selected = false, helperContent }: NodeActions
                 </div>
               )}
             </div>
+          )}
+
+          {/* A source has nothing downstream of it to be the answer instead, so
+              marking one adds nothing; every other step can be the result. */}
+          {!isSource && (
+            <button
+              type="button"
+              onClick={() => setResultNode(isResult ? null : id)}
+              aria-pressed={isResult}
+              title={isResult ? 'Stop treating this step as the result' : 'Return this step when the workflow runs'}
+              className={cn(actionButtonClass, isResult && 'text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700')}
+            >
+              <Flag className={cn('h-3.5 w-3.5', isResult && 'fill-current')} />
+            </button>
           )}
 
           <button

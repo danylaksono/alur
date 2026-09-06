@@ -170,6 +170,11 @@ export type WorkflowNode = Node & {
      * reconstruct from the SQL.
      */
     note?: string;
+    /**
+     * The step whose output a full run returns. Without one, the result is
+     * whichever step sorts last — which depends on the order nodes were added.
+     */
+    isResult?: boolean;
   };
 };
 
@@ -474,6 +479,7 @@ export interface AppState {
   toggleNodeCollapsed: (id: string) => void;
   setNodeNote: (id: string, note: string) => void;
   updateNodeLabel: (id: string, label: string) => void;
+  setResultNode: (id: string | null) => void;
   setNodePositions: (updates: Array<{ id: string; position: { x: number; y: number } }>) => void;
   setNoteEditorNodeId: (id: string | null) => void;
   setNodeExecutionState: (id: string, state: NodeExecutionState) => void;
@@ -1481,6 +1487,16 @@ export const useStore = create<AppState>()(
             ),
           };
         }),
+
+      setResultNode: (id) =>
+        set((state) => ({
+          // Exactly one, or none: a workflow has a single answer.
+          nodes: state.nodes.map((node) =>
+            node.data.isResult === (node.id === id)
+              ? node
+              : { ...node, data: { ...node.data, isResult: node.id === id } },
+          ),
+        })),
 
       updateNodeLabel: (id, label) =>
         set((state) => ({

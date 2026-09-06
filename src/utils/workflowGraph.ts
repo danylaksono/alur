@@ -67,6 +67,18 @@ export const findCycleNodes = (nodeIds: string[], edges: Edge[]): string[] => {
 };
 
 /**
+ * The steps nothing reads from — the ends of the graph's branches.
+ *
+ * One of these is what a run returns. More than one means the workflow has
+ * several endings and only one of them can be the answer, which is worth
+ * saying out loud rather than resolving by sort order.
+ */
+export const terminalCandidates = (nodeIds: string[], edges: Edge[]): string[] => {
+  const hasChild = new Set(edges.map((edge) => edge.source));
+  return nodeIds.filter((id) => !hasChild.has(id));
+};
+
+/**
  * Which node an engine error belongs to, or null.
  *
  * The compiler names the offending node as `"<id>"` inside its message. Matching

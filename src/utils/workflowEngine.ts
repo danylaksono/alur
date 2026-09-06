@@ -805,6 +805,19 @@ export function buildWorkflowSQL(
     }
   }
 
+  // Which branch is the answer.
+  //
+  // Without this, the result is whichever step happened to sort last, which
+  // comes down to the order the nodes were added — so a two-branch workflow
+  // silently returns a different branch depending on which one you built
+  // first. Every step already has a CTE by now, so naming the result is just
+  // choosing which one the final SELECT reads from.
+  const marked = sorted.find((node) => node.data.isResult);
+  if (marked) {
+    const markedAlias = cteAlias(marked.id);
+    if (nodeMetadata.has(markedAlias)) lastAlias = markedAlias;
+  }
+
   if (!lastAlias) {
     throw new Error("Could not determine the final step in the workflow.");
   }

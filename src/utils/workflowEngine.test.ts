@@ -1582,3 +1582,56 @@ describe("group boxes", () => {
     expect(buildUpToSQL(nodes, edges, "a1").sql).not.toContain(cteAlias("box"));
   });
 });
+
+describe("which branch is the result", () => {
+  const branchA = () => [
+    makeNode({ id: "srcA", data: { label: "A src", type: "input", config: { tableName: "a" } } }),
+    makeNode({ id: "fA", data: { label: "A step", type: "attribute", config: { expression: "1" } } }),
+  ];
+  const branchB = () => [
+    makeNode({ id: "srcB", data: { label: "B src", type: "input", config: { tableName: "b" } } }),
+    makeNode({ id: "fB", data: { label: "B step", type: "attribute", config: { expression: "2" } } }),
+  ];
+  const edges: Edge[] = [
+    { id: "e1", source: "srcA", target: "fA" },
+    { id: "e2", source: "srcB", target: "fB" },
+  ];
+
+  it("without a marked result, the answer depends on the order nodes were added", () => {
+    // Documenting the behaviour this feature exists to make controllable.
+    expect(buildWorkflowSQL([...branchA(), ...branchB()], edges).terminalNodeId).toBe("fB");
+    expect(buildWorkflowSQL([...branchB(), ...branchA()], edges).terminalNodeId).toBe("fA");
+  });
+
+  it("returns the marked step whichever order the nodes are in", () => {
+    const mark = (nodes: WorkflowNode[]) =>
+      nodes.map((node) =>
+        node.id === "fA" ? { ...node, data: { ...node.data, isResult: true } } : node,
+      );
+    expect(buildWorkflowSQL(mark([...branchA(), ...branchB()]), edges).terminalNodeId).toBe("fA");
+    expect(buildWorkflowSQL(mark([...branchB(), ...branchA()]), edges).terminalNodeId).toBe("fA");
+  });
+
+  it("reads the final SELECT from the marked step", () => {
+    const nodes = [...branchA(), ...branchB()].map((node) =>
+      node.id === "fA" ? { ...node, data: { ...node.data, isResult: true } } : node,
+    );
+    expect(buildWorkflowSQL(nodes, edges).sql).toContain(`FROM ${cteAlias("fA")}`);
+  });
+
+  it("marking a mid-chain step cuts the result short without dropping the rest", () => {
+    const nodes = [
+      makeNode({ id: "src", data: { label: "Src", type: "input", config: { tableName: "london" } } }),
+      makeNode({ id: "mid", data: { label: "Mid", type: "attribute", config: { expression: "1" }, isResult: true } }),
+      makeNode({ id: "end", data: { label: "End", type: "attribute", config: { expression: "2" } } }),
+    ];
+    const chain: Edge[] = [
+      { id: "c1", source: "src", target: "mid" },
+      { id: "c2", source: "mid", target: "end" },
+    ];
+    const result = buildWorkflowSQL(nodes, chain);
+    expect(result.terminalNodeId).toBe("mid");
+    // The later step is still compiled — it is simply not what is returned.
+    expect(result.sql).toContain(`${cteAlias("end")} AS (`);
+  });
+});
