@@ -12,6 +12,8 @@ export type GlyphPoint = {
   weight: number;
   /** Values aligned with the visualisation's fields, for multivariate glyphs. */
   values: number[];
+  /** Only present when a categoryField was asked for. */
+  category?: string;
 };
 
 const GLYPH_MAX_POINTS = 60000;
@@ -105,10 +107,18 @@ export const queryLayerGlyphPoints = async ({
   layer,
   filters,
   vis,
+  categoryField,
 }: {
   layer: Pick<MapLayer, 'id' | 'source' | 'geojson'>;
   filters: VisualFilter[];
   vis: GlyphGridVisualisation;
+  /**
+   * A text column to carry alongside the numeric values.
+   *
+   * Only the lens asks for it — a glyph grid bins by cell and has no use for a
+   * category. Omitted, nothing extra is read.
+   */
+  categoryField?: string;
 }): Promise<GlyphPoint[]> => {
   const weightField = vis.aggregate === 'count' ? undefined : vis.fields[0];
 
@@ -131,6 +141,9 @@ export const queryLayerGlyphPoints = async ({
     const weightSelect = weightField && available.has(weightField)
       ? `COALESCE(TRY_CAST(${quoteIdentifier(weightField)} AS DOUBLE), 0)`
       : '1';
+    const categorySelect = categoryField && available.has(categoryField)
+      ? `, CAST(${quoteIdentifier(categoryField)} AS VARCHAR) AS cat`
+      : '';
 
     const countResult = await duckdbService.query(`SELECT COUNT(*) AS n FROM ${table} ${whereClause};`);
     const count = Number(normalizeRows(countResult.toArray())[0]?.n ?? 0);
@@ -144,7 +157,7 @@ export const queryLayerGlyphPoints = async ({
     const result = await duckdbService.query(
       `SELECT ST_X(${lonLat}) AS lon, ST_Y(${lonLat}) AS lat,
               CAST(${quoteIdentifier(layer.source.featureIdColumn)} AS VARCHAR) AS id,
-              ${weightSelect} AS weight${valueSelects}
+              ${weightSelect} AS weight${valueSelects}${categorySelect}
        FROM ${fromClause};`
     );
     return normalizeRows(result.toArray())
@@ -156,6 +169,7 @@ export const queryLayerGlyphPoints = async ({
           const index = valueFields.indexOf(field);
           return index >= 0 ? Number(row[`v${index}`]) || 0 : 0;
         }),
+        ...(categorySelect ? { category: String(row.cat ?? '') } : {}),
       }))
       .filter((point) => Number.isFinite(point.position[0]) && Number.isFinite(point.position[1]));
   }
@@ -172,6 +186,7 @@ export const queryLayerGlyphPoints = async ({
       id: String(properties[FEATURE_ID_PROPERTY] ?? feature.id ?? ''),
       weight: weightField ? Number(properties[weightField]) || 0 : 1,
       values: vis.fields.map((field) => Number(properties[field]) || 0),
+      ...(categoryField ? { category: String(properties[categoryField] ?? '') } : {}),
     });
     if (points.length >= GLYPH_MAX_POINTS) break;
   }

@@ -36,8 +36,13 @@ import {
   activeLensLayer,
   lensBinningFor,
   lensFieldsForLayer,
+  lensGroupFieldsForLayer,
+  lensPlacementFor,
+  DEFAULT_LENS_CONFIG,
+  type LensConfig,
   type LensPoints,
 } from "../../services/lensService";
+import { LensPanel } from "./LensPanel";
 import type { CartogramVisualisation, GlyphGridVisualisation } from "../../types/visualisation";
 import type { H3GridVisualisation } from "../../types/visualisation";
 import {
@@ -287,24 +292,49 @@ export const MapView = () => {
   } | null>(null);
   const lensFields = useMemo(() => {
     const layer = activeLensLayer(mapLayers, selectedLayerId);
-    return layer ? lensFieldsForLayer(layer) : [];
+    return layer
+      ? { measures: lensFieldsForLayer(layer), groups: lensGroupFieldsForLayer(layer) }
+      : { measures: [], groups: [] };
   }, [mapLayers, selectedLayerId]);
-  /** Which field the bars measure. Null reads point density instead. */
-  const [chosenLensField, setLensField] = useState<string | null>(null);
-  // Derived rather than reset, so switching to a layer without the field falls
-  // back to density instead of leaving a choice that reads nothing.
-  const lensField = chosenLensField && lensFields.includes(chosenLensField) ? chosenLensField : null;
+  const [chosenLensConfig, setLensConfig] = useState<LensConfig>(DEFAULT_LENS_CONFIG);
+  // Derived rather than reset, so moving to a layer without one of these fields
+  // falls back to counting compass sectors instead of leaving a choice that
+  // reads nothing.
+  const lensConfig = useMemo<LensConfig>(
+    () => ({
+      ...chosenLensConfig,
+      field:
+        chosenLensConfig.field && lensFields.measures.includes(chosenLensConfig.field)
+          ? chosenLensConfig.field
+          : null,
+      groupField:
+        chosenLensConfig.groupField && lensFields.groups.includes(chosenLensConfig.groupField)
+          ? chosenLensConfig.groupField
+          : null,
+    }),
+    [chosenLensConfig, lensFields],
+  );
   // Read inside the click handler, which is registered once per arming and so
-  // cannot close over the current choice.
-  const lensFieldRef = useRef<string | null>(null);
-  lensFieldRef.current = lensField;
+  // cannot close over the current settings.
+  const lensConfigRef = useRef<LensConfig>(lensConfig);
+  lensConfigRef.current = lensConfig;
   /**
    * The points the placed lens is reading.
    *
-   * Kept so changing the field re-bins what is already in hand rather than
-   * going back to the database — every field came out of the one query.
+   * Kept so most of the panel re-bins what is already in hand rather than
+   * going back to the database — every numeric field came out of the one query.
    */
   const lensData = useRef<LensPoints | null>(null);
+  /**
+   * The grouping field `lensData` was extracted for.
+   *
+   * Changing that field needs a query, so for a moment the config asks for a
+   * grouping the points in hand cannot answer. Re-binning them anyway would
+   * label one field's categories with another field's name for a frame, and
+   * glyphlens would animate into it.
+   */
+  const lensDataGroup = useRef<string | null>(null);
+  const [lensCategories, setLensCategories] = useState(0);
   /**
    * True while a tool is reading map clicks for itself.
    *
@@ -1258,6 +1288,7 @@ export const MapView = () => {
       }
       lensOverlay.current = null;
       lensData.current = null;
+      lensDataGroup.current = null;
     };
 
     const canvas = m.getCanvas();
@@ -1291,13 +1322,15 @@ export const MapView = () => {
           import("glyphlens/maplibre"),
         ]);
         const filters = state.visualAnalytics.datasets[layer.id]?.filters || [];
-        const data = await lensPointsForLayer(layer, filters);
+        const data = await lensPointsForLayer(layer, filters, lensConfigRef.current.groupField);
         if (cancelled) return;
         if (!data.points.length) {
           addToast({ type: "warning", message: `"${layer.name}" has no points a lens can read.` });
           return;
         }
         lensData.current = data;
+        lensDataGroup.current = lensConfigRef.current.groupField;
+        setLensCategories(data.categories.length);
         // The lens sizes itself in screen pixels, so it needs the scale of the
         // view it is being put down on to express its disc in metres.
         // zoom + 1 because MapLibre's zoom is defined against 512px tiles, not
@@ -1308,7 +1341,7 @@ export const MapView = () => {
           2 ** (m.getZoom() + 1);
         lensOverlay.current = addLens(
           m,
-          lensOptionsFor(centre, metresPerPixel, data, lensFieldRef.current),
+          lensOptionsFor(centre, metresPerPixel, data, lensConfigRef.current),
         );
       } catch (error) {
         addToast({
@@ -1333,18 +1366,64 @@ export const MapView = () => {
   }, [lensMode, addToast]);
 
   /**
-   * Changing what the bars measure re-bins the points already in hand.
+   * Most of the panel re-bins the points already in hand.
    *
-   * Every field came out of the one extraction, so this is arithmetic over an
-   * array the lens is already holding — it does not go back to the database,
-   * and glyphlens animates between the two layouts.
+   * Every numeric field came out of the one extraction, so measure, statistic,
+   * normalisation and the morph are all arithmetic over an array the lens is
+   * already holding — no database, and glyphlens eases between the layouts.
    */
   useEffect(() => {
     const overlay = lensOverlay.current;
     const data = lensData.current;
     if (!overlay || !data) return;
-    overlay.update({ binning: lensBinningFor(data, lensField) });
-  }, [lensField]);
+    if (lensDataGroup.current !== lensConfig.groupField) return;
+    overlay.update({
+      binning: lensBinningFor(data, lensConfig),
+      normalisation: { mode: lensConfig.normalisation },
+      placement: lensPlacementFor(data, lensConfig),
+    });
+  }, [lensConfig]);
+
+  /**
+   * The grouping field is the exception: it is the one choice that changes what
+   * has to come out of the database, because the category travels with each
+   * point rather than being derived from one.
+   */
+  useEffect(() => {
+    if (!lensOverlay.current) return;
+    const state = useStore.getState();
+    const layer = activeLensLayer(state.mapLayers, state.selectedLayerId);
+    if (!layer) return;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { lensPointsForLayer } = await import("../../services/lensService");
+        const filters = state.visualAnalytics.datasets[layer.id]?.filters || [];
+        const data = await lensPointsForLayer(layer, filters, lensConfig.groupField);
+        // The lens may have been put away, or moved to another layer, while the
+        // query was out.
+        if (cancelled || !lensOverlay.current) return;
+        lensData.current = data;
+        lensDataGroup.current = lensConfig.groupField;
+        setLensCategories(data.categories.length);
+        lensOverlay.current.update({
+          data: data.points,
+          binning: lensBinningFor(data, lensConfig),
+          placement: lensPlacementFor(data, lensConfig),
+        });
+      } catch (error) {
+        addToast({
+          type: "error",
+          message: `Could not group the lens: ${error instanceof Error ? error.message : "unknown error"}`,
+        });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Only the grouping field: everything else is handled above without a query.
+  }, [lensConfig.groupField, addToast]);
 
   // Cartogram layers: geo-morpher morph layers over a gridmapper allocation.
   //
@@ -1885,9 +1964,6 @@ export const MapView = () => {
         pitch={orientation.pitch}
         zoom={orientation.zoom}
         lensMode={lensMode}
-        lensFields={lensFields}
-        lensField={lensField}
-        onLensFieldChange={setLensField}
         onToggleLens={() => { setSelectionMode(false); setLensMode((current) => !current); }}
         onToggleSelection={() => { setLensMode(false); setSelectionMode((current) => !current); }}
         onHome={() => {
@@ -1948,6 +2024,16 @@ export const MapView = () => {
           );
         }}
       />
+      {lensMode && (
+        <LensPanel
+          config={lensConfig}
+          fields={lensFields.measures}
+          groupFields={lensFields.groups}
+          categoryCount={lensCategories}
+          onChange={(patch) => setLensConfig((current) => ({ ...current, ...patch }))}
+          onClose={() => setLensMode(false)}
+        />
+      )}
       {selectionBox && (
         <div
           className="pointer-events-none absolute z-20 border border-orange-500 bg-orange-300/20"
