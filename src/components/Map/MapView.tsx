@@ -3,7 +3,7 @@ import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useStore } from "../../store/useStore";
 import { useAnalyticsCommands } from "../../hooks/useAnalyticsCommands";
-import { getBasemap } from "../../utils/basemaps";
+import { DEFAULT_BASEMAP_ID, getBasemap } from "../../utils/basemaps";
 import {
   compileLayerStyle,
   geometryKindForLayer,
@@ -43,6 +43,7 @@ import { requiredMapTileProperties } from "../../utils/mapTileProperties";
 import { queryLayerFeatureDetails } from "../../services/visualAnalyticsService";
 import { MapInteractionToolbar } from "./MapInteractionToolbar";
 import { registerMap } from "../../services/mapRegistry";
+import { ensurePmtilesProtocol } from "../../services/pmtilesProtocol";
 import {
   combineFeatureSelection,
   featureIdsFromRenderedFeatures,
@@ -234,6 +235,7 @@ export const MapView = () => {
   >(new Map());
 
   const selectedBasemapId = useStore((s) => s.selectedBasemapId);
+  const customBasemaps = useStore((s) => s.settings.customBasemaps);
   const mapLayers = useStore((s) => s.mapLayers);
   const selectedNodeId = useStore((s) => s.selectedNodeId);
   const selectedLayerId = useStore((s) => s.selectedLayerId);
@@ -294,7 +296,13 @@ export const MapView = () => {
     registerMvtProtocol();
     const m = new maplibregl.Map({
       container: mapContainer.current,
-      style: getBasemap(selectedBasemapId).styleUrl,
+      // The constructor cannot wait for the pmtiles protocol, so a restored
+      // PMTiles basemap starts on the default and the style effect — which runs
+      // on mount and does await it — swaps the real one in.
+      style:
+        getBasemap(selectedBasemapId, customBasemaps).custom?.kind === "pmtiles"
+          ? getBasemap(DEFAULT_BASEMAP_ID).style
+          : getBasemap(selectedBasemapId, customBasemaps).style,
       // Blank-canvas start: world view until the first layer focuses the map.
       center: [mapCamera.longitude, mapCamera.latitude],
       zoom: mapCamera.zoom,
@@ -718,7 +726,8 @@ export const MapView = () => {
   useEffect(() => {
     const m = map.current;
     if (!m) return;
-    const nextStyleUrl = getBasemap(selectedBasemapId).styleUrl;
+    const basemap = getBasemap(selectedBasemapId, customBasemaps);
+    const nextStyle = basemap.style;
     layerEventHandlers.current.forEach((handlers) => {
       handlers.forEach(({ event, mapLayerId, fn }) =>
         m.off(event, mapLayerId, fn as any),
@@ -732,8 +741,15 @@ export const MapView = () => {
     glyphLayers.current.clear();
     popup.current?.remove();
     styleReady.current = false;
-    m.setStyle(nextStyleUrl);
-  }, [selectedBasemapId]);
+    // A pmtiles:// source is unreadable until its protocol handler exists, and
+    // the handler is 370KB that most sessions never need — so it is fetched
+    // here, only for the basemap that actually asks for it.
+    if (basemap.custom?.kind === "pmtiles") {
+      void ensurePmtilesProtocol().then(() => m.setStyle(nextStyle));
+    } else {
+      m.setStyle(nextStyle);
+    }
+  }, [selectedBasemapId, customBasemaps]);
 
   // Sync layers from store to map
   useEffect(() => {

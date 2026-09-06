@@ -11,7 +11,11 @@ import {
   applyNodeChanges,
   applyEdgeChanges,
 } from "@xyflow/react";
-import { DEFAULT_BASEMAP_ID, type BasemapId } from "../utils/basemaps";
+import {
+  DEFAULT_BASEMAP_ID,
+  type BasemapDefinition,
+  type BasemapId,
+} from "../utils/basemaps";
 import type { LayerVisualisation, LegendSpec } from "../types/visualisation";
 import { ensureFeatureIds } from "../utils/featureIdentity";
 import type {
@@ -356,6 +360,12 @@ export type SettingsState = {
   openRouterModelId: string;
   /** Stamped onto exported stories so a reader knows whose account it is. */
   authorName: string;
+  /**
+   * Tile sources the user added — XYZ, WMS, PMTiles or a style document. Kept
+   * in settings so they persist with the other preferences rather than living
+   * and dying with one project.
+   */
+  customBasemaps: BasemapDefinition[];
 };
 
 export type ChatMessage = {
@@ -463,6 +473,8 @@ export interface AppState {
   setPresentationMode: (presenting: boolean) => void;
   requestLayerStyle: (layerId: string, field?: string) => void;
   updateSettings: (patch: Partial<SettingsState>) => void;
+  addCustomBasemap: (basemap: BasemapDefinition) => void;
+  removeCustomBasemap: (id: string) => void;
   setDuckDBReady: (ready: boolean) => void;
   setSelectedBasemapId: (id: BasemapId) => void;
   setManualSQL: (sql: string) => void;
@@ -953,6 +965,7 @@ const initialSettings: SettingsState = {
   openRouterApiKey: "",
   openRouterModelId: "openai/gpt-4o-mini",
   authorName: "",
+  customBasemaps: [],
 };
 
 const defaultExplainDocument = (): ExplainDocument => ({
@@ -1434,6 +1447,30 @@ export const useStore = create<AppState>()(
         set((state) => ({
           settings: { ...state.settings, ...patch },
         })),
+      addCustomBasemap: (basemap) =>
+        set((state) => ({
+          settings: {
+            ...state.settings,
+            // Re-adding the same id replaces it, so correcting a typo in a URL
+            // does not leave the broken one behind.
+            customBasemaps: [
+              ...state.settings.customBasemaps.filter((item) => item.id !== basemap.id),
+              basemap,
+            ],
+          },
+        })),
+
+      removeCustomBasemap: (id) =>
+        set((state) => ({
+          settings: {
+            ...state.settings,
+            customBasemaps: state.settings.customBasemaps.filter((item) => item.id !== id),
+          },
+          // Falling back keeps the map from staring at a style that is gone.
+          selectedBasemapId:
+            state.selectedBasemapId === id ? DEFAULT_BASEMAP_ID : state.selectedBasemapId,
+        })),
+
       setDuckDBReady: (ready) => set({ duckdbReady: ready }),
       setSelectedBasemapId: (id) => set({ selectedBasemapId: id }),
       setManualSQL: (sql) => set({ manualSQL: sql }),
@@ -3822,6 +3859,10 @@ export const useStore = create<AppState>()(
       partialize: (state) =>
         ({
           settings: state.settings,
+          // Which basemap you are looking at is a preference like any other,
+          // and forgetting it is most annoying for the custom source you just
+          // went to the trouble of adding.
+          selectedBasemapId: state.selectedBasemapId,
           ui: pickLayoutPreferences(state.ui),
         }) as unknown as AppState,
       // Zustand's default merge is shallow, which would replace the whole `ui`
@@ -3831,6 +3872,7 @@ export const useStore = create<AppState>()(
         return {
           ...current,
           settings: { ...current.settings, ...(saved?.settings || {}) },
+          selectedBasemapId: saved?.selectedBasemapId || current.selectedBasemapId,
           ui: { ...current.ui, ...pickLayoutPreferences(saved?.ui) },
         };
       },

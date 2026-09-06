@@ -81,13 +81,14 @@ const ComparisonMapCell = ({
   const syncing = useRef(false);
   const [ready, setReady] = useState(false);
   const selectedBasemapId = useStore((state) => state.selectedBasemapId);
+  const customBasemaps = useStore((state) => state.settings.customBasemaps);
 
   useEffect(() => {
     if (!container.current) return;
     setReady(false);
     const instance = new maplibregl.Map({
       container: container.current,
-      style: getBasemap(selectedBasemapId).styleUrl,
+      style: getBasemap(selectedBasemapId, customBasemaps).style,
       center: [camera.longitude, camera.latitude],
       zoom: camera.zoom,
       attributionControl: { compact: true },

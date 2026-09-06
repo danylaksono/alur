@@ -1,7 +1,7 @@
-import { BoxSelect, Camera, Check, Crosshair, Expand, Home, Loader2, LocateFixed, Map as MapIcon, Minus, MousePointer2, Navigation, Plus, Scan } from 'lucide-react';
+import { BoxSelect, Camera, Check, Crosshair, Expand, Home, Loader2, LocateFixed, Map as MapIcon, Minus, MousePointer2, Navigation, Plus, Scan, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '../../utils/cn';
-import { BASEMAPS } from '../../utils/basemaps';
+import { BASEMAPS, attributionFor, basemapStyleFromUrl, defaultTileSourceName, detectTileSourceKind } from '../../utils/basemaps';
 import { useStore } from '../../store/useStore';
 import { pinMapEvidence } from '../../services/explainCapture';
 
@@ -41,12 +41,19 @@ export const MapInteractionToolbar = ({
   onFullscreen: () => void;
 }) => {
   const [basemapsOpen, setBasemapsOpen] = useState(false);
+  const [tileUrl, setTileUrl] = useState('');
+  const [tileName, setTileName] = useState('');
+  const [adding, setAdding] = useState(false);
   const [isPinning, setPinning] = useState(false);
   // Only surfaced once the map is actually off north or tilted: an always-on
   // compass reading 0° is chrome that never earns its square.
   const isOriented = Math.abs(bearing) >= 0.5 || pitch >= 0.5;
   const selectedBasemapId = useStore((state) => state.selectedBasemapId);
   const setSelectedBasemapId = useStore((state) => state.setSelectedBasemapId);
+  const customBasemaps = useStore((state) => state.settings.customBasemaps);
+  const addCustomBasemap = useStore((state) => state.addCustomBasemap);
+  const removeCustomBasemap = useStore((state) => state.removeCustomBasemap);
+  const addToast = useStore((state) => state.addToast);
   return (
   <>
     <div className="pointer-events-auto absolute right-2.5 top-3 z-20 flex flex-col rounded-lg border border-slate-200 bg-white shadow-md" aria-label="Map controls">
@@ -87,7 +94,119 @@ export const MapInteractionToolbar = ({
         {isPinning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
       </button>
       <button type="button" onClick={() => setBasemapsOpen(!basemapsOpen)} aria-expanded={basemapsOpen} aria-label="Choose basemap" title="Basemap" className={cn('pressable flex h-9 w-9 items-center justify-center rounded-b-lg text-slate-600 hover:bg-slate-50', basemapsOpen && 'bg-slate-900 text-white hover:bg-slate-900')}><MapIcon className="h-4 w-4" /></button>
-      {basemapsOpen && <div className="absolute right-11 top-0 w-40 rounded-lg border border-slate-200 bg-white p-1 shadow-lg"><p className="px-2 py-1 text-[11px] font-bold uppercase tracking-wider text-slate-500">Basemap</p>{BASEMAPS.map((basemap) => <button key={basemap.id} type="button" onClick={() => { setSelectedBasemapId(basemap.id); setBasemapsOpen(false); }} className="pressable flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-[11px] font-semibold text-slate-600 hover:bg-slate-50">{basemap.name}{selectedBasemapId === basemap.id && <Check className="h-3 w-3" />}</button>)}</div>}
+      {basemapsOpen && (
+        <div className="absolute right-11 top-0 w-64 rounded-lg border border-slate-200 bg-white p-1 shadow-lg">
+          <p className="px-2 py-1 text-[11px] font-bold uppercase tracking-wider text-slate-500">Basemap</p>
+          {[...BASEMAPS, ...customBasemaps].map((basemap) => (
+            <div key={basemap.id} className="group/basemap flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => { setSelectedBasemapId(basemap.id); setBasemapsOpen(false); }}
+                title={basemap.custom?.url || basemap.description}
+                className="pressable flex min-w-0 flex-1 items-center justify-between rounded-md px-2 py-1.5 text-left text-[11px] font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                <span className="truncate">{basemap.name}</span>
+                {selectedBasemapId === basemap.id && <Check className="h-3 w-3 shrink-0" />}
+              </button>
+              {basemap.custom && (
+                <button
+                  type="button"
+                  onClick={() => removeCustomBasemap(basemap.id)}
+                  title={`Remove ${basemap.name}`}
+                  aria-label={`Remove ${basemap.name}`}
+                  className="pressable shrink-0 rounded p-1 text-slate-400 opacity-0 hover:bg-rose-50 hover:text-rose-600 focus-visible:opacity-100 group-hover/basemap:opacity-100"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+          ))}
+
+          <form
+            className="mt-1 space-y-1 border-t border-slate-100 px-2 pb-1 pt-2"
+            onSubmit={async (event) => {
+              event.preventDefault();
+              const url = tileUrl.trim();
+              if (!url) return;
+              const kind = detectTileSourceKind(url);
+
+              // A bare vector archive has named source layers that only a style
+              // document can render; adding it as raster would draw nothing and
+              // say nothing, so the header is read before it is accepted.
+              if (kind === 'pmtiles' && !url.toLowerCase().endsWith('.json')) {
+                setAdding(true);
+                try {
+                  const { ensurePmtilesProtocol, inspectPmtilesArchive } = await import(
+                    '../../services/pmtilesProtocol'
+                  );
+                  await ensurePmtilesProtocol();
+                  const info = await inspectPmtilesArchive(url);
+                  if (info.isVector) {
+                    addToast({
+                      type: 'warning',
+                      message:
+                        'That is a vector PMTiles archive. Add the style.json that references it instead — a vector archive has no styling of its own.',
+                    });
+                    return;
+                  }
+                } catch (error) {
+                  addToast({
+                    type: 'error',
+                    message: `Could not read that PMTiles archive: ${
+                      error instanceof Error ? error.message : 'unknown error'
+                    }`,
+                  });
+                  return;
+                } finally {
+                  setAdding(false);
+                }
+              }
+
+              addCustomBasemap({
+                id: `custom-${Date.now()}`,
+                name: tileName.trim() || defaultTileSourceName(url, kind),
+                description: `${kind.toUpperCase()} · ${url}`,
+                style: basemapStyleFromUrl(url, kind, attributionFor(kind)),
+                custom: { url, kind },
+              });
+              setTileUrl('');
+              setTileName('');
+            }}
+          >
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500" htmlFor="alur-tile-url">
+              Add a tile source
+            </label>
+            <input
+              id="alur-tile-url"
+              value={tileUrl}
+              onChange={(event) => setTileUrl(event.target.value)}
+              placeholder="XYZ, WMS, .pmtiles, or style.json"
+              className="h-7 w-full rounded border border-slate-200 px-2 text-[11px] outline-none focus:border-sky-400"
+            />
+            <div className="flex gap-1">
+              <input
+                value={tileName}
+                onChange={(event) => setTileName(event.target.value)}
+                placeholder="Name (optional)"
+                aria-label="Tile source name"
+                className="h-7 min-w-0 flex-1 rounded border border-slate-200 px-2 text-[11px] outline-none focus:border-sky-400"
+              />
+              <button
+                type="submit"
+                disabled={!tileUrl.trim() || adding}
+                className="pressable h-7 shrink-0 rounded bg-slate-900 px-2 text-[11px] font-bold text-white disabled:opacity-40"
+              >
+                Add
+              </button>
+            </div>
+            {tileUrl.trim() && (
+              <p className="text-[11px] text-slate-500">
+                Detected: {detectTileSourceKind(tileUrl).toUpperCase()}
+              </p>
+            )}
+          </form>
+        </div>
+      )}
     </div>
     {selectionMode && (
       <div className="pointer-events-none absolute right-14 top-3 z-20 rounded-md border border-orange-200 bg-white/95 px-2.5 py-2 text-[11px] font-medium text-slate-600 shadow backdrop-blur">
