@@ -235,7 +235,7 @@ export const H3Node = ({ data, id, selected }: any) => {
           <div>
             <label className={cn(fieldLabelClass, "mb-1")}>
               Buffer distance{" "}
-              <span className="font-normal text-slate-400">
+              <span className="font-normal text-slate-500">
                 (geometry units, 0 = off)
               </span>
             </label>
@@ -261,7 +261,7 @@ export const H3Node = ({ data, id, selected }: any) => {
             />
             <span className="text-[11px] text-slate-600">
               Include cell geometry{" "}
-              <span className="font-normal text-slate-400">
+              <span className="font-normal text-slate-500">
                 (off = pure table for Parquet/CSV export)
               </span>
             </span>
@@ -326,7 +326,7 @@ export const H3Node = ({ data, id, selected }: any) => {
       )}
 
       {errors.map((error) => (
-        <p key={error} className="text-[10px] text-rose-600">
+        <p key={error} className="text-[11px] text-rose-600">
           {error}
         </p>
       ))}

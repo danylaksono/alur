@@ -188,7 +188,7 @@ const Bars = ({
             <span className="text-right text-[11px] tabular-nums">
               <span className="font-bold text-slate-700">{formatNumber(datum.value)}</span>
               {isFiltered && (
-                <span className="text-slate-400"> /{formatNumber(datum.totalValue)}</span>
+                <span className="text-slate-500"> /{formatNumber(datum.totalValue)}</span>
               )}
             </span>
           </button>
@@ -295,7 +295,7 @@ const Histogram = ({
           <button
             type="button"
             onClick={onClearRange}
-            className="pressable flex items-center gap-1 rounded px-1.5 py-0.5 font-semibold uppercase tracking-wide text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            className="pressable flex items-center gap-1 rounded px-1.5 py-0.5 font-semibold uppercase tracking-wide text-slate-500 hover:bg-slate-100 hover:text-slate-600"
           >
             <X className="h-3 w-3" />
             Clear range
@@ -364,9 +364,9 @@ const Histogram = ({
           />
         )}
       </svg>
-      <div className="mt-1 flex items-center justify-between text-[11px] tabular-nums text-slate-400">
+      <div className="mt-1 flex items-center justify-between text-[11px] tabular-nums text-slate-500">
         <span>{formatNumber(domainMin)}</span>
-        <span className="text-slate-300">drag to brush</span>
+        <span className="text-slate-500">drag to brush</span>
         <span>{formatNumber(domainMax)}</span>
       </div>
     </div>
@@ -497,7 +497,7 @@ const ScatterChart = ({
           <button
             type="button"
             onClick={onClear}
-            className="pressable flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 font-semibold uppercase tracking-wide text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            className="pressable flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 font-semibold uppercase tracking-wide text-slate-500 hover:bg-slate-100 hover:text-slate-600"
           >
             <X className="h-3 w-3" />
             Clear selection
@@ -505,7 +505,7 @@ const ScatterChart = ({
         </div>
       )}
       <div className="flex gap-1.5">
-        <div className="flex select-none flex-col justify-between py-0.5 text-right text-[10px] tabular-nums text-slate-400">
+        <div className="flex select-none flex-col justify-between py-0.5 text-right text-[11px] tabular-nums text-slate-500">
           <span>{formatNumber(result.yMax)}</span>
           <span>{formatNumber(result.yMin)}</span>
         </div>
@@ -531,9 +531,9 @@ const ScatterChart = ({
           )}
         </div>
       </div>
-      <div className="mt-1 flex items-center justify-between pl-6 text-[11px] tabular-nums text-slate-400">
+      <div className="mt-1 flex items-center justify-between pl-6 text-[11px] tabular-nums text-slate-500">
         <span>{formatNumber(result.xMin)}</span>
-        <span className="text-slate-300">drag to select</span>
+        <span className="text-slate-500">drag to select</span>
         <span>{formatNumber(result.xMax)}</span>
       </div>
     </div>
@@ -604,7 +604,7 @@ const RadialChart = ({
             <span className="text-[11px] tabular-nums">
               <span className="font-bold text-slate-700">{formatNumber(datum.value)}</span>
               {datum.value !== datum.totalValue && (
-                <span className="text-slate-400"> /{formatNumber(datum.totalValue)}</span>
+                <span className="text-slate-500"> /{formatNumber(datum.totalValue)}</span>
               )}
             </span>
           </button>
@@ -685,12 +685,12 @@ const TemporalChart = ({
     <div className="space-y-2">
       <div className="flex flex-wrap gap-x-3 gap-y-1" aria-label="Series legend">
         {result.series.map((series) => (
-          <span key={series.key} className="inline-flex min-w-0 items-center gap-1 text-[10px] text-slate-500">
+          <span key={series.key} className="inline-flex min-w-0 items-center gap-1 text-[11px] text-slate-500">
             <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: series.color }} />
             <span className="max-w-28 truncate" title={series.label}>{series.label}</span>
           </span>
         ))}
-        {result.hasOtherSeries && <span className="text-[10px] text-slate-400">remaining series grouped as Other</span>}
+        {result.hasOtherSeries && <span className="text-[11px] text-slate-500">remaining series grouped as Other</span>}
       </div>
       <svg
         ref={svgRef}
@@ -771,11 +771,11 @@ const TemporalChart = ({
         <text x={TEMPORAL_PADDING.left} y={TEMPORAL_HEIGHT - 5} fontSize="8" fill="#94a3b8">{points[0]?.label}</text>
         <text x={TEMPORAL_WIDTH - TEMPORAL_PADDING.right} y={TEMPORAL_HEIGHT - 5} textAnchor="end" fontSize="8" fill="#94a3b8">{points.at(-1)?.label}</text>
       </svg>
-      <div className="flex min-h-5 items-center justify-between gap-2 text-[10px] text-slate-500" aria-live="polite">
+      <div className="flex min-h-5 items-center justify-between gap-2 text-[11px] text-slate-500" aria-live="polite">
         <span className="truncate">{active ? `${active.series} · ${active.point.label}: ${formatNumber(active.point.value ?? 0)} (${active.point.count.toLocaleString()} rows)` : 'Drag across periods to filter · focus a point for details'}</span>
         {brush && <button type="button" onClick={onClear} className="pressable shrink-0 rounded px-1.5 py-0.5 font-semibold text-sky-700 hover:bg-sky-50">Reset time</button>}
       </div>
-      <details className="rounded-md border border-slate-100 bg-slate-50/70 text-[10px] text-slate-500">
+      <details className="rounded-md border border-slate-100 bg-slate-50/70 text-[11px] text-slate-500">
         <summary className="cursor-pointer px-2 py-1.5 font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400">Accessible data table</summary>
         <div className="max-h-48 overflow-auto border-t border-slate-100">
           <table className="w-full border-collapse text-left tabular-nums">
@@ -1024,7 +1024,7 @@ const ChartCard = ({
             onChange={(event) => onUpdate({ title: event.target.value })}
             className="w-full truncate bg-transparent text-[11px] font-semibold uppercase tracking-wide text-slate-700 outline-none"
           />
-          <div className="truncate text-[11px] text-slate-400">
+          <div className="truncate text-[11px] text-slate-500">
             {isTableChart
               ? `${datasetSource.kind === 'workflow-node' ? 'workflow' : 'table'} · ${datasetDescriptor?.name || tableName || 'Missing relation'}${datasetDescriptor ? ` · ID ${datasetDescriptor.rowIdColumn} (${datasetDescriptor.rowIdQuality === 'validated-unique' ? 'validated' : 'materialised'})` : ''}`
               : layer?.name || 'Missing layer'}
@@ -1035,7 +1035,7 @@ const ChartCard = ({
             type="button"
             onClick={exportChartData}
             disabled={!exportData}
-            className="pressable rounded-md p-1.5 text-slate-400 hover:bg-sky-50 hover:text-sky-700 disabled:cursor-not-allowed disabled:opacity-30"
+            className="pressable rounded-md p-1.5 text-slate-500 hover:bg-sky-50 hover:text-sky-700 disabled:cursor-not-allowed disabled:opacity-30"
             title="Export the plotted values and filter provenance as CSV"
             aria-label={`Export plotted data for ${chart.title} as CSV`}
           >
@@ -1045,7 +1045,7 @@ const ChartCard = ({
             type="button"
             onClick={() => { void exportChartImage('svg'); }}
             disabled={!exportData}
-            className="pressable rounded-md p-1.5 text-slate-400 hover:bg-sky-50 hover:text-sky-700 disabled:cursor-not-allowed disabled:opacity-30"
+            className="pressable rounded-md p-1.5 text-slate-500 hover:bg-sky-50 hover:text-sky-700 disabled:cursor-not-allowed disabled:opacity-30"
             title="Export the rendered chart as SVG (SVG charts only)"
             aria-label={`Export ${chart.title} as SVG`}
           >
@@ -1055,7 +1055,7 @@ const ChartCard = ({
             type="button"
             onClick={() => { void exportChartImage('png'); }}
             disabled={!exportData}
-            className="pressable rounded-md p-1.5 text-slate-400 hover:bg-sky-50 hover:text-sky-700 disabled:cursor-not-allowed disabled:opacity-30"
+            className="pressable rounded-md p-1.5 text-slate-500 hover:bg-sky-50 hover:text-sky-700 disabled:cursor-not-allowed disabled:opacity-30"
             title="Export the rendered chart as PNG (canvas or SVG charts)"
             aria-label={`Export ${chart.title} as PNG`}
           >
@@ -1065,7 +1065,7 @@ const ChartCard = ({
           <button
             type="button"
             onClick={onRemove}
-            className="pressable rounded-md p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+            className="pressable rounded-md p-1.5 text-slate-500 hover:bg-rose-50 hover:text-rose-600"
             title="Remove chart"
             aria-label={`Remove ${chart.title}`}
           >
@@ -1076,7 +1076,7 @@ const ChartCard = ({
 
       <div className="grid grid-cols-2 gap-2 border-b p-3">
         <label className="space-y-1">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Source</span>
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Source</span>
           <select
             value={isTableChart && datasetDescriptor ? `dataset:${datasetDescriptor.id}` : isTableChart ? `table:${tableName || ''}` : `layer:${datasetSource.layerId}`}
             onChange={(event) => {
@@ -1139,7 +1139,7 @@ const ChartCard = ({
         </label>
 
         <label className="space-y-1">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Type</span>
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Type</span>
           <select
             value={chart.type}
             onChange={(event) => {
@@ -1162,7 +1162,7 @@ const ChartCard = ({
         </label>
 
         <label className="space-y-1">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
             {chart.type === 'scatter' ? 'X field' : isTemporalChart(chart.type) ? 'Date / time' : 'Dimension'}
           </span>
           <select
@@ -1177,7 +1177,7 @@ const ChartCard = ({
         </label>
 
         <label className="space-y-1">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
             {chart.type === 'scatter' ? 'Y field' : 'Value'}
           </span>
           <select
@@ -1196,7 +1196,7 @@ const ChartCard = ({
         </label>
 
         <label className="space-y-1">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Aggregate</span>
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Aggregate</span>
           <select
             value={chart.aggregation}
             disabled={chart.type === 'scatter'}
@@ -1210,7 +1210,7 @@ const ChartCard = ({
         </label>
 
         <label className="space-y-1">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Palette</span>
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Palette</span>
           <select
             value={chart.paletteId}
             onChange={(event) => onUpdate({ paletteId: event.target.value })}
@@ -1224,7 +1224,7 @@ const ChartCard = ({
 
         {chart.type !== 'scatter' && !isTemporalChart(chart.type) && (
           <label className="space-y-1">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Facet by</span>
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Facet by</span>
             <select
               value={chart.facetField || ''}
               onChange={(event) => onUpdate({ facetField: event.target.value || undefined })}
@@ -1241,7 +1241,7 @@ const ChartCard = ({
         {isTemporalChart(chart.type) && (
           <>
             <label className="space-y-1">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Time grain</span>
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Time grain</span>
               <select value={chart.timeGrain || 'auto'} onChange={(event) => onUpdate({ timeGrain: event.target.value as TimeGrain })} className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] outline-none focus:border-slate-400">
                 <option value="auto">Auto</option>
                 <option value="hour">Hour</option>
@@ -1253,7 +1253,7 @@ const ChartCard = ({
               </select>
             </label>
             <label className="space-y-1">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Series</span>
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Series</span>
               <select value={chart.seriesField || ''} onChange={(event) => onUpdate({ seriesField: event.target.value || undefined })} className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] outline-none focus:border-slate-400">
                 <option value="">Single series</option>
                 {availableFields.filter((field) => field.name !== chart.dimensionField).map((field) => <option key={field.name} value={field.name}>{field.name}</option>)}
@@ -1269,9 +1269,9 @@ const ChartCard = ({
         )}
         {result && result.data.length > 0 && (
           <details className="mt-3 rounded-md border border-slate-100 bg-slate-50 px-2 py-1.5">
-            <summary className="cursor-pointer text-[10px] font-semibold text-slate-500">Accessible data table</summary>
+            <summary className="cursor-pointer text-[11px] font-semibold text-slate-500">Accessible data table</summary>
             <div className="mt-2 max-h-40 overflow-auto">
-              <table className="w-full text-left text-[10px] text-slate-600">
+              <table className="w-full text-left text-[11px] text-slate-600">
                 <caption className="sr-only">Values plotted in {chart.title}</caption>
                 <thead><tr><th scope="col" className="py-1">{chart.dimensionField}</th><th scope="col" className="py-1 text-right">Active</th><th scope="col" className="py-1 text-right">Total</th></tr></thead>
                 <tbody>{result.data.map((datum) => <tr key={datum.key} className="border-t border-slate-200"><th scope="row" className="py-1 font-medium">{datum.label}</th><td className="py-1 text-right tabular-nums">{formatNumber(datum.value)}</td><td className="py-1 text-right tabular-nums">{formatNumber(datum.totalValue)}</td></tr>)}</tbody>
@@ -1283,7 +1283,7 @@ const ChartCard = ({
 
       <div className="p-3">
         {isLoading && !result && !scatter && !temporal && !facetResults ? (
-          <div className="flex h-36 items-center justify-center text-slate-400">
+          <div className="flex h-36 items-center justify-center text-slate-500">
             <Loader2 className="h-4 w-4 animate-spin" />
           </div>
         ) : error ? (
@@ -1292,12 +1292,12 @@ const ChartCard = ({
           </div>
         ) : isTemporalChart(chart.type) ? (
           !temporal || !temporal.series.some((series) => series.points.some((point) => point.value !== null)) ? (
-            <div className="flex h-36 items-center justify-center px-4 text-center text-[11px] text-slate-400">
+            <div className="flex h-36 items-center justify-center px-4 text-center text-[11px] text-slate-500">
               No valid temporal values for this field and aggregation.
             </div>
           ) : (
             <div className="space-y-2">
-              <div className="flex items-center justify-between gap-2 text-[11px] text-slate-400">
+              <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
                 <span>{chart.aggregation} · {temporal.grain} grain</span>
                 <span>{temporal.filteredRows.toLocaleString()} active / {temporal.totalRows.toLocaleString()} total</span>
               </div>
@@ -1314,15 +1314,15 @@ const ChartCard = ({
           )
         ) : chart.type === 'scatter' ? (
           !scatter || !scatter.points.length ? (
-            <div className="flex h-36 items-center justify-center px-4 text-center text-[11px] text-slate-400">
+            <div className="flex h-36 items-center justify-center px-4 text-center text-[11px] text-slate-500">
               No numeric value pairs for these fields.
             </div>
           ) : (
             <div className="space-y-3">
-              <div className="flex items-center justify-between text-[11px] text-slate-400">
+              <div className="flex items-center justify-between text-[11px] text-slate-500">
                 <span>{scatter.filteredRows.toLocaleString()} active rows</span>
                 <span>
-                  {scatter.sampled && <span className="text-slate-300">sampled · </span>}
+                  {scatter.sampled && <span className="text-slate-500">sampled · </span>}
                   {scatter.totalRows.toLocaleString()} total
                 </span>
               </div>
@@ -1337,7 +1337,7 @@ const ChartCard = ({
           )
         ) : chart.facetField ? (
           !facetResults || !facetResults.length ? (
-            <div className="flex h-36 items-center justify-center px-4 text-center text-[11px] text-slate-400">
+            <div className="flex h-36 items-center justify-center px-4 text-center text-[11px] text-slate-500">
               No facet values for this field.
             </div>
           ) : (
@@ -1355,12 +1355,12 @@ const ChartCard = ({
                     <div key={value} className="rounded-md border border-slate-100 bg-white p-1.5">
                       <div className="mb-1 flex items-center justify-between gap-1">
                         <span className="truncate text-[11px] font-semibold text-slate-600" title={value}>{value}</span>
-                        <span className="shrink-0 text-[10px] tabular-nums text-slate-400">
+                        <span className="shrink-0 text-[11px] tabular-nums text-slate-500">
                           {facetResult.totalRows.toLocaleString()}
                         </span>
                       </div>
                       {!facetResult.data.length ? (
-                        <div className="py-4 text-center text-[10px] text-slate-300">no values</div>
+                        <div className="py-4 text-center text-[11px] text-slate-500">no values</div>
                       ) : chart.type === 'histogram' ? (
                         <Histogram
                           data={facetResult.data}
@@ -1388,12 +1388,12 @@ const ChartCard = ({
             </div>
           )
         ) : !result || !result.data.length ? (
-          <div className="flex h-36 items-center justify-center px-4 text-center text-[11px] text-slate-400">
+          <div className="flex h-36 items-center justify-center px-4 text-center text-[11px] text-slate-500">
             No chartable values for this field.
           </div>
         ) : (
           <div className="space-y-3">
-            <div className="flex items-center justify-between text-[11px] text-slate-400">
+            <div className="flex items-center justify-between text-[11px] text-slate-500">
               <span>{result.filteredRows.toLocaleString()} active rows</span>
               <span>{result.totalRows.toLocaleString()} total</span>
             </div>
@@ -1625,7 +1625,7 @@ export const ChartPanel = () => {
               <BarChart3 className="h-3.5 w-3.5" />
               Charts
             </h3>
-            <p className="mt-1 truncate text-[11px] text-slate-400">
+            <p className="mt-1 truncate text-[11px] text-slate-500">
               Click marks to filter; drag distributions or timelines to brush. Muted marks show unfiltered context.
             </p>
           </div>
@@ -1653,11 +1653,11 @@ export const ChartPanel = () => {
 
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
         {!mapLayers.length && !tables.length && !tableDatasets.length ? (
-          <div className="flex h-full items-center justify-center px-6 text-center text-[11px] text-slate-400">
+          <div className="flex h-full items-center justify-center px-6 text-center text-[11px] text-slate-500">
             Add or run a layer before creating charts.
           </div>
         ) : !charts.length ? (
-          <div className="flex h-full flex-col items-center justify-center px-6 text-center text-[11px] text-slate-400">
+          <div className="flex h-full flex-col items-center justify-center px-6 text-center text-[11px] text-slate-500">
             <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white">
               <Donut className="h-5 w-5" />
             </div>

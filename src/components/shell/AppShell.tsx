@@ -118,7 +118,7 @@ export const AppShell = () => {
                   <ErrorBoundary
                     name="Map"
                     fallback={
-                      <div className="flex h-full items-center justify-center bg-slate-100 text-xs italic text-slate-400">
+                      <div className="flex h-full items-center justify-center bg-slate-100 text-xs italic text-slate-500">
                         Map failed to load
                       </div>
                     }

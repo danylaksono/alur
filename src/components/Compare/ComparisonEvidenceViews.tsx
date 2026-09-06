@@ -152,7 +152,7 @@ const ComparisonMapCell = ({
   return <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
     <header className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
       <span className="truncate text-xs font-bold text-slate-700"><i className="mr-1.5 inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: accent }} />{title}</span>
-      <span className="text-[9px] font-semibold text-slate-600">{interactive ? 'Shared navigation' : 'Captured view'}</span>
+      <span className="text-[11px] font-semibold text-slate-600">{interactive ? 'Shared navigation' : 'Captured view'}</span>
     </header>
     <div ref={container} data-comparison-map-ready={ready ? 'true' : 'false'} className="h-72 w-full bg-slate-100" aria-label={`${title} comparison map`} />
   </section>;
@@ -195,8 +195,8 @@ export const ComparisonMapEvidence = ({ spec, result, differenceEligible, select
   return <div className="space-y-3">
     {interactive && <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
       <div className="flex rounded-lg bg-slate-100 p-1" role="group" aria-label="Comparison map mode">
-        <button type="button" onClick={() => setMode('multiples')} className={cn('pressable rounded-md px-3 py-1.5 text-[10px] font-bold', activeMode === 'multiples' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600')}>Small multiples</button>
-        <button type="button" disabled={!differenceEligible || !difference} onClick={() => setMode('difference')} className={cn('pressable rounded-md px-3 py-1.5 text-[10px] font-bold disabled:opacity-35', activeMode === 'difference' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600')}>Difference B − A</button>
+        <button type="button" onClick={() => setMode('multiples')} className={cn('pressable rounded-md px-3 py-1.5 text-[11px] font-bold', activeMode === 'multiples' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600')}>Small multiples</button>
+        <button type="button" disabled={!differenceEligible || !difference} onClick={() => setMode('difference')} className={cn('pressable rounded-md px-3 py-1.5 text-[11px] font-bold disabled:opacity-35', activeMode === 'difference' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600')}>Difference B − A</button>
       </div>
       <div className="flex items-center rounded-lg border border-slate-200" role="group" aria-label="Shared map navigation">
         <button type="button" onClick={() => setCamera((current) => ({ ...current, zoom: current.zoom + 1 }))} className="pressable p-2 text-slate-600" aria-label="Zoom all comparison maps in"><Plus className="h-3.5 w-3.5" /></button>
@@ -212,7 +212,7 @@ export const ComparisonMapEvidence = ({ spec, result, differenceEligible, select
           return <ComparisonMapCell key={sample.operandId} title={operand.label} accent={operand.colour} data={sample.features} range={range} difference={false} camera={camera} selectedKey={selectedKey} onCameraChange={setCamera} onSelectKey={onSelectKey} interactive={interactive} />;
         })}
     </div>
-    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-900 px-3 py-2 text-[10px] text-white">
+    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-900 px-3 py-2 text-[11px] text-white">
       <span>{activeMode === 'difference' ? 'Diverging scale centred on zero' : 'Shared sequential scale'} · {range.min.toLocaleString(undefined, { maximumFractionDigits: 2 })} to {range.max.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
       <span>{samples.some((sample) => sample.sampled) ? `Spatial display bounded to ${samples.map((sample) => sample.features.features.length.toLocaleString()).join(' / ')} features; summaries use full denominators.` : `${samples.reduce((sum, sample) => sum + sample.features.features.length, 0).toLocaleString()} mapped features`}</span>
     </div>
@@ -255,7 +255,7 @@ export const ComparisonTimeEvidence = ({ spec, result }: { spec: ComparisonSpec;
       return <section key={measureId} className="rounded-xl border border-slate-200 bg-white p-4">
         <div className="mb-3 flex flex-wrap items-baseline justify-between gap-3">
           <h3 className="text-sm font-bold text-slate-800">{spec.measures.find((item) => item.id === measureId)?.label || measureId}</h3>
-          <div className="flex flex-wrap items-center gap-3 text-[10px] text-slate-600">{series.map((item) => {
+          <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-600">{series.map((item) => {
             const operand = spec.operands.find((entry) => entry.id === item.operandId);
             return <span key={item.operandId} className="flex items-center gap-1.5"><i className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: operand?.colour || '#64748b' }} />{operand?.label || item.operandId}</span>;
           })}</div>
@@ -290,7 +290,7 @@ export const ComparisonTimeEvidence = ({ spec, result }: { spec: ComparisonSpec;
           </svg>
         </div>
 
-        <p className="mt-2 text-[10px] text-slate-600">
+        <p className="mt-2 text-[11px] text-slate-600">
           {periods.length.toLocaleString()} period{periods.length === 1 ? '' : 's'} on a shared scale
           {gapCount > 0 && ` · ${gapCount.toLocaleString()} missing observation${gapCount === 1 ? '' : 's'} left as gaps rather than joined across`}
         </p>
@@ -311,15 +311,15 @@ export const ComparisonRecordsEvidence = ({ spec, result, selectedKey, onSelectK
   const selected = records.find((record) => record.key === selectedKey);
   return <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
     <header className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-4 py-3">
-      <div><h3 className="text-xs font-bold text-slate-800">Entity-aligned record preview</h3><p className="mt-0.5 text-[10px] text-slate-500">Showing {records.length.toLocaleString()} of {(result.alignedRecordCount || records.length).toLocaleString()} aligned keys. Preview size never changes denominators.</p></div>
-      {onUseAsFilter && <button type="button" disabled={!selected} onClick={() => selected && onUseAsFilter(selected)} className="pressable rounded-lg bg-slate-900 px-3 py-2 text-[10px] font-bold text-white disabled:bg-slate-300">Use selected as filter</button>}
+      <div><h3 className="text-xs font-bold text-slate-800">Entity-aligned record preview</h3><p className="mt-0.5 text-[11px] text-slate-500">Showing {records.length.toLocaleString()} of {(result.alignedRecordCount || records.length).toLocaleString()} aligned keys. Preview size never changes denominators.</p></div>
+      {onUseAsFilter && <button type="button" disabled={!selected} onClick={() => selected && onUseAsFilter(selected)} className="pressable rounded-lg bg-slate-900 px-3 py-2 text-[11px] font-bold text-white disabled:bg-slate-300">Use selected as filter</button>}
     </header>
     <div className="max-h-[560px] overflow-auto">
-      <table className="w-full min-w-[760px] border-collapse text-left text-[10px]">
-        <thead className="sticky top-0 z-10 bg-slate-50 text-slate-600"><tr><th className="px-3 py-2 font-bold">Key</th><th className="px-3 py-2 font-bold">Present in</th>{spec.measures.flatMap((measure) => spec.operands.map((operand) => <th key={`${measure.id}-${operand.id}`} className="px-3 py-2 text-right font-bold">{measure.label}<span className="block font-normal" style={{ color: operand.colour }}>{operand.label}</span></th>))}{spec.operands.length === 2 && spec.measures.map((measure) => <th key={`delta-${measure.id}`} className="px-3 py-2 text-right font-bold">Δ {measure.label}<span className="block font-normal text-slate-400">B − A</span></th>)}</tr></thead>
+      <table className="w-full min-w-[760px] border-collapse text-left text-[11px]">
+        <thead className="sticky top-0 z-10 bg-slate-50 text-slate-600"><tr><th className="px-3 py-2 font-bold">Key</th><th className="px-3 py-2 font-bold">Present in</th>{spec.measures.flatMap((measure) => spec.operands.map((operand) => <th key={`${measure.id}-${operand.id}`} className="px-3 py-2 text-right font-bold">{measure.label}<span className="block font-normal" style={{ color: operand.colour }}>{operand.label}</span></th>))}{spec.operands.length === 2 && spec.measures.map((measure) => <th key={`delta-${measure.id}`} className="px-3 py-2 text-right font-bold">Δ {measure.label}<span className="block font-normal text-slate-500">B − A</span></th>)}</tr></thead>
         <tbody>{records.map((record) => <tr key={record.key} onClick={() => onSelectKey?.(record.key)} className={cn('cursor-pointer border-t border-slate-100 hover:bg-blue-50/60', record.key === selectedKey && 'bg-blue-50')} aria-selected={record.key === selectedKey}><td className="max-w-48 truncate px-3 py-2 font-semibold text-slate-700">{record.key}</td><td className="px-3 py-2 text-slate-500">{record.presentOperandIds.length}/{spec.operands.length}</td>{spec.measures.flatMap((measure) => spec.operands.map((operand) => <td key={`${measure.id}-${operand.id}`} className="px-3 py-2 text-right tabular-nums text-slate-600">{displayValue(record.values[operand.id]?.[measure.id] ?? null)}</td>))}{spec.operands.length === 2 && spec.measures.map((measure) => <td key={`delta-${measure.id}`} className={cn('px-3 py-2 text-right font-bold tabular-nums', (record.deltas[measure.id] || 0) > 0 ? 'text-blue-700' : (record.deltas[measure.id] || 0) < 0 ? 'text-rose-700' : 'text-slate-500')}>{displayValue(record.deltas[measure.id])}</td>)}</tr>)}</tbody>
       </table>
     </div>
-    {result.alignedRecordsTruncated && <p className="border-t border-amber-100 bg-amber-50 px-4 py-2 text-[10px] text-amber-800">Preview bounded to {records.length.toLocaleString()} records. Export or source records are not embedded in the project manifest.</p>}
+    {result.alignedRecordsTruncated && <p className="border-t border-amber-100 bg-amber-50 px-4 py-2 text-[11px] text-amber-800">Preview bounded to {records.length.toLocaleString()} records. Export or source records are not embedded in the project manifest.</p>}
   </section>;
 };

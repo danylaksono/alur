@@ -21,17 +21,17 @@ const Delta = ({ differences }: { differences: VariantDifference[] }) => {
   if (!differences.length) return null;
   const shown = differences.slice(0, 3);
   return (
-    <div className="flex flex-wrap gap-x-2.5 gap-y-0.5 font-mono text-[9.5px] leading-4">
+    <div className="flex flex-wrap gap-x-2.5 gap-y-0.5 font-mono text-[11px] leading-4">
       {shown.map((difference) => (
         <span key={difference.path} className="whitespace-nowrap">
-          <span className="text-slate-400">{difference.path.split('.').slice(-2).join('.')}</span>{' '}
-          <span className="text-slate-400 line-through">{formatVariantValue(difference.before)}</span>{' '}
-          <span className="text-slate-300">→</span>{' '}
+          <span className="text-slate-500">{difference.path.split('.').slice(-2).join('.')}</span>{' '}
+          <span className="text-slate-500 line-through">{formatVariantValue(difference.before)}</span>{' '}
+          <span className="text-slate-500">→</span>{' '}
           <span className="font-semibold text-emerald-700">{formatVariantValue(difference.after)}</span>
         </span>
       ))}
       {differences.length > shown.length && (
-        <span className="text-slate-400">+{differences.length - shown.length} more</span>
+        <span className="text-slate-500">+{differences.length - shown.length} more</span>
       )}
     </div>
   );
@@ -117,7 +117,7 @@ export const ScenarioPanel = () => {
             onChange={(event) => updateSession(activeSession.id, { question: event.target.value })}
             placeholder="What is this asking?"
             aria-label="Question"
-            className="w-full bg-transparent text-[13px] font-bold leading-5 text-slate-800 placeholder:font-medium placeholder:text-slate-400 focus:outline-none"
+            className="w-full bg-transparent text-[13px] font-bold leading-5 text-slate-800 placeholder:font-medium placeholder:text-slate-500 focus:outline-none"
           />
         ) : (
           <h3 className="text-[13px] font-bold text-slate-800">Scenarios</h3>
@@ -127,7 +127,7 @@ export const ScenarioPanel = () => {
             value={activeSessionId || ''}
             onChange={(event) => setActiveSession(event.target.value || undefined)}
             aria-label="Question"
-            className="mt-1.5 w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] text-slate-600"
+            className="mt-1.5 w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-600"
           >
             <option value="">All questions</option>
             {sessions.map((session) => (
@@ -178,7 +178,7 @@ export const ScenarioPanel = () => {
                       onClick={() => branchVariant(row.variant.id)}
                       aria-label={`Branch ${row.variant.name}`}
                       title={`Branch ${row.variant.name}`}
-                      className="pressable rounded p-1 text-slate-300 transition-colors duration-hover hover:bg-slate-50 hover:text-emerald-600 focus-visible:text-emerald-600"
+                      className="pressable rounded p-1 text-slate-400 transition-colors duration-hover hover:bg-slate-50 hover:text-emerald-600 focus-visible:text-emerald-600"
                     >
                       <GitBranch className="h-3.5 w-3.5" />
                     </button>
@@ -201,7 +201,7 @@ export const ScenarioPanel = () => {
             type="button"
             disabled={sweeping}
             onClick={runSweep}
-            className="pressable flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-bold text-slate-700 transition-colors duration-hover hover:bg-slate-50 disabled:opacity-40"
+            className="pressable flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] font-bold text-slate-700 transition-colors duration-hover hover:bg-slate-50 disabled:opacity-40"
           >
             <Play className="h-3 w-3" />
             {sweeping ? 'Running…' : pending ? `Run all · ${pending} pending` : `Run all ${variants.length}`}
@@ -210,18 +210,18 @@ export const ScenarioPanel = () => {
             type="button"
             disabled={comparable.length < 2}
             onClick={compareScenarios}
-            className="pressable flex w-full items-center justify-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-[10px] font-bold text-white transition-colors duration-hover hover:bg-black disabled:cursor-not-allowed disabled:bg-slate-300"
+            className="pressable flex w-full items-center justify-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-[11px] font-bold text-white transition-colors duration-hover hover:bg-black disabled:cursor-not-allowed disabled:bg-slate-300"
           >
             <GitCompareArrows className="h-3 w-3" /> Compare {comparable.length > 1 ? comparable.length : ''} scenarios
           </button>
           {/* Name what is missing rather than leaving a dead control unexplained. */}
           {comparable.length < 2 && (
-            <p className="text-center text-[9px] leading-4 text-slate-500">
+            <p className="text-center text-[11px] leading-4 text-slate-500">
               Run at least two scenarios to compare them.
             </p>
           )}
           {parameters.length > 0 && (
-            <p className="text-[9px] leading-4 text-slate-400">
+            <p className="text-[11px] leading-4 text-slate-500">
               Each run substitutes {parameters.join(', ')} from the scenario.
             </p>
           )}
@@ -241,7 +241,7 @@ export const StartScenarioButton = ({ onClick }: { onClick: () => void }) => (
   <button
     type="button"
     onClick={onClick}
-    className="pressable flex w-full items-center justify-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[9px] font-bold text-slate-600 transition-colors duration-hover hover:bg-slate-50"
+    className="pressable flex w-full items-center justify-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-bold text-slate-600 transition-colors duration-hover hover:bg-slate-50"
   >
     <Plus className="h-2.5 w-2.5" /> New scenario
   </button>

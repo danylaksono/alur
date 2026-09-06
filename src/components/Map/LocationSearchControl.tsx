@@ -129,7 +129,7 @@ export const LocationSearchControl = ({
         onSubmit={handleSubmit}
         className="flex h-10 items-center rounded-lg border border-slate-200 bg-white/95 shadow-lg backdrop-blur"
       >
-        <Search className="ml-3 h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
+        <Search className="ml-3 h-4 w-4 shrink-0 text-slate-500" aria-hidden="true" />
         <label htmlFor="map-location-search" className="sr-only">Search for a location</label>
         <input
           id="map-location-search"
@@ -156,7 +156,7 @@ export const LocationSearchControl = ({
           aria-haspopup="listbox"
           aria-expanded={isOpen}
           aria-activedescendant={activeIndex >= 0 ? `map-location-result-${activeIndex}` : undefined}
-          className="min-w-0 flex-1 bg-transparent px-2 text-sm text-slate-700 outline-none placeholder:text-slate-400"
+          className="min-w-0 flex-1 bg-transparent px-2 text-sm text-slate-700 outline-none placeholder:text-slate-500"
         />
         {query && (
           <button
@@ -164,7 +164,7 @@ export const LocationSearchControl = ({
             onClick={clear}
             aria-label="Clear location search"
             title="Clear location search and marker"
-            className="pressable rounded p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+            className="pressable rounded p-1.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
           >
             <X className="h-3.5 w-3.5" />
           </button>
@@ -211,12 +211,12 @@ export const LocationSearchControl = ({
                 <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-teal-600" />
                 <span className="min-w-0">
                   <span className="line-clamp-2 block text-xs font-medium leading-4 text-slate-700">{result.label}</span>
-                  <span className="mt-0.5 block text-[10px] capitalize text-slate-400">{resultKind(result)}</span>
+                  <span className="mt-0.5 block text-[11px] capitalize text-slate-500">{resultKind(result)}</span>
                 </span>
               </button>
             ))}
           </div>
-          <div className="border-t border-slate-100 px-3 py-1.5 text-[9px] text-slate-400">
+          <div className="border-t border-slate-100 px-3 py-1.5 text-[11px] text-slate-500">
             Search data ©{' '}
             <a
               href="https://www.openstreetmap.org/copyright"

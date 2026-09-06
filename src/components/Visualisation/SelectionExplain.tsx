@@ -36,7 +36,7 @@ const PairBars = ({
         <span className="w-14 shrink-0 text-right text-[11px] font-bold tabular-nums text-slate-700">{selectedLabel}</span>
       </div>
       <div className="flex items-center gap-1.5">
-        <span className="w-10 shrink-0 text-[11px] text-slate-400">rest</span>
+        <span className="w-10 shrink-0 text-[11px] text-slate-500">rest</span>
         <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
           <span
             className="block h-full rounded-full bg-slate-300"
@@ -90,11 +90,11 @@ export const SelectionExplain = ({
           <Sparkles className="h-3.5 w-3.5" />
           What sets it apart
         </h3>
-        {isLoading && <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-400" />}
+        {isLoading && <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-500" />}
       </div>
 
       {!explanation || !explanation.fields.length ? (
-        <div className="px-4 py-3 text-[11px] text-slate-400">
+        <div className="px-4 py-3 text-[11px] text-slate-500">
           {isLoading ? 'Comparing selection against the rest…' : 'No clear differences found.'}
         </div>
       ) : (
@@ -104,7 +104,7 @@ export const SelectionExplain = ({
               <div className="mb-1 flex items-center justify-between gap-2">
                 <span className="truncate text-[11px] font-semibold uppercase tracking-wide text-slate-500">{item.field}</span>
                 <span
-                  className="shrink-0 rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-sky-700"
+                  className="shrink-0 rounded bg-sky-100 px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-sky-700"
                   title={item.kind === 'numeric' ? 'Standardized mean difference' : 'Share divergence'}
                 >
                   {item.score >= 10 ? '10+' : item.score.toFixed(2)}
@@ -134,7 +134,7 @@ export const SelectionExplain = ({
               )}
             </div>
           ))}
-          <p className="text-[10px] leading-relaxed text-slate-400">
+          <p className="text-[11px] leading-relaxed text-slate-500">
             {explanation.selectedCount.toLocaleString()} selected vs {explanation.restCount.toLocaleString()} others.
             Ranked by effect size.
           </p>

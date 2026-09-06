@@ -11,6 +11,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useStore } from "../../store/useStore";
+import { wouldCreateCycle } from "../../utils/workflowGraph";
 import { InputNode } from "../Flow/InputNode";
 import { GeometryNode } from "../Flow/GeometryNode";
 import { AnalysisNode } from "../Flow/AnalysisNode";
@@ -87,7 +88,7 @@ export const WorkflowTab = () => {
         <ErrorBoundary
           name="Workflow"
           fallback={
-            <div className="flex h-full items-center justify-center bg-slate-100 text-xs italic text-slate-400">
+            <div className="flex h-full items-center justify-center bg-slate-100 text-xs italic text-slate-500">
               Workflow editor error
             </div>
           }
@@ -98,6 +99,13 @@ export const WorkflowTab = () => {
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
+            // React Flow greys out invalid targets while dragging, so a loop is
+            // refused under the cursor rather than accepted and reported later.
+            isValidConnection={(connection) =>
+              Boolean(connection.source) &&
+              Boolean(connection.target) &&
+              !wouldCreateCycle(edges, connection.source!, connection.target!)
+            }
             onNodeClick={(_, node) => {
               setSelectedNodeId(node.id);
               setSelectedLayerId(null);

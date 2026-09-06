@@ -181,7 +181,7 @@ export const FilterNode = ({ data, id, selected }: any) => {
               <button
                 type="button"
                 onClick={() => updatePredicates([...predicates, { id: `p-${Date.now()}`, expression: '', severity: 'hard' }])}
-                className="pressable rounded px-1 text-[10px] font-bold text-amber-700 hover:bg-amber-50"
+                className="pressable rounded px-1 text-[11px] font-bold text-amber-700 hover:bg-amber-50"
               >
                 + Add
               </button>
@@ -202,7 +202,7 @@ export const FilterNode = ({ data, id, selected }: any) => {
                     <button
                       type="button"
                       onClick={() => updatePredicates(predicates.filter((_, position) => position !== index))}
-                      className="pressable rounded p-1 text-slate-400 hover:bg-white hover:text-rose-600"
+                      className="pressable rounded p-1 text-slate-500 hover:bg-white hover:text-rose-600"
                       aria-label={`Remove condition ${index + 1}`}
                     >
                       <X className="h-3 w-3" />
@@ -217,7 +217,7 @@ export const FilterNode = ({ data, id, selected }: any) => {
                     aria-label={`Condition ${index + 1} expression`}
                   />
                   <select
-                    className={cn(selectClass, 'mt-1 text-[10px]')}
+                    className={cn(selectClass, 'mt-1 text-[11px]')}
                     value={predicate.severity}
                     onChange={(e) => updatePredicate(index, { severity: e.target.value as FilterPredicate['severity'] })}
                     aria-label={`Condition ${index + 1} severity`}
@@ -230,7 +230,7 @@ export const FilterNode = ({ data, id, selected }: any) => {
             </div>
 
             {!predicates.length && (
-              <p className="text-[10px] leading-4 text-slate-500">
+              <p className="text-[11px] leading-4 text-slate-500">
                 Name each condition so an excluded row can say what excluded it.
               </p>
             )}
@@ -239,11 +239,11 @@ export const FilterNode = ({ data, id, selected }: any) => {
           {columnNames.length > 0 && (
             <div className="flex flex-wrap gap-1">
               {columnNames.slice(0, 8).map((col) => (
-                <span key={col} className="rounded border border-slate-200 bg-white px-1.5 py-0.5 font-mono text-[10px] text-slate-500">
+                <span key={col} className="rounded border border-slate-200 bg-white px-1.5 py-0.5 font-mono text-[11px] text-slate-500">
                   {col}
                 </span>
               ))}
-              {columnNames.length > 8 && <span className="text-[10px] text-slate-400">+{columnNames.length - 8}</span>}
+              {columnNames.length > 8 && <span className="text-[11px] text-slate-500">+{columnNames.length - 8}</span>}
             </div>
           )}
 
@@ -258,19 +258,19 @@ export const FilterNode = ({ data, id, selected }: any) => {
               {columnNames.slice(0, 8).map((col) => (
                 <button
                   key={col}
-                  className="pressable rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 font-mono text-[10px] text-amber-700 transition-colors hover:bg-amber-100"
+                  className="pressable rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 font-mono text-[11px] text-amber-700 transition-colors hover:bg-amber-100"
                   onClick={() => updateConfig({ condition: selectionCount ? col : condition ? `${condition} ${col}` : col, selectionIds: undefined })}
                   title={`Insert "${col}" into condition`}
                 >
                   {col}
                 </button>
               ))}
-              {columnNames.length > 8 && <span className="text-[10px] text-slate-400">+{columnNames.length - 8}</span>}
+              {columnNames.length > 8 && <span className="text-[11px] text-slate-500">+{columnNames.length - 8}</span>}
             </div>
           )}
           <div>
             {selectionCount > 0 && (
-              <div className="mb-2 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[10px] font-semibold text-amber-700">
+              <div className="mb-2 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] font-semibold text-amber-700">
                 Snapshot of {selectionCount.toLocaleString()} selected rows. Editing the condition converts this to a regular SQL filter.
               </div>
             )}

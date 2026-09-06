@@ -157,11 +157,11 @@ export const FieldCalculatorDialog = ({
               </div>
               <div className="flex max-h-24 flex-wrap gap-1 overflow-auto rounded-md border border-slate-200 bg-slate-50 p-1.5">
                 {filteredColumns.map((column) => (
-                  <button key={column} type="button" onClick={() => insertField(column)} className="pressable rounded border border-slate-200 bg-white px-1.5 py-0.5 font-mono text-[10px] text-slate-600 hover:border-slate-400">
+                  <button key={column} type="button" onClick={() => insertField(column)} className="pressable rounded border border-slate-200 bg-white px-1.5 py-0.5 font-mono text-[11px] text-slate-600 hover:border-slate-400">
                     {column}
                   </button>
                 ))}
-                {!filteredColumns.length && <span className="px-1 text-[11px] text-slate-400">No matching fields</span>}
+                {!filteredColumns.length && <span className="px-1 text-[11px] text-slate-500">No matching fields</span>}
               </div>
             </div>
 
@@ -178,11 +178,11 @@ export const FieldCalculatorDialog = ({
 
             {preview.length > 0 && (
               <div className="overflow-hidden rounded-md border border-slate-200">
-                <div className="bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">Preview · loaded rows</div>
+                <div className="bg-slate-100 px-2 py-1 text-[11px] font-bold uppercase tracking-wider text-slate-500">Preview · loaded rows</div>
                 {preview.map((row) => (
                   <div key={row.key} className="flex justify-between border-t border-slate-100 px-2 py-1 font-mono text-xs">
-                    <span className="text-slate-400">{row.key}</span>
-                    <span className={row.value == null ? 'italic text-slate-400' : 'text-slate-700'}>{formatValue(row.value)}</span>
+                    <span className="text-slate-500">{row.key}</span>
+                    <span className={row.value == null ? 'italic text-slate-500' : 'text-slate-700'}>{formatValue(row.value)}</span>
                   </div>
                 ))}
               </div>

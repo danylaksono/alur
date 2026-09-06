@@ -167,7 +167,7 @@ export const BottomDrawer = () => {
         {isOpen && (
           <div className="min-h-0 flex-1 overflow-hidden">
             {activeDrawerTab === 'workflow' ? (
-              <Suspense fallback={<div className="p-4 text-xs text-slate-400" role="status">Loading workflow editor…</div>}><WorkflowTab /></Suspense>
+              <Suspense fallback={<div className="p-4 text-xs text-slate-500" role="status">Loading workflow editor…</div>}><WorkflowTab /></Suspense>
             ) : activeDrawerTab === 'table' ? (
               <TableTab table={table} />
             ) : (

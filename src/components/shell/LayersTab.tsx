@@ -38,7 +38,7 @@ export const LayersTab = () => {
     return (
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
         <ErrorBoundary name="Visualisation Panel">
-          <Suspense fallback={<div className="p-4 text-xs text-slate-400" role="status">Loading style editor…</div>}><VisualisationPanel
+          <Suspense fallback={<div className="p-4 text-xs text-slate-500" role="status">Loading style editor…</div>}><VisualisationPanel
             layer={stylingLayer}
             initialField={initialStyleField}
             onBack={() => {

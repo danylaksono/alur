@@ -84,7 +84,7 @@ export const LayoutMenu = ({ expanded }: { expanded: boolean }) => {
           aria-label="Workspace layout"
           className="absolute bottom-0 left-full z-[100] ml-2 w-64 rounded-lg border border-slate-200 bg-white p-2 shadow-xl"
         >
-          <p className="px-1.5 pb-1.5 text-[9px] font-bold uppercase tracking-[.14em] text-slate-500">Arrangement</p>
+          <p className="px-1.5 pb-1.5 text-[11px] font-bold uppercase tracking-[.14em] text-slate-500">Arrangement</p>
           {PRESET_ORDER.map((id) => {
             const spec = LAYOUT_PRESETS[id];
             const active = layoutPreset === id;
@@ -106,7 +106,7 @@ export const LayoutMenu = ({ expanded }: { expanded: boolean }) => {
                 <PresetThumbnail dock={spec.dock} closed={spec.drawerMode === 'collapsed'} />
                 <span className="min-w-0">
                   <span className="block truncate text-xs font-semibold">{spec.label}</span>
-                  <span className={cn('block text-[10px] leading-4', active ? 'text-slate-300' : 'text-slate-500')}>
+                  <span className={cn('block text-[11px] leading-4', active ? 'text-slate-400' : 'text-slate-500')}>
                     {spec.description}
                   </span>
                 </span>
@@ -115,8 +115,8 @@ export const LayoutMenu = ({ expanded }: { expanded: boolean }) => {
           })}
 
           <div className="my-1.5 h-px bg-slate-100" />
-          <p className="px-1.5 pb-1.5 text-[9px] font-bold uppercase tracking-[.14em] text-slate-500">
-            Dock position{layoutPreset === 'custom' && <span className="ml-1 font-medium normal-case tracking-normal text-slate-400">· custom</span>}
+          <p className="px-1.5 pb-1.5 text-[11px] font-bold uppercase tracking-[.14em] text-slate-500">
+            Dock position{layoutPreset === 'custom' && <span className="ml-1 font-medium normal-case tracking-normal text-slate-500">· custom</span>}
           </p>
           <div className="flex gap-1 px-0.5">
             {DOCK_OPTIONS.map(({ id, icon: Icon, label }) => (

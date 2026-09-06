@@ -73,7 +73,7 @@ export const RecoveryDialog = () => {
             <h2 id="recovery-title" className="flex items-center gap-2 text-sm font-bold text-slate-800"><History className="h-4 w-4 text-sky-600" /> Recover your workspace?</h2>
             <p className="mt-1 text-xs leading-5 text-slate-500">A recovery snapshot from {new Date(candidate.createdAt).toLocaleString()} is available.</p>
           </div>
-          <button type="button" onClick={() => { void discard(); }} className="pressable rounded-md p-1.5 text-slate-400 hover:bg-slate-100" aria-label="Discard recovery snapshot"><X className="h-4 w-4" /></button>
+          <button type="button" onClick={() => { void discard(); }} className="pressable rounded-md p-1.5 text-slate-500 hover:bg-slate-100" aria-label="Discard recovery snapshot"><X className="h-4 w-4" /></button>
         </div>
         {sources === null ? (
           <div className="space-y-4 p-5">

@@ -118,7 +118,7 @@ export const AggregateNode = ({ data, id, selected }: any) => {
 
       <div>
         <label className={cn(fieldLabelClass, 'mb-1')}>
-          Group by <span className="normal-case text-slate-400">{mode === 'summary' ? '(optional, several allowed)' : '(optional)'}</span>
+          Group by <span className="normal-case text-slate-500">{mode === 'summary' ? '(optional, several allowed)' : '(optional)'}</span>
         </label>
         {columnNames.length > 0 ? (
           <div className="mb-1.5 flex flex-wrap gap-1">
@@ -127,7 +127,7 @@ export const AggregateNode = ({ data, id, selected }: any) => {
                 key={col}
                 type="button"
                 className={cn(
-                  'pressable rounded border px-1.5 py-0.5 font-mono text-[10px] transition-colors',
+                  'pressable rounded border px-1.5 py-0.5 font-mono text-[11px] transition-colors',
                   groupFields.includes(col)
                     ? 'border-orange-300 bg-orange-200 text-orange-800'
                     : 'border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100',
@@ -157,7 +157,7 @@ export const AggregateNode = ({ data, id, selected }: any) => {
         <div>
           <div className="mb-1 flex items-center justify-between">
             <label className={fieldLabelClass}>Measures</label>
-            <button type="button" onClick={addMeasure} className="pressable flex items-center gap-1 rounded px-1 text-[10px] font-bold text-orange-700 hover:bg-orange-50">
+            <button type="button" onClick={addMeasure} className="pressable flex items-center gap-1 rounded px-1 text-[11px] font-bold text-orange-700 hover:bg-orange-50">
               <Plus className="h-3 w-3" /> Add
             </button>
           </div>
@@ -198,7 +198,7 @@ export const AggregateNode = ({ data, id, selected }: any) => {
                 <button
                   type="button"
                   onClick={() => updateConfig({ measures: measures.filter((_, position) => position !== index) })}
-                  className="pressable rounded p-1 text-slate-400 hover:bg-slate-50 hover:text-rose-600"
+                  className="pressable rounded p-1 text-slate-500 hover:bg-slate-50 hover:text-rose-600"
                   aria-label={`Remove measure ${index + 1}`}
                 >
                   <X className="h-3 w-3" />
@@ -208,19 +208,19 @@ export const AggregateNode = ({ data, id, selected }: any) => {
           </div>
 
           {measures.length > 0 && (
-            <p className="mt-1.5 font-mono text-[9px] leading-4 text-slate-400">
+            <p className="mt-1.5 font-mono text-[11px] leading-4 text-slate-500">
               → {measures.map(measureAlias).join(', ')}
             </p>
           )}
 
           {groupFields.length > 0 && (
-            <label className="mt-2 flex items-center gap-1.5 text-[10px] text-slate-600">
+            <label className="mt-2 flex items-center gap-1.5 text-[11px] text-slate-600">
               <input type="checkbox" checked={includeGeometry} onChange={(e) => updateConfig({ includeGeometry: e.target.checked })} />
               Merge each group's geometry, so the result can be mapped
             </label>
           )}
 
-          {errors.length > 0 && <p className="mt-1.5 text-[10px] leading-4 text-amber-700">{errors[0]}</p>}
+          {errors.length > 0 && <p className="mt-1.5 text-[11px] leading-4 text-amber-700">{errors[0]}</p>}
         </div>
       )}
 

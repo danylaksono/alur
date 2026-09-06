@@ -169,7 +169,7 @@ export const ScorePanel = () => {
         <h3 className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
           <SlidersHorizontal className="h-3.5 w-3.5" /> Composite score
         </h3>
-        <p className="mt-1 text-[10px] leading-4 text-slate-500">
+        <p className="mt-1 text-[11px] leading-4 text-slate-500">
           Combine columns into one weighted score. Move a weight to see the ranking change.
         </p>
       </div>
@@ -185,7 +185,7 @@ export const ScorePanel = () => {
         </select>
 
         {!numericFields.length && (
-          <p className="mt-3 rounded-md bg-amber-50 px-2 py-1.5 text-[10px] leading-4 text-amber-800">
+          <p className="mt-3 rounded-md bg-amber-50 px-2 py-1.5 text-[11px] leading-4 text-amber-800">
             This dataset has no numeric columns to score on.
           </p>
         )}
@@ -194,7 +194,7 @@ export const ScorePanel = () => {
           <button
             type="button"
             onClick={() => setSpec(equalWeightedScoreModel(numericFields.slice(0, 3)))}
-            className="pressable mt-3 w-full rounded-lg bg-purple-600 px-3 py-2 text-[10px] font-bold text-white hover:bg-purple-700"
+            className="pressable mt-3 w-full rounded-lg bg-purple-600 px-3 py-2 text-[11px] font-bold text-white hover:bg-purple-700"
           >
             Start with {Math.min(3, numericFields.length)} equally weighted criteria
           </button>
@@ -209,7 +209,7 @@ export const ScorePanel = () => {
                   <select
                     value={criterion.field}
                     onChange={(event) => updateCriterion(index, { field: event.target.value })}
-                    className="min-w-0 flex-1 truncate rounded border border-slate-200 px-1.5 py-1 text-[10px]"
+                    className="min-w-0 flex-1 truncate rounded border border-slate-200 px-1.5 py-1 text-[11px]"
                     aria-label={`Criterion ${index + 1} column`}
                   >
                     {numericFields.map((name) => <option key={name} value={name}>{name}</option>)}
@@ -217,7 +217,7 @@ export const ScorePanel = () => {
                   <button
                     type="button"
                     onClick={() => setSpec((current) => ({ ...current, criteria: current.criteria.filter((_, position) => position !== index) }))}
-                    className="pressable rounded p-1 text-slate-400 hover:bg-slate-50 hover:text-rose-600"
+                    className="pressable rounded p-1 text-slate-500 hover:bg-slate-50 hover:text-rose-600"
                     aria-label={`Remove ${criterion.field}`}
                   >
                     <X className="h-3 w-3" />
@@ -236,7 +236,7 @@ export const ScorePanel = () => {
                     style={{ accentColor: colourFor(criterion.field) }}
                     aria-label={`${criterion.field} weight`}
                   />
-                  <span className="w-9 shrink-0 text-right text-[10px] font-bold tabular-nums text-slate-700">
+                  <span className="w-9 shrink-0 text-right text-[11px] font-bold tabular-nums text-slate-700">
                     {Math.round((shares.get(criterion.field) || 0) * 100)}%
                   </span>
                 </div>
@@ -245,7 +245,7 @@ export const ScorePanel = () => {
                   <select
                     value={criterion.direction}
                     onChange={(event) => updateCriterion(index, { direction: event.target.value as ScoreCriterion['direction'] })}
-                    className="rounded border border-slate-200 px-1 py-0.5 text-[9px]"
+                    className="rounded border border-slate-200 px-1 py-0.5 text-[11px]"
                     aria-label={`${criterion.field} direction`}
                   >
                     <option value="higher">Higher is better</option>
@@ -254,7 +254,7 @@ export const ScorePanel = () => {
                   <select
                     value={criterion.normalisation}
                     onChange={(event) => updateCriterion(index, { normalisation: event.target.value as ScoreCriterion['normalisation'] })}
-                    className="rounded border border-slate-200 px-1 py-0.5 text-[9px]"
+                    className="rounded border border-slate-200 px-1 py-0.5 text-[11px]"
                     aria-label={`${criterion.field} normalisation`}
                   >
                     <option value="min-max">Min–max</option>
@@ -270,14 +270,14 @@ export const ScorePanel = () => {
                 type="button"
                 onClick={addCriterion}
                 disabled={spec.criteria.length >= numericFields.length}
-                className="pressable flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1.5 text-[10px] font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+                className="pressable flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
               >
                 <Plus className="h-3 w-3" /> Criterion
               </button>
               <select
                 value={spec.missingValueTreatment}
                 onChange={(event) => setSpec((current) => ({ ...current, missingValueTreatment: event.target.value as ScoreModelSpec['missingValueTreatment'] }))}
-                className="min-w-0 flex-1 rounded-lg border border-slate-200 px-1.5 py-1.5 text-[9px]"
+                className="min-w-0 flex-1 rounded-lg border border-slate-200 px-1.5 py-1.5 text-[11px]"
                 aria-label="Missing value treatment"
               >
                 <option value="zero">Missing counts as zero</option>
@@ -286,7 +286,7 @@ export const ScorePanel = () => {
               </select>
             </div>
 
-            <label className="flex items-center gap-1.5 text-[10px] text-slate-600">
+            <label className="flex items-center gap-1.5 text-[11px] text-slate-600">
               <input type="checkbox" checked={respectFilters} onChange={(event) => setRespectFilters(event.target.checked)} />
               Score only the rows passing active filters
             </label>
@@ -294,23 +294,23 @@ export const ScorePanel = () => {
         )}
 
         {errors.length > 0 && spec.criteria.length > 0 && (
-          <p className="mt-2 rounded-md bg-amber-50 px-2 py-1.5 text-[10px] leading-4 text-amber-800">{errors[0]}</p>
+          <p className="mt-2 rounded-md bg-amber-50 px-2 py-1.5 text-[11px] leading-4 text-amber-800">{errors[0]}</p>
         )}
-        {error && <p className="mt-2 rounded-md bg-rose-50 px-2 py-1.5 text-[10px] leading-4 text-rose-700">{error}</p>}
+        {error && <p className="mt-2 rounded-md bg-rose-50 px-2 py-1.5 text-[11px] leading-4 text-rose-700">{error}</p>}
 
         {preview && (
           <section className="mt-4 border-t border-slate-100 pt-3">
             <div className="flex items-baseline justify-between gap-2">
-              <h4 className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Ranked</h4>
-              <span className="flex items-center gap-1 text-[9px] text-slate-500">
+              <h4 className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Ranked</h4>
+              <span className="flex items-center gap-1 text-[11px] text-slate-500">
                 {loading && <Loader2 className="h-3 w-3 animate-spin" />}
                 {preview.scoredRows.toLocaleString()} of {preview.totalRows.toLocaleString()} scored
-                {preview.labelField && <span className="text-slate-400">· by {preview.labelField}</span>}
+                {preview.labelField && <span className="text-slate-500">· by {preview.labelField}</span>}
               </span>
             </div>
 
             {preview.scoredRows < preview.totalRows && (
-              <p className="mt-1 text-[9px] leading-4 text-amber-700">
+              <p className="mt-1 text-[11px] leading-4 text-amber-700">
                 {(preview.totalRows - preview.scoredRows).toLocaleString()} rows are missing a value on at least one criterion and were left unscored.
               </p>
             )}
@@ -330,9 +330,9 @@ export const ScorePanel = () => {
                       aria-expanded={expanded}
                     >
                       <div className="flex items-baseline gap-2">
-                        <span className="w-5 shrink-0 text-right text-[10px] font-bold tabular-nums text-slate-400">{row.rank}</span>
-                        <span className="min-w-0 flex-1 truncate text-[10px] text-slate-700">{row.key || '—'}</span>
-                        <span className="shrink-0 text-[10px] font-bold tabular-nums text-slate-800">{format(row.score)}</span>
+                        <span className="w-5 shrink-0 text-right text-[11px] font-bold tabular-nums text-slate-500">{row.rank}</span>
+                        <span className="min-w-0 flex-1 truncate text-[11px] text-slate-700">{row.key || '—'}</span>
+                        <span className="shrink-0 text-[11px] font-bold tabular-nums text-slate-800">{format(row.score)}</span>
                       </div>
                       {/* Contributions sum to the score, so the bar is exact. */}
                       <div className="mt-1 ml-7 flex h-1.5 overflow-hidden rounded-full bg-slate-100">
@@ -352,7 +352,7 @@ export const ScorePanel = () => {
                     {expanded && (
                       <dl className="ml-7 mt-1 space-y-0.5 rounded-md bg-slate-50 p-2">
                         {spec.criteria.map((criterion) => (
-                          <div key={criterion.field} className="flex items-baseline justify-between gap-2 text-[9px]">
+                          <div key={criterion.field} className="flex items-baseline justify-between gap-2 text-[11px]">
                             <dt className="flex min-w-0 items-center gap-1 truncate text-slate-600">
                               <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: colourFor(criterion.field) }} />
                               {criterion.field}
@@ -371,8 +371,8 @@ export const ScorePanel = () => {
 
         {sensitivity && sensitivity.criteria.length > 0 && (
           <section className="mt-4 border-t border-slate-100 pt-3">
-            <h4 className="text-[10px] font-bold uppercase tracking-wide text-slate-500">How much each weight matters</h4>
-            <p className="mt-1 text-[9px] leading-4 text-slate-500">
+            <h4 className="text-[11px] font-bold uppercase tracking-wide text-slate-500">How much each weight matters</h4>
+            <p className="mt-1 text-[11px] leading-4 text-slate-500">
               Raising one weight by {Math.round(sensitivity.delta * 100)}% and seeing how far the ranking moves.
               A criterion that barely disturbs the top {sensitivity.topN} is not worth arguing over.
             </p>
@@ -380,7 +380,7 @@ export const ScorePanel = () => {
               {[...sensitivity.criteria].sort((a, b) => b.topNChanged - a.topNChanged).map((item) => (
                 <div key={item.field} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
                   <div className="min-w-0">
-                    <div className="flex items-center gap-1 truncate text-[10px] text-slate-700">
+                    <div className="flex items-center gap-1 truncate text-[11px] text-slate-700">
                       <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: colourFor(item.field) }} />
                       {item.field}
                     </div>
@@ -394,7 +394,7 @@ export const ScorePanel = () => {
                       />
                     </div>
                   </div>
-                  <span className="shrink-0 text-[9px] tabular-nums text-slate-600">
+                  <span className="shrink-0 text-[11px] tabular-nums text-slate-600">
                     {item.topNChanged} of top {sensitivity.topN}
                   </span>
                 </div>
@@ -404,7 +404,7 @@ export const ScorePanel = () => {
         )}
 
         {sensitivity && !sensitivity.criteria.length && sensitivity.warnings.length > 0 && spec.criteria.length > 0 && (
-          <p className="mt-3 text-[9px] leading-4 text-slate-500">{sensitivity.warnings[0]}</p>
+          <p className="mt-3 text-[11px] leading-4 text-slate-500">{sensitivity.warnings[0]}</p>
         )}
       </div>
 

@@ -79,7 +79,7 @@ export const SaveFragmentDialog = ({ selectedIds, onClose }: { selectedIds: stri
             <Package className="h-4 w-4 text-cyan-600" />
             Save {selectedIds.length} step{selectedIds.length === 1 ? '' : 's'} as an operation
           </h2>
-          <button type="button" onClick={onClose} className="pressable rounded p-1 text-slate-400 hover:bg-slate-100" aria-label="Close">
+          <button type="button" onClick={onClose} className="pressable rounded p-1 text-slate-500 hover:bg-slate-100" aria-label="Close">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -111,7 +111,7 @@ export const SaveFragmentDialog = ({ selectedIds, onClose }: { selectedIds: stri
           <div>
             <div className="mb-1 flex items-center justify-between">
               <span className="text-[11px] font-semibold text-slate-600">Values it asks for</span>
-              <span className="text-[10px] text-slate-400">Write <code>{'{{name}}'}</code> in a step to add one</span>
+              <span className="text-[11px] text-slate-500">Write <code>{'{{name}}'}</code> in a step to add one</span>
             </div>
 
             {parameters.length === 0 ? (
@@ -125,7 +125,7 @@ export const SaveFragmentDialog = ({ selectedIds, onClose }: { selectedIds: stri
                 {parameters.map((parameter, index) => (
                   <div key={parameter.id} className="rounded-lg border border-slate-200 bg-slate-50 p-2">
                     <div className="flex items-center gap-2">
-                      <code className="shrink-0 rounded bg-white px-1.5 py-0.5 text-[10px] font-semibold text-cyan-700">{`{{${parameter.id}}}`}</code>
+                      <code className="shrink-0 rounded bg-white px-1.5 py-0.5 text-[11px] font-semibold text-cyan-700">{`{{${parameter.id}}}`}</code>
                       <input
                         className={cn(inputClass, 'flex-1 py-1')}
                         value={parameter.label}
@@ -178,7 +178,7 @@ export const SaveFragmentDialog = ({ selectedIds, onClose }: { selectedIds: stri
 
           {/* Free text is not offered on purpose: a value is interpolated into
               SQL, so only shapes that can be validated are allowed. */}
-          <p className="text-[10px] leading-4 text-slate-400">
+          <p className="text-[11px] leading-4 text-slate-500">
             Numbers must be numbers, and columns must be plain column names. That is checked before the operation runs.
           </p>
 

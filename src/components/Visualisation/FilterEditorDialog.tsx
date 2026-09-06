@@ -47,9 +47,9 @@ export const FilterEditorDialog = ({
             <h2 id={titleId} className="flex items-center gap-2 text-sm font-bold text-slate-800">
               <SlidersHorizontal className="h-4 w-4 text-sky-600" /> {title}
             </h2>
-            <p className="mt-0.5 truncate text-[11px] text-slate-400">{visualFilterLabel(draft)}</p>
+            <p className="mt-0.5 truncate text-[11px] text-slate-500">{visualFilterLabel(draft)}</p>
           </div>
-          <button type="button" onClick={onCancel} aria-label="Close filter editor" className="pressable rounded-md p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700">
+          <button type="button" onClick={onCancel} aria-label="Close filter editor" className="pressable rounded-md p-1.5 text-slate-500 hover:bg-slate-200 hover:text-slate-700">
             <X className="h-4 w-4" />
           </button>
         </header>
@@ -70,7 +70,7 @@ export const FilterEditorDialog = ({
 
           {draft.kind === 'category' && (
             <label className={labelClass}>
-              Values <span className="font-normal text-slate-400">comma or line separated</span>
+              Values <span className="font-normal text-slate-500">comma or line separated</span>
               <textarea autoFocus rows={4} value={draft.values.join('\n')} onChange={(event) => setDraft({ ...draft, values: [...new Set(event.target.value.split(/[\n,]/).map((value) => value.trim()).filter(Boolean))] })} className={`${inputClass} h-auto py-2 font-mono`} />
             </label>
           )}

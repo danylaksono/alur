@@ -90,7 +90,7 @@ export const LeftPanel = () => {
           </ErrorBoundary>
         ) : (
           <ErrorBoundary name="Chat">
-            <Suspense fallback={<div className="p-4 text-xs text-slate-400" role="status">Loading copilot…</div>}><Chat /></Suspense>
+            <Suspense fallback={<div className="p-4 text-xs text-slate-500" role="status">Loading copilot…</div>}><Chat /></Suspense>
           </ErrorBoundary>
         )}
       </div>

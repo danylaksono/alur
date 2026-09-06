@@ -54,11 +54,11 @@ export const StoryExportDialog = ({ open, onClose }: { open: boolean; onClose: (
               A story is read-only and stands alone — the reader needs no data, no relinking, and no query engine.
             </p>
           </div>
-          <button type="button" onClick={onClose} className="pressable rounded-md p-1.5 text-slate-400 hover:bg-slate-100" aria-label="Close share dialog"><X className="h-4 w-4" /></button>
+          <button type="button" onClick={onClose} className="pressable rounded-md p-1.5 text-slate-500 hover:bg-slate-100" aria-label="Close share dialog"><X className="h-4 w-4" /></button>
         </div>
 
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
-          <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">
+          <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500">
             Author (optional)
             <input
               value={authorName}
@@ -69,7 +69,7 @@ export const StoryExportDialog = ({ open, onClose }: { open: boolean; onClose: (
           </label>
 
           <section className="rounded-xl border border-slate-200">
-            <h3 className="border-b border-slate-100 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+            <h3 className="border-b border-slate-100 px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">
               What the reader receives
             </h3>
             <dl className="divide-y divide-slate-100 text-xs">
@@ -82,13 +82,13 @@ export const StoryExportDialog = ({ open, onClose }: { open: boolean; onClose: (
               </div>
               {disclosure.imageCards > 0 && (
                 <div className="flex items-center gap-2 px-3 py-2 text-slate-600">
-                  <Image className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden="true" />
+                  <Image className="h-3.5 w-3.5 shrink-0 text-slate-500" aria-hidden="true" />
                   {disclosure.imageCards} captured map {disclosure.imageCards === 1 ? 'image' : 'images'}
                 </div>
               )}
               {disclosure.spatialCards.length > 0 && (
                 <div className="flex items-start gap-2 px-3 py-2 text-slate-600">
-                  <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden="true" />
+                  <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-500" aria-hidden="true" />
                   <span>{disclosure.spatialCards.reduce((total, card) => total + card.featureCount, 0).toLocaleString()} sampled locations across {disclosure.spatialCards.length} comparison {disclosure.spatialCards.length === 1 ? 'card' : 'cards'}</span>
                 </div>
               )}
@@ -127,12 +127,12 @@ export const StoryExportDialog = ({ open, onClose }: { open: boolean; onClose: (
                 value={hostedUrl}
                 onChange={(event) => setHostedUrl(event.target.value)}
                 placeholder="https://…/my-analysis.alur-story.json"
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 font-mono text-[10px] outline-none focus:border-sky-400"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 font-mono text-[11px] outline-none focus:border-sky-400"
                 aria-label="Hosted story address"
               />
               {link && (
                 <div className="flex items-center gap-2">
-                  <code className="min-w-0 flex-1 truncate rounded-md bg-slate-50 px-2 py-1.5 text-[10px] text-slate-600">{link}</code>
+                  <code className="min-w-0 flex-1 truncate rounded-md bg-slate-50 px-2 py-1.5 text-[11px] text-slate-600">{link}</code>
                   <button
                     type="button"
                     onClick={() => {
@@ -141,7 +141,7 @@ export const StoryExportDialog = ({ open, onClose }: { open: boolean; onClose: (
                         () => addToast({ type: 'warning', message: 'Could not copy the link.' }),
                       );
                     }}
-                    className="pressable flex shrink-0 items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1.5 text-[10px] font-bold text-slate-700 hover:bg-slate-50"
+                    className="pressable flex shrink-0 items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-50"
                   >
                     <Link2 className="h-3 w-3" /> Copy
                   </button>
@@ -161,7 +161,7 @@ export const StoryExportDialog = ({ open, onClose }: { open: boolean; onClose: (
         </div>
 
         <footer className="flex items-center justify-between gap-3 border-t bg-slate-50 px-5 py-3">
-          <p className="text-[10px] text-slate-500">Readers open this with “Open story” — no ALUR project needed.</p>
+          <p className="text-[11px] text-slate-500">Readers open this with “Open story” — no ALUR project needed.</p>
           <button
             type="button"
             onClick={() => {

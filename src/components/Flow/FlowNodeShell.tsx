@@ -1,5 +1,6 @@
 import { type ReactNode } from 'react';
-import { type LucideIcon } from 'lucide-react';
+import { AlertTriangle, type LucideIcon } from 'lucide-react';
+import { useStore } from '../../store/useStore';
 import { cn } from '../../utils/cn';
 import { NodeActions } from './NodeActions';
 
@@ -42,14 +43,19 @@ export const FlowNodeShell = ({
   children,
 }: FlowNodeShellProps) => {
   const styles = toneStyles[tone];
+  // The compiler stops at the first problem, so at most one node carries an
+  // issue at a time — which is also the only one worth acting on.
+  const issue = useStore((state) => (state.workflowIssue?.nodeId === id ? state.workflowIssue.message : null));
 
   return (
     <div
       className={cn(
         'group relative box-border rounded-lg border bg-white transition-shadow',
-        selected
-          ? 'border-slate-900 shadow-md ring-1 ring-slate-900'
-          : 'border-slate-200 shadow-sm hover:shadow-md',
+        issue
+          ? 'border-amber-400 shadow-md ring-1 ring-amber-300'
+          : selected
+            ? 'border-slate-900 shadow-md ring-1 ring-slate-900'
+            : 'border-slate-200 shadow-sm hover:shadow-md',
         widthClassName
       )}
     >
@@ -60,7 +66,7 @@ export const FlowNodeShell = ({
           <Icon className="h-3.5 w-3.5" />
         </div>
         <div className="min-w-0">
-          <div className="text-[10px] font-semibold uppercase leading-tight tracking-wide text-slate-600">
+          <div className="text-[11px] font-semibold uppercase leading-tight tracking-wide text-slate-600">
             {label}
           </div>
           {title && (
@@ -73,10 +79,19 @@ export const FlowNodeShell = ({
       <div className="space-y-2 px-3 pb-2.5 pt-2">
         {children}
       </div>
+      {issue && (
+        <div
+          className="flex items-start gap-1.5 rounded-b-lg border-t border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-medium leading-snug text-amber-900"
+          role="status"
+        >
+          <AlertTriangle className="mt-px h-3 w-3 shrink-0" aria-hidden="true" />
+          <span>{issue}</span>
+        </div>
+      )}
     </div>
   );
 };
 
-export const fieldLabelClass = 'block text-[10px] font-semibold uppercase tracking-wide text-slate-400';
+export const fieldLabelClass = 'block text-[11px] font-semibold uppercase tracking-wide text-slate-500';
 export const inputClass = 'w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none transition-colors focus:border-slate-400 focus:ring-2 focus:ring-slate-200';
 export const selectClass = 'w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-700 outline-none transition-colors focus:border-slate-400 focus:ring-2 focus:ring-slate-200';

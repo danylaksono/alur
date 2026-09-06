@@ -33,7 +33,7 @@ export const MapEmptyState = () => {
           onClick={dismissEmptyState}
           title="Dismiss"
           aria-label="Dismiss welcome prompt"
-          className="pressable absolute right-2.5 top-2.5 rounded-md p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+          className="pressable absolute right-2.5 top-2.5 rounded-md p-1 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-600"
         >
           <X className="h-3.5 w-3.5" />
         </button>

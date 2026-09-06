@@ -121,7 +121,7 @@ export const AboutDialog = () => {
             ref={closeButtonRef}
             type="button"
             onClick={() => setAboutOpen(false)}
-            className="pressable rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            className="pressable rounded p-1 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
             title="Close"
             aria-label="Close About"
           >
@@ -136,7 +136,7 @@ export const AboutDialog = () => {
               <h3 className="flex items-center gap-1.5 text-base font-extrabold tracking-[0.14em] text-slate-900">
                 ALUR
                 <span
-                  className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[8px] font-extrabold leading-none tracking-[0.12em] text-primary"
+                  className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-extrabold leading-none tracking-[0.12em] text-primary"
                   aria-label="ALUR is in beta"
                 >
                   BETA
@@ -154,7 +154,7 @@ export const AboutDialog = () => {
           </p>
 
           <div className="mt-5 border-t border-slate-100 pt-4">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
               Built with
             </p>
             <ul className="mt-2 space-y-1">
@@ -164,7 +164,7 @@ export const AboutDialog = () => {
                   className="flex items-center justify-between gap-3 text-xs"
                 >
                   <span className="text-slate-600">{label}</span>
-                  <span className="font-mono text-[11px] text-slate-400">
+                  <span className="font-mono text-[11px] text-slate-500">
                     {dependencyVersion(pkg)}
                   </span>
                 </li>
@@ -173,7 +173,7 @@ export const AboutDialog = () => {
           </div>
 
           <div className="mt-5 border-t border-slate-100 pt-4">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
               Created by
             </p>
             <a

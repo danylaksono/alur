@@ -64,7 +64,7 @@ export const LegendControl = ({
         type="button"
         onClick={() => setPanelCollapsed(!panelCollapsed)}
         className={cn(
-          "pressable flex w-full items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500",
+          "pressable flex w-full items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500",
           !panelCollapsed && "mb-2",
         )}
         aria-expanded={!panelCollapsed}
@@ -140,19 +140,19 @@ export const LegendControl = ({
                       <button
                         type="button"
                         onClick={() => clearLayerFilters(layerId)}
-                        className="pressable rounded px-1 py-0.5 text-[9px] font-semibold text-orange-600 hover:bg-orange-50"
+                        className="pressable rounded px-1 py-0.5 text-[11px] font-semibold text-orange-600 hover:bg-orange-50"
                       >
                         clear
                       </button>
                     )}
-                    <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-slate-500">
+                    <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                       {legendKindLabel[legend.kind]}
                     </span>
                   </div>
                 </div>
                 {!isCollapsed && (
                   <div className="mt-1.5 space-y-1.5">
-                    <div className="flex items-start justify-between gap-2 text-[9px] text-slate-400">
+                    <div className="flex items-start justify-between gap-2 text-[11px] text-slate-500">
                       <span className="truncate" title={legend.title}>
                         {legend.title}
                       </span>
@@ -163,7 +163,7 @@ export const LegendControl = ({
                     {legend.palette?.warnings.map((warning) => (
                       <div
                         key={warning}
-                        className="flex gap-1 rounded bg-amber-50 px-1.5 py-1 text-[9px] leading-tight text-amber-800"
+                        className="flex gap-1 rounded bg-amber-50 px-1.5 py-1 text-[11px] leading-tight text-amber-800"
                       >
                         <AlertTriangle className="h-3 w-3 shrink-0" />
                         {warning}
@@ -171,7 +171,7 @@ export const LegendControl = ({
                     ))}
                     {legend.items.length > MAX_ITEMS && !isBivariate && (
                       <label className="flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-2 focus-within:border-sky-400">
-                        <Search className="h-3 w-3 text-slate-400" />
+                        <Search className="h-3 w-3 text-slate-500" />
                         <span className="sr-only">Search {legend.title}</span>
                         <input
                           value={query}
@@ -182,7 +182,7 @@ export const LegendControl = ({
                             }))
                           }
                           placeholder="Search legend"
-                          className="min-w-0 flex-1 text-[10px] outline-none"
+                          className="min-w-0 flex-1 text-[11px] outline-none"
                         />
                       </label>
                     )}
@@ -208,7 +208,7 @@ export const LegendControl = ({
                             }),
                           )}
                         </div>
-                        <div className="text-[9px] leading-tight text-slate-400">
+                        <div className="text-[11px] leading-tight text-slate-500">
                           low → high
                           <br />
                           per axis
@@ -227,7 +227,7 @@ export const LegendControl = ({
                           const row = (
                             <>
                               <span
-                                className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border border-slate-300 text-[7px] font-bold text-slate-700"
+                                className="flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border border-slate-300 text-[10px] font-bold text-slate-700"
                                 style={{ backgroundColor: item.color }}
                                 aria-hidden="true"
                               >
@@ -243,7 +243,7 @@ export const LegendControl = ({
                                 {item.label}
                               </span>
                               {item.count !== undefined && (
-                                <span className="shrink-0 text-right tabular-nums text-slate-400">
+                                <span className="shrink-0 text-right tabular-nums text-slate-500">
                                   {item.count.toLocaleString()}
                                   {item.percentage !== undefined
                                     ? ` · ${(item.percentage * 100).toFixed(1)}%`
@@ -282,7 +282,7 @@ export const LegendControl = ({
                           );
                         })}
                         {!visibleItems.length && (
-                          <div className="py-2 text-center text-[10px] text-slate-400">
+                          <div className="py-2 text-center text-[11px] text-slate-500">
                             No matching legend items.
                           </div>
                         )}
@@ -295,7 +295,7 @@ export const LegendControl = ({
                                 [layerId]: !value[layerId],
                               }))
                             }
-                            className="pressable rounded px-1 py-0.5 text-[10px] font-semibold text-sky-700 hover:bg-sky-50"
+                            className="pressable rounded px-1 py-0.5 text-[11px] font-semibold text-sky-700 hover:bg-sky-50"
                           >
                             {expandedItems[layerId]
                               ? "Show less"
@@ -306,7 +306,7 @@ export const LegendControl = ({
                     )}
                     {legend.classification?.breaks?.length ? (
                       <div
-                        className="truncate text-[9px] text-slate-400"
+                        className="truncate text-[11px] text-slate-500"
                         title={legend.classification.breaks.join(", ")}
                       >
                         Breaks:{" "}

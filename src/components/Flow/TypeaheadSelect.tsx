@@ -100,25 +100,25 @@ export const TypeaheadSelect = ({
         className="pressable flex w-full items-center justify-between gap-2 rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-left text-xs text-slate-700 outline-none transition-colors hover:bg-white focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
       >
         <span className="block min-w-0 flex-1 truncate font-medium">{selected?.label || value}</span>
-        <ChevronDown className={cn('h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform', open && 'rotate-180')} />
+        <ChevronDown className={cn('h-3.5 w-3.5 shrink-0 text-slate-500 transition-transform', open && 'rotate-180')} />
       </button>
 
       {open && (
         <div className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl shadow-slate-900/15">
           <div className="flex items-center gap-1.5 border-b border-slate-100 px-2 py-1.5">
-            <Search className="h-3 w-3 shrink-0 text-slate-400" />
+            <Search className="h-3 w-3 shrink-0 text-slate-500" />
             <input
               ref={inputRef}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               onKeyDown={handleKeyDown}
               placeholder={placeholder}
-              className="h-7 min-w-0 flex-1 bg-transparent text-[11px] text-slate-700 outline-none placeholder:text-slate-400"
+              className="h-7 min-w-0 flex-1 bg-transparent text-[11px] text-slate-700 outline-none placeholder:text-slate-500"
             />
           </div>
           <div className="max-h-64 overflow-y-auto py-1">
             {filteredOptions.length === 0 ? (
-              <div className="px-3 py-3 text-center text-[11px] text-slate-400">{emptyLabel}</div>
+              <div className="px-3 py-3 text-center text-[11px] text-slate-500">{emptyLabel}</div>
             ) : (
               filteredOptions.map((option, index) => {
                 const showGroup = option.group && option.group !== previousGroup;
@@ -129,7 +129,7 @@ export const TypeaheadSelect = ({
                 return (
                   <div key={option.value}>
                     {showGroup && (
-                      <div className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                      <div className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                         {option.group}
                       </div>
                     )}
@@ -146,7 +146,7 @@ export const TypeaheadSelect = ({
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-[11px] font-semibold text-slate-700">{option.label}</span>
                         {option.description && (
-                          <span className="mt-0.5 block truncate text-[11px] text-slate-400">{option.description}</span>
+                          <span className="mt-0.5 block truncate text-[11px] text-slate-500">{option.description}</span>
                         )}
                       </span>
                     </button>

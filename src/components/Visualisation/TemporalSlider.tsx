@@ -96,7 +96,7 @@ export const TemporalSlider = ({
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-2.5">
       <div className="flex items-center justify-between gap-2">
-        <span className="truncate text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        <span className="truncate text-[11px] font-semibold uppercase tracking-wide text-slate-500">
           Time · {field}
         </span>
         <div className="flex items-center gap-1">
@@ -104,7 +104,7 @@ export const TemporalSlider = ({
             type="button"
             onClick={() => setCurrentStart(range.minDate)}
             disabled={playing}
-            className="pressable rounded border border-slate-200 p-1 text-slate-400 hover:bg-slate-50 disabled:opacity-30"
+            className="pressable rounded border border-slate-200 p-1 text-slate-500 hover:bg-slate-50 disabled:opacity-30"
           >
             <SkipBack className="h-3 w-3" />
           </button>
@@ -124,7 +124,7 @@ export const TemporalSlider = ({
             type="button"
             onClick={() => setCurrentStart(addDays(range.maxDate, -windowSize))}
             disabled={playing}
-            className="pressable rounded border border-slate-200 p-1 text-slate-400 hover:bg-slate-50 disabled:opacity-30"
+            className="pressable rounded border border-slate-200 p-1 text-slate-500 hover:bg-slate-50 disabled:opacity-30"
           >
             <SkipForward className="h-3 w-3" />
           </button>
@@ -148,7 +148,7 @@ export const TemporalSlider = ({
       </div>
 
       <div className="flex items-center gap-3">
-        <label className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        <label className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
           Window
           <select
             value={windowSize}
@@ -160,7 +160,7 @@ export const TemporalSlider = ({
             ))}
           </select>
         </label>
-        <label className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        <label className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
           Speed
           <input
             type="range"

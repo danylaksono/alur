@@ -21,7 +21,7 @@ export const MapEvidence = ({ card }: { card: ExplainCard }) => {
         <div>
           <AlertCircle className="mx-auto h-6 w-6 text-amber-500" />
           <p className="mt-2 text-xs font-semibold text-slate-700">No map image was captured</p>
-          <p className="mt-1 text-[10px] leading-4 text-slate-500">
+          <p className="mt-1 text-[11px] leading-4 text-slate-500">
             {capture?.failureReason || 'Capture this card again while the map is visible.'}
           </p>
         </div>
@@ -37,7 +37,7 @@ export const MapEvidence = ({ card }: { card: ExplainCard }) => {
         className="min-h-0 w-full flex-1 rounded-lg border border-slate-200 object-cover"
         loading="lazy"
       />
-      <figcaption className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[9px] text-slate-500">
+      <figcaption className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-500">
         <span className="flex items-center gap-1 font-semibold text-slate-600">
           <Map className="h-3 w-3" />{capture.layers.length} {capture.layers.length === 1 ? 'layer' : 'layers'}
         </span>

@@ -119,7 +119,7 @@ export const NodeActions = ({ id, selected = false, helperContent }: NodeActions
         <button
           type="button"
           className={cn(
-            'pressable nodrag absolute right-2 top-3 z-10 flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
+            'pressable nodrag absolute right-2 top-3 z-10 flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide',
             execState.status === 'running' && 'bg-amber-100 text-amber-700',
             execState.status === 'done' && 'bg-emerald-100 text-emerald-700',
             execState.status === 'error' && 'bg-red-100 text-red-700',

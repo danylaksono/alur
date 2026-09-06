@@ -138,7 +138,7 @@ export const CalculationNode = ({ data, id, selected }: any) => {
 
       <div className="space-y-2">
         {problem && (
-          <p className="rounded-md bg-rose-50 px-2 py-1.5 text-[9px] leading-relaxed text-rose-700">{problem}</p>
+          <p className="rounded-md bg-rose-50 px-2 py-1.5 text-[11px] leading-relaxed text-rose-700">{problem}</p>
         )}
 
         {manifest && (
@@ -148,8 +148,8 @@ export const CalculationNode = ({ data, id, selected }: any) => {
               return (
                 <div key={input.id} className="rounded-md bg-slate-50 px-1.5 py-1">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-[9px] font-bold text-slate-600">{input.label}</span>
-                    <span className={cn('shrink-0 text-[9px]', sources.length ? 'text-slate-400' : 'text-amber-600')}>
+                    <span className="truncate text-[11px] font-bold text-slate-600">{input.label}</span>
+                    <span className={cn('shrink-0 text-[11px]', sources.length ? 'text-slate-500' : 'text-amber-600')}>
                       {sources.length ? `${sources.length} connected` : 'not connected'}
                     </span>
                   </div>
@@ -159,17 +159,17 @@ export const CalculationNode = ({ data, id, selected }: any) => {
                     const label = nodes.find((node) => node.id === sourceNodeId)?.data.label || sourceNodeId;
                     return (
                       <div key={sourceNodeId} className="mt-1 border-t border-slate-200 pt-1">
-                        <p className="truncate text-[9px] italic text-slate-400">{label}</p>
+                        <p className="truncate text-[11px] italic text-slate-500">{label}</p>
                         {input.fields.map((role) => (
                           <div key={role.id} className="mt-0.5 flex items-center gap-1">
-                            <span className="w-16 shrink-0 truncate text-[9px] text-slate-500" title={role.description}>
+                            <span className="w-16 shrink-0 truncate text-[11px] text-slate-500" title={role.description}>
                               {role.label}{role.required && <span className="text-rose-400">*</span>}
                             </span>
                             <select
                               value={config.fields?.[input.id]?.[sourceNodeId]?.[role.id] || ''}
                               onChange={(event) => setField(input.id, sourceNodeId, role.id, event.target.value)}
                               aria-label={`${input.label} ${label} ${role.label}`}
-                              className="min-w-0 flex-1 rounded border border-slate-200 px-1 py-0.5 text-[9px]"
+                              className="min-w-0 flex-1 rounded border border-slate-200 px-1 py-0.5 text-[11px]"
                             >
                               {/* Named rather than blank. An identifier falls back
                                   to the row number, and a control that showed a
@@ -191,14 +191,14 @@ export const CalculationNode = ({ data, id, selected }: any) => {
 
             {expanded && manifest.parameters.length > 0 && (
               <div className="border-t border-slate-100 pt-1.5">
-                <p className="mb-1 text-[9px] font-bold uppercase tracking-wide text-slate-400">Settings</p>
+                <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-slate-500">Settings</p>
                 {manifest.parameters.map((parameter) => {
                   const value = config.parameters?.[parameter.id] ?? parameter.defaultValue ?? '';
                   const set = (next: unknown) =>
                     updateConfig({ parameters: { ...(config.parameters ?? {}), [parameter.id]: next } });
                   return (
                     <div key={parameter.id} className="mb-1 flex items-center gap-1">
-                      <span className="w-20 shrink-0 truncate text-[9px] text-slate-500" title={parameter.description}>
+                      <span className="w-20 shrink-0 truncate text-[11px] text-slate-500" title={parameter.description}>
                         {parameter.label}
                       </span>
                       {parameter.type === 'choice' ? (
@@ -206,7 +206,7 @@ export const CalculationNode = ({ data, id, selected }: any) => {
                           value={String(value)}
                           onChange={(event) => set(event.target.value)}
                           aria-label={parameter.label}
-                          className="min-w-0 flex-1 rounded border border-slate-200 px-1 py-0.5 text-[9px]"
+                          className="min-w-0 flex-1 rounded border border-slate-200 px-1 py-0.5 text-[11px]"
                         >
                           <option value="">Choose…</option>
                           {(parameter.options || []).map((option) => (
@@ -219,7 +219,7 @@ export const CalculationNode = ({ data, id, selected }: any) => {
                           value={String(value)}
                           onChange={(event) => set(event.target.value === '' ? '' : Number(event.target.value))}
                           aria-label={parameter.label}
-                          className="min-w-0 flex-1 rounded border border-slate-200 px-1 py-0.5 text-[9px]"
+                          className="min-w-0 flex-1 rounded border border-slate-200 px-1 py-0.5 text-[11px]"
                         />
                       )}
                     </div>
@@ -230,12 +230,12 @@ export const CalculationNode = ({ data, id, selected }: any) => {
 
             {expanded && manifest.outputs.length > 1 && (
               <div className="flex items-center gap-1 border-t border-slate-100 pt-1.5">
-                <span className="w-20 shrink-0 text-[9px] text-slate-500">Passes on</span>
+                <span className="w-20 shrink-0 text-[11px] text-slate-500">Passes on</span>
                 <select
                   value={config.outputId || manifest.outputs[0].id}
                   onChange={(event) => updateConfig({ outputId: event.target.value })}
                   aria-label="Output passed downstream"
-                  className="min-w-0 flex-1 rounded border border-slate-200 px-1 py-0.5 text-[9px]"
+                  className="min-w-0 flex-1 rounded border border-slate-200 px-1 py-0.5 text-[11px]"
                 >
                   {manifest.outputs.map((output) => (
                     <option key={output.id} value={output.id}>{output.label}</option>
@@ -252,7 +252,7 @@ export const CalculationNode = ({ data, id, selected }: any) => {
         {ran && (
           <div
             className={cn(
-              'flex items-center gap-1.5 rounded-md px-2 py-1 text-[9px] font-semibold',
+              'flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-semibold',
               stale ? 'bg-amber-50 text-amber-800' : 'bg-emerald-50 text-emerald-800',
             )}
           >
@@ -270,7 +270,7 @@ export const CalculationNode = ({ data, id, selected }: any) => {
             type="button"
             onClick={() => void run()}
             disabled={running || !manifest}
-            className="pressable flex flex-1 items-center justify-center gap-1.5 rounded-md bg-violet-600 px-2 py-1.5 text-[10px] font-bold text-white disabled:bg-slate-300"
+            className="pressable flex flex-1 items-center justify-center gap-1.5 rounded-md bg-violet-600 px-2 py-1.5 text-[11px] font-bold text-white disabled:bg-slate-300"
           >
             {running ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
             {ran ? 'Run again' : 'Run'}

@@ -2,6 +2,7 @@ import type { Edge } from "@xyflow/react";
 import type { WorkflowNode } from "../store/useStore";
 import type { LayerVisualisation } from "../types/visualisation";
 import { spatialFunctions } from "./spatialFunctions";
+import { findCycleNodes } from "./workflowGraph";
 import {
   buildH3Expression,
   buildH3PolyfillBody,
@@ -168,6 +169,22 @@ function topoSort(nodes: WorkflowNode[], edges: Edge[]): WorkflowNode[] {
       inDeg.set(neighbour, newDeg);
       if (newDeg === 0) queue.push(neighbour);
     }
+  }
+
+  // Kahn's algorithm cannot place a node that sits on a cycle, and returning
+  // the short list would compile a workflow with those steps quietly missing —
+  // a result that looks successful and is wrong. Refuse instead.
+  if (sorted.length !== nodes.length) {
+    const stuck = findCycleNodes(
+      nodes.map((n) => n.id),
+      edges,
+    );
+    const named = stuck
+      .map((id) => nodes.find((n) => n.id === id)?.data.label || id)
+      .join(", ");
+    throw new Error(
+      `Circular connection in the workflow: ${named}. Remove the connection that loops back to break it.`,
+    );
   }
 
   const nodeMap = new Map(nodes.map((n) => [n.id, n]));

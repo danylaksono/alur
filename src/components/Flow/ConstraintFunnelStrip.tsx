@@ -41,31 +41,31 @@ export const ConstraintFunnelStrip = ({ nodeId, predicates }: { nodeId: string; 
   return (
     <div className="nodrag rounded-md border border-slate-200 bg-slate-50/60 p-1.5">
       <div className="flex items-center justify-between">
-        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">What each one removes</span>
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">What each one removes</span>
         <button
           type="button"
           onClick={run}
           disabled={busy}
-          className="pressable flex items-center gap-1 rounded px-1 text-[10px] font-bold text-amber-700 hover:bg-amber-50 disabled:opacity-50"
+          className="pressable flex items-center gap-1 rounded px-1 text-[11px] font-bold text-amber-700 hover:bg-amber-50 disabled:opacity-50"
         >
           {busy && <Loader2 className="h-2.5 w-2.5 animate-spin" />}
           {funnel ? 'Recheck' : 'Check'}
         </button>
       </div>
 
-      {error && <p className="mt-1 text-[10px] leading-4 text-rose-600">{error}</p>}
+      {error && <p className="mt-1 text-[11px] leading-4 text-rose-600">{error}</p>}
 
       {funnel && (
         <div className="mt-1.5 space-y-1.5">
-          <div className="text-[10px] font-semibold tabular-nums text-slate-600">
+          <div className="text-[11px] font-semibold tabular-nums text-slate-600">
             {funnel.kept.toLocaleString()} of {funnel.total.toLocaleString()} rows kept
           </div>
 
           {funnel.steps.map((step) => (
             <div key={step.id}>
               <div className="flex items-baseline justify-between gap-2">
-                <span className="min-w-0 flex-1 truncate text-[10px] text-slate-700" title={step.label}>{step.label}</span>
-                <span className="shrink-0 text-[10px] tabular-nums text-slate-500">
+                <span className="min-w-0 flex-1 truncate text-[11px] text-slate-700" title={step.label}>{step.label}</span>
+                <span className="shrink-0 text-[11px] tabular-nums text-slate-500">
                   {step.remaining === null
                     ? `${step.removedAlone.toLocaleString()} tagged`
                     : `−${(step.removedHere ?? 0).toLocaleString()}`}
@@ -80,7 +80,7 @@ export const ConstraintFunnelStrip = ({ nodeId, predicates }: { nodeId: string; 
               {/* Alone vs in sequence: the gap is what says whether a condition
                   is doing work or is already implied by the ones before it. */}
               {step.removedHere !== null && step.removedAlone !== step.removedHere && (
-                <div className="text-[9px] leading-3 text-slate-400">
+                <div className="text-[11px] leading-3 text-slate-500">
                   removes {step.removedAlone.toLocaleString()} on its own
                 </div>
               )}
@@ -88,7 +88,7 @@ export const ConstraintFunnelStrip = ({ nodeId, predicates }: { nodeId: string; 
           ))}
 
           {funnel.warnings.map((warning) => (
-            <p key={warning} className="text-[10px] leading-4 text-amber-700">{warning}</p>
+            <p key={warning} className="text-[11px] leading-4 text-amber-700">{warning}</p>
           ))}
         </div>
       )}

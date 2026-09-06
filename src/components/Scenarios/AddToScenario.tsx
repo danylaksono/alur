@@ -159,7 +159,7 @@ export const AddToScenario = ({
           onChange={(event) => setChosen(event.target.value)}
           disabled={disabled}
           aria-label="Scenario to add to"
-          className="min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[10px] text-slate-700 disabled:opacity-50"
+          className="min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[11px] text-slate-700 disabled:opacity-50"
         >
           {scoped.map((variant) => (
             <option key={variant.id} value={variant.id}>{variant.name}</option>
@@ -170,12 +170,12 @@ export const AddToScenario = ({
           type="button"
           onClick={add}
           disabled={disabled}
-          className="pressable flex shrink-0 items-center gap-1 rounded-md bg-slate-900 px-2.5 py-1.5 text-[10px] font-bold text-white hover:bg-black disabled:cursor-not-allowed disabled:bg-slate-300"
+          className="pressable flex shrink-0 items-center gap-1 rounded-md bg-slate-900 px-2.5 py-1.5 text-[11px] font-bold text-white hover:bg-black disabled:cursor-not-allowed disabled:bg-slate-300"
         >
           <Plus className="h-2.5 w-2.5" /> Add
         </button>
       </div>
-      <p className="text-[9px] leading-4 text-slate-400">{hint}</p>
+      <p className="text-[11px] leading-4 text-slate-500">{hint}</p>
     </div>
   );
 };

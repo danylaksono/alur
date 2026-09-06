@@ -48,7 +48,7 @@ export const GlobalLoadingOverlay = () => {
         </div>
 
         {operations.length > 1 && (
-          <p className="border-t border-slate-100 px-5 py-2.5 text-[10px] font-medium text-slate-400">
+          <p className="border-t border-slate-100 px-5 py-2.5 text-[11px] font-medium text-slate-500">
             {operations.length - 1} more {operations.length === 2 ? 'task' : 'tasks'} queued
           </p>
         )}

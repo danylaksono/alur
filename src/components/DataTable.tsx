@@ -141,7 +141,7 @@ const MiniHistogram = ({
 }) => {
   const maxCount = Math.max(1, ...profile.bins.map((bin) => bin.count));
   if (!profile.bins.length) {
-    return <div className="flex h-[72px] items-center justify-center rounded-md border border-dashed border-slate-200 bg-white text-[10px] font-medium text-slate-400">No distribution</div>;
+    return <div className="flex h-[72px] items-center justify-center rounded-md border border-dashed border-slate-200 bg-white text-[11px] font-medium text-slate-500">No distribution</div>;
   }
 
   return (
@@ -342,13 +342,13 @@ export const DataTable = ({
               title={`Sort by ${key}`}
             >
               <span className="min-w-0 flex-1 truncate">{key}</span>
-              {computedNames.has(key) && <span className="rounded bg-violet-50 px-1 text-[8px] font-bold text-violet-600">FX</span>}
+              {computedNames.has(key) && <span className="rounded bg-violet-50 px-1 text-[10px] font-bold text-violet-600">FX</span>}
               {sortBy === key && (sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}
             </button>
-            <button type="button" onClick={() => togglePinnedColumn(key)} aria-label={`${pinnedColumns.includes(key) ? 'Unpin' : 'Pin'} ${key}`} title={`${pinnedColumns.includes(key) ? 'Unpin' : 'Pin'} ${key}`} className="pressable h-7 w-0 overflow-hidden rounded-md border-0 bg-white p-0 text-slate-400 opacity-0 transition-colors hover:text-slate-700 focus-visible:w-7 focus-visible:border focus-visible:border-slate-200 focus-visible:opacity-100 group-hover/column:w-7 group-hover/column:border group-hover/column:border-slate-200 group-hover/column:p-1.5 group-hover/column:opacity-100">
+            <button type="button" onClick={() => togglePinnedColumn(key)} aria-label={`${pinnedColumns.includes(key) ? 'Unpin' : 'Pin'} ${key}`} title={`${pinnedColumns.includes(key) ? 'Unpin' : 'Pin'} ${key}`} className="pressable h-7 w-0 overflow-hidden rounded-md border-0 bg-white p-0 text-slate-500 opacity-0 transition-colors hover:text-slate-700 focus-visible:w-7 focus-visible:border focus-visible:border-slate-200 focus-visible:opacity-100 group-hover/column:w-7 group-hover/column:border group-hover/column:border-slate-200 group-hover/column:p-1.5 group-hover/column:opacity-100">
               {pinnedColumns.includes(key) ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
             </button>
-            <button type="button" onClick={() => hideColumn(key)} aria-label={`Hide ${key}`} title={`Hide ${key}`} className="pressable h-7 w-0 overflow-hidden rounded-md border-0 bg-white p-0 text-slate-400 opacity-0 transition-colors hover:text-slate-700 focus-visible:w-7 focus-visible:border focus-visible:border-slate-200 focus-visible:opacity-100 group-hover/column:w-7 group-hover/column:border group-hover/column:border-slate-200 group-hover/column:p-1.5 group-hover/column:opacity-100">
+            <button type="button" onClick={() => hideColumn(key)} aria-label={`Hide ${key}`} title={`Hide ${key}`} className="pressable h-7 w-0 overflow-hidden rounded-md border-0 bg-white p-0 text-slate-500 opacity-0 transition-colors hover:text-slate-700 focus-visible:w-7 focus-visible:border focus-visible:border-slate-200 focus-visible:opacity-100 group-hover/column:w-7 group-hover/column:border group-hover/column:border-slate-200 group-hover/column:p-1.5 group-hover/column:opacity-100">
               <EyeOff className="h-3.5 w-3.5" />
             </button>
             {datasetField && onAddFilter && (
@@ -374,7 +374,7 @@ export const DataTable = ({
               ) : profile ? (
                 <MiniHistogram profile={profile} activeFilterKeys={activeFilterSet} canFilter={canFilter} onSelect={(bin) => onApplyProfileFilter?.(profile, bin)} />
               ) : (
-                <button type="button" onClick={() => onProfileColumn(key)} className="pressable flex h-[72px] w-full items-center justify-center rounded-md border border-dashed border-slate-200 bg-white text-[10px] font-semibold text-slate-400 hover:border-slate-300 hover:text-slate-600">Load histogram</button>
+                <button type="button" onClick={() => onProfileColumn(key)} className="pressable flex h-[72px] w-full items-center justify-center rounded-md border border-dashed border-slate-200 bg-white text-[11px] font-semibold text-slate-500 hover:border-slate-300 hover:text-slate-600">Load histogram</button>
               )}
               <button type="button" onClick={() => moveColumn(key, 1)} disabled={orderedColumns.indexOf(key) === orderedColumns.length - 1} aria-label={`Move ${key} right`} title="Move column right" className="pressable absolute -right-2.5 top-1/2 z-10 -translate-y-1/2 rounded-full border border-slate-200 bg-white p-1 text-slate-500 opacity-0 shadow-sm transition-opacity hover:bg-slate-100 disabled:hidden group-hover/column:opacity-100 focus-visible:opacity-100">
                 <ArrowRight className="h-3 w-3" />
@@ -399,7 +399,7 @@ export const DataTable = ({
       const value = info.getValue();
       const formatted = formatCellValue(value);
       return formatted === null
-        ? <span className="italic text-slate-300">null</span>
+        ? <span className="italic text-slate-500">null</span>
         : <span title={formatted}>{formatted}</span>;
     },
   })), [activeFilterSet, columnProfiles, computedNames, datasetMetadata, hideColumn, loadingSet, moveColumn, onAddFilter, onApplyProfileFilter, onPinMetric, onProfileColumn, onQuickChart, onQuickStyle, onSortChange, orderedColumns, pinnedColumns, showHistograms, sortBy, sortDirection, togglePinnedColumn, visibleColumnNames, widthForColumn]);
@@ -434,7 +434,7 @@ export const DataTable = ({
   if (isLoading && !data.length) {
     return (
       <div className="flex h-full w-full items-center justify-center bg-white/80">
-        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-400">
+        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500">
           <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-slate-700" /> Loading data
         </div>
       </div>
@@ -442,7 +442,7 @@ export const DataTable = ({
   }
 
   if (!data.length) {
-    return <div className="flex h-full items-center justify-center bg-slate-50 text-xs italic text-slate-400">No attribute data available for the selected node or layer.</div>;
+    return <div className="flex h-full items-center justify-center bg-slate-50 text-xs italic text-slate-500">No attribute data available for the selected node or layer.</div>;
   }
 
   return (
@@ -450,7 +450,7 @@ export const DataTable = ({
       <div className="flex min-h-11 shrink-0 items-center gap-2 border-b bg-slate-50 px-2.5 py-1.5">
         <label className="relative min-w-[180px] max-w-md flex-1">
           <span className="sr-only">Search table</span>
-          <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+          <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
           <input
             type="search"
             value={search}
@@ -458,7 +458,7 @@ export const DataTable = ({
             placeholder="Search every field…"
             className="h-8 w-full rounded-md border border-slate-200 bg-white pl-7 pr-7 text-xs outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
           />
-          {search && <button type="button" onClick={() => onSearchChange('')} aria-label="Clear search" className="pressable absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"><X className="h-3.5 w-3.5" /></button>}
+          {search && <button type="button" onClick={() => onSearchChange('')} aria-label="Clear search" className="pressable absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700"><X className="h-3.5 w-3.5" /></button>}
         </label>
 
         <button type="button" aria-pressed={showHistograms} onClick={() => setShowHistograms((current) => !current)} className={cn('pressable inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-[11px] font-bold', showHistograms ? 'border-slate-800 bg-slate-800 text-white' : 'border-slate-200 bg-white text-slate-600')}>
@@ -467,23 +467,23 @@ export const DataTable = ({
 
         <div className="relative">
           <button type="button" aria-expanded={showFieldMenu} onClick={() => setShowFieldMenu((current) => !current)} className="pressable inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[11px] font-bold text-slate-600 hover:bg-slate-100">
-            <Columns3 className="h-3.5 w-3.5" /> Fields <span className="font-normal text-slate-400">{visibleColumnNames.length}/{keys.length}</span>
+            <Columns3 className="h-3.5 w-3.5" /> Fields <span className="font-normal text-slate-500">{visibleColumnNames.length}/{keys.length}</span>
           </button>
           {showFieldMenu && (
             <div className="absolute right-0 top-9 z-40 w-72 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl">
               <div className="flex items-center justify-between border-b bg-slate-50 px-3 py-2">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Visible fields</span>
-                <button type="button" onClick={() => { setColumnOrder(keys); setHiddenColumns([]); setPinnedColumns([]); setColumnWidths({}); }} className="pressable inline-flex items-center gap-1 text-[10px] font-semibold text-slate-500 hover:text-slate-800"><RotateCcw className="h-3 w-3" /> Reset</button>
+                <button type="button" onClick={() => { setColumnOrder(keys); setHiddenColumns([]); setPinnedColumns([]); setColumnWidths({}); }} className="pressable inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500 hover:text-slate-800"><RotateCcw className="h-3 w-3" /> Reset</button>
               </div>
               <div className="max-h-72 overflow-auto p-1.5">
                 {orderedColumns.map((column) => {
                   const hidden = hiddenColumns.includes(column);
                   return (
                     <div key={column} className="flex items-center gap-1 rounded px-1.5 py-1 hover:bg-slate-50">
-                      <button type="button" aria-label={`${hidden ? 'Show' : 'Hide'} ${column}`} onClick={() => setHiddenColumns((current) => hidden ? current.filter((item) => item !== column) : [...current, column])} className="pressable rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
+                      <button type="button" aria-label={`${hidden ? 'Show' : 'Hide'} ${column}`} onClick={() => setHiddenColumns((current) => hidden ? current.filter((item) => item !== column) : [...current, column])} className="pressable rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700">
                         {hidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                       </button>
-                      <span className={cn('min-w-0 flex-1 truncate text-xs', hidden ? 'text-slate-400' : 'font-semibold text-slate-700')} title={column}>{column}</span>
+                      <span className={cn('min-w-0 flex-1 truncate text-xs', hidden ? 'text-slate-500' : 'font-semibold text-slate-700')} title={column}>{column}</span>
                     </div>
                   );
                 })}
@@ -514,7 +514,7 @@ export const DataTable = ({
         {onSaveView && (
           <div className="relative">
             <button type="button" aria-expanded={showViewsMenu} onClick={() => setShowViewsMenu((current) => !current)} className="pressable inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[11px] font-bold text-slate-600 hover:bg-slate-100">
-              <Bookmark className="h-3.5 w-3.5" /> Views {savedViews.length > 0 && <span className="text-slate-400">{savedViews.length}</span>}
+              <Bookmark className="h-3.5 w-3.5" /> Views {savedViews.length > 0 && <span className="text-slate-500">{savedViews.length}</span>}
             </button>
             {showViewsMenu && (
               <div className="absolute right-0 top-9 z-40 w-72 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl">
@@ -522,14 +522,14 @@ export const DataTable = ({
                   <input value={viewName} onChange={(event) => setViewName(event.target.value)} onKeyDown={(event) => {
                     if (event.key === 'Enter' && viewName.trim()) { onSaveView(viewName.trim(), currentLayout); setViewName(''); }
                   }} placeholder="Name this view…" aria-label="Table view name" className="h-7 min-w-0 flex-1 rounded border border-slate-200 px-2 text-xs outline-none focus:border-slate-400" />
-                  <button type="button" disabled={!viewName.trim()} onClick={() => { onSaveView(viewName.trim(), currentLayout); setViewName(''); }} className="pressable inline-flex h-7 items-center gap-1 rounded bg-slate-900 px-2 text-[10px] font-bold text-white disabled:opacity-40"><Save className="h-3 w-3" /> Save</button>
+                  <button type="button" disabled={!viewName.trim()} onClick={() => { onSaveView(viewName.trim(), currentLayout); setViewName(''); }} className="pressable inline-flex h-7 items-center gap-1 rounded bg-slate-900 px-2 text-[11px] font-bold text-white disabled:opacity-40"><Save className="h-3 w-3" /> Save</button>
                 </div>
                 <div className="max-h-64 overflow-auto p-1.5">
-                  {!savedViews.length && <div className="px-2 py-4 text-center text-xs italic text-slate-400">No saved views</div>}
+                  {!savedViews.length && <div className="px-2 py-4 text-center text-xs italic text-slate-500">No saved views</div>}
                   {savedViews.map((view) => (
                     <div key={view.id} className="flex items-center gap-1 rounded hover:bg-slate-50">
                       <button type="button" onClick={() => onApplyView?.(view.id)} className="pressable min-w-0 flex-1 truncate px-2 py-1.5 text-left text-xs font-semibold text-slate-700" title={view.name}>{view.name}</button>
-                      <button type="button" onClick={() => onDeleteView?.(view.id)} aria-label={`Delete view ${view.name}`} className="pressable rounded p-1.5 text-slate-400 hover:text-rose-600"><Trash2 className="h-3 w-3" /></button>
+                      <button type="button" onClick={() => onDeleteView?.(view.id)} aria-label={`Delete view ${view.name}`} className="pressable rounded p-1.5 text-slate-500 hover:text-rose-600"><Trash2 className="h-3 w-3" /></button>
                     </div>
                   ))}
                 </div>
@@ -663,7 +663,7 @@ export const DataTable = ({
           <strong className="text-slate-700">{rowCount.toLocaleString()} rows</strong>
           <span>{visibleColumnNames.length} of {keys.length} fields</span>
           {selectedOnPage > 0 && <span className="font-semibold text-orange-700">{selectedOnPage} selected on page</span>}
-          {onToggleSelection && <span className="hidden text-slate-400 sm:inline">Click to toggle · Shift-click for a range</span>}
+          {onToggleSelection && <span className="hidden text-slate-500 sm:inline">Click to toggle · Shift-click for a range</span>}
           {isLoading && <span className="inline-flex items-center gap-1"><span className="h-3 w-3 animate-spin rounded-full border border-slate-300 border-t-slate-700" /> Updating</span>}
         </div>
         <div className="flex items-center gap-2">

@@ -63,8 +63,8 @@ const parameterInput = (
 
 const Block = ({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) => (
   <section className="mb-4">
-    <h3 className="text-[9px] font-bold uppercase tracking-wider text-slate-400">{title}</h3>
-    {hint && <p className="mb-1.5 mt-0.5 text-[9px] leading-relaxed text-slate-400">{hint}</p>}
+    <h3 className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{title}</h3>
+    {hint && <p className="mb-1.5 mt-0.5 text-[11px] leading-relaxed text-slate-500">{hint}</p>}
     <div className={hint ? undefined : 'mt-1.5'}>{children}</div>
   </section>
 );
@@ -233,7 +233,7 @@ export const AlgorithmDialog = ({
             <h2 className="truncate text-sm font-bold text-slate-900">{manifest.label}</h2>
             <p className="mt-0.5 text-[11px] leading-relaxed text-slate-500">{manifest.description}</p>
           </div>
-          <button type="button" onClick={onClose} aria-label="Close" className="pressable shrink-0 rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
+          <button type="button" onClick={onClose} aria-label="Close" className="pressable shrink-0 rounded-md p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700">
             <X className="h-4 w-4" />
           </button>
         </header>
@@ -246,8 +246,8 @@ export const AlgorithmDialog = ({
                   const sources = bindingFor(input.id)?.sources ?? [];
                   return (
                     <div key={input.id}>
-                      <p className="text-[10px] font-bold text-slate-600">{input.label}</p>
-                      {input.description && <p className="mb-1 text-[9px] leading-relaxed text-slate-400">{input.description}</p>}
+                      <p className="text-[11px] font-bold text-slate-600">{input.label}</p>
+                      {input.description && <p className="mb-1 text-[11px] leading-relaxed text-slate-500">{input.description}</p>}
 
                       {sources.map((source, index) => {
                         const bound = datasets[source.datasetId || ''];
@@ -267,7 +267,7 @@ export const AlgorithmDialog = ({
                                 <button
                                   type="button"
                                   onClick={() => removeSource(input.id, index)}
-                                  className="pressable rounded-md border border-slate-200 px-1.5 text-slate-400 hover:text-rose-500"
+                                  className="pressable rounded-md border border-slate-200 px-1.5 text-slate-500 hover:text-rose-500"
                                   aria-label={`Remove dataset ${index + 1} from ${input.label}`}
                                 >
                                   <X className="h-3 w-3" />
@@ -276,13 +276,13 @@ export const AlgorithmDialog = ({
                             </div>
                             {bound && input.fields.map((role) => (
                               <div key={role.id} className="mt-1 flex items-center gap-1.5 pl-2">
-                                <span className="w-24 shrink-0 truncate text-[9px] text-slate-500" title={role.description}>
+                                <span className="w-24 shrink-0 truncate text-[11px] text-slate-500" title={role.description}>
                                   {role.label}{role.required && <span className="text-rose-400">*</span>}
                                 </span>
                                 <select
                                   value={source.fields[role.id] || ''}
                                   onChange={(event) => patchSource(input.id, index, { fields: { ...source.fields, [role.id]: event.target.value } })}
-                                  className="min-w-0 flex-1 rounded-md border border-slate-200 px-1.5 py-0.5 text-[10px] text-slate-700 focus:border-slate-400 focus:outline-none"
+                                  className="min-w-0 flex-1 rounded-md border border-slate-200 px-1.5 py-0.5 text-[11px] text-slate-700 focus:border-slate-400 focus:outline-none"
                                 >
                                   <option value="">—</option>
                                   {bound.fields.map((field) => <option key={field.name} value={field.name}>{field.name}</option>)}
@@ -297,7 +297,7 @@ export const AlgorithmDialog = ({
                         <button
                           type="button"
                           onClick={() => addSource(input.id)}
-                          className="pressable mt-1 flex items-center gap-1 text-[9px] font-bold text-blue-600 hover:text-blue-700"
+                          className="pressable mt-1 flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-700"
                         >
                           <Plus className="h-3 w-3" /> Add another dataset
                         </button>
@@ -308,7 +308,7 @@ export const AlgorithmDialog = ({
               </div>
               {bindingErrors.length > 0 && (
                 <ul className="mt-2 space-y-0.5">
-                  {bindingErrors.map((error) => <li key={error} className="text-[9px] text-amber-600">{error}</li>)}
+                  {bindingErrors.map((error) => <li key={error} className="text-[11px] text-amber-600">{error}</li>)}
                 </ul>
               )}
             </Block>
@@ -322,13 +322,13 @@ export const AlgorithmDialog = ({
                   {manifest.parameters.map((parameter) => (
                     <div key={parameter.id}>
                       <div className="flex items-center gap-1.5">
-                        <span className="w-32 shrink-0 truncate text-[9px] text-slate-500" title={parameter.label}>{parameter.label}</span>
+                        <span className="w-32 shrink-0 truncate text-[11px] text-slate-500" title={parameter.label}>{parameter.label}</span>
                         <div className="min-w-0 flex-1">
                           {parameterInput(parameter, parameters[parameter.id], [], (next) =>
                             setParameters((current) => ({ ...current, [parameter.id]: next })))}
                         </div>
                       </div>
-                      {parameter.description && <p className="ml-[8.5rem] mt-0.5 text-[9px] text-slate-400">{parameter.description}</p>}
+                      {parameter.description && <p className="ml-[8.5rem] mt-0.5 text-[11px] text-slate-500">{parameter.description}</p>}
                     </div>
                   ))}
                 </div>
@@ -348,7 +348,7 @@ export const AlgorithmDialog = ({
                   {scoped.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}
                 </select>
               ) : (
-                <p className="text-[10px] text-amber-600">
+                <p className="text-[11px] text-amber-600">
                   Create a scenario first — a change has to belong to one, or there is no record of what was tried.
                 </p>
               )}
@@ -358,7 +358,7 @@ export const AlgorithmDialog = ({
               <Block title="Changes">
                 {placement && (
                   <div className="mb-2 flex items-center justify-between gap-2 rounded-md bg-orange-50 px-2 py-1.5">
-                    <span className="flex items-center gap-1.5 text-[10px] font-semibold text-orange-800">
+                    <span className="flex items-center gap-1.5 text-[11px] font-semibold text-orange-800">
                       <Crosshair className="h-3 w-3" /> Click the map to place “{placement.label}”
                     </span>
                     <button type="button" onClick={cancelPlacement} aria-label="Cancel placement" className="pressable text-orange-700 hover:text-orange-900">
@@ -371,13 +371,13 @@ export const AlgorithmDialog = ({
                   {manifest.accepts.map((spec) => (
                     <div key={spec.id} className="rounded-md border border-slate-200 p-1.5">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="truncate text-[10px] font-semibold text-slate-700" title={spec.description}>{spec.label}</span>
+                        <span className="truncate text-[11px] font-semibold text-slate-700" title={spec.description}>{spec.label}</span>
                         <button
                           type="button"
                           onClick={() => addChange(spec.id)}
                           disabled={!variant}
                           title={spec.referent === 'rows' ? 'Applies to the current selection' : 'Then click the map'}
-                          className="pressable flex shrink-0 items-center gap-1 rounded-md border border-slate-200 px-1.5 py-0.5 text-[9px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                          className="pressable flex shrink-0 items-center gap-1 rounded-md border border-slate-200 px-1.5 py-0.5 text-[11px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-40"
                         >
                           {spec.referent === 'rows' ? <MousePointerClick className="h-2.5 w-2.5" /> : <Crosshair className="h-2.5 w-2.5" />}
                           Record
@@ -387,7 +387,7 @@ export const AlgorithmDialog = ({
                         <div className="mt-1 space-y-1">
                           {spec.parameters.map((parameter) => (
                             <div key={parameter.id} className="flex items-center gap-1.5">
-                              <span className="w-20 shrink-0 truncate text-[9px] text-slate-500">{parameter.label}</span>
+                              <span className="w-20 shrink-0 truncate text-[11px] text-slate-500">{parameter.label}</span>
                               <div className="min-w-0 flex-1">
                                 {parameterInput(
                                   parameter,
@@ -411,12 +411,12 @@ export const AlgorithmDialog = ({
                   <ul className="mt-2 space-y-0.5">
                     {records.map((record) => (
                       <li key={record.id} className="flex items-center justify-between gap-2 rounded-md bg-slate-50 px-1.5 py-1">
-                        <span className="truncate text-[9px] text-slate-600">{summariseOperation(record, manifest)}</span>
+                        <span className="truncate text-[11px] text-slate-600">{summariseOperation(record, manifest)}</span>
                         <button
                           type="button"
                           onClick={() => variant && removeVariantOperation(variant.id, record.id)}
                           aria-label="Remove this change"
-                          className="pressable shrink-0 text-slate-400 hover:text-rose-500"
+                          className="pressable shrink-0 text-slate-500 hover:text-rose-500"
                         >
                           <Trash2 className="h-2.5 w-2.5" />
                         </button>
@@ -431,10 +431,10 @@ export const AlgorithmDialog = ({
               <Block title="Result">
                 <ul className="space-y-0.5">
                   {report.created.map((created) => (
-                    <li key={created.outputId} className="truncate text-[10px] text-slate-600">{created.label}</li>
+                    <li key={created.outputId} className="truncate text-[11px] text-slate-600">{created.label}</li>
                   ))}
                   {report.warnings.map((warning) => (
-                    <li key={warning} className="text-[9px] leading-relaxed text-amber-600">{warning}</li>
+                    <li key={warning} className="text-[11px] leading-relaxed text-amber-600">{warning}</li>
                   ))}
                 </ul>
               </Block>
@@ -443,7 +443,7 @@ export const AlgorithmDialog = ({
         </div>
 
         <footer className="flex items-center justify-between gap-3 border-t border-slate-100 px-5 py-3">
-          <span className="text-[9px] text-slate-400">{manifest.id} · {manifest.version}</span>
+          <span className="text-[11px] text-slate-500">{manifest.id} · {manifest.version}</span>
           <div className="flex items-center gap-2">
             {/* Dismissal is the header's X alone. A second control with the same
                 name reads to a screen reader as two different ways out, and to

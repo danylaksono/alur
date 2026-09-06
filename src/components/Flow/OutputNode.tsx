@@ -123,14 +123,14 @@ export const OutputNode = ({ data, id, selected }: any) => {
             ))}
           </select>
           {formatSpec.requiresWgs84 && (
-            <p className="mt-1 text-[10px] leading-tight text-slate-500">
+            <p className="mt-1 text-[11px] leading-tight text-slate-500">
               Needs longitude/latitude coordinates (EPSG:4326).
             </p>
           )}
         </div>
       ) : (
         <div className="mt-2 flex items-center gap-2">
-        <Settings2 className="w-2.5 h-2.5 text-slate-400" />
+        <Settings2 className="w-2.5 h-2.5 text-slate-500" />
         <label className="text-[11px] text-slate-500 font-medium">Max features:</label>
         <input
           type="number"

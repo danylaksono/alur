@@ -89,7 +89,7 @@ export const ScoreNode = ({ data, id, selected }: any) => {
       <div>
         <div className="mb-1 flex items-center justify-between">
           <label className={fieldLabelClass}>Criteria</label>
-          <button type="button" onClick={addCriterion} className="pressable rounded px-1 text-[10px] font-bold text-purple-700 hover:bg-purple-50">
+          <button type="button" onClick={addCriterion} className="pressable rounded px-1 text-[11px] font-bold text-purple-700 hover:bg-purple-50">
             + Add
           </button>
         </div>
@@ -121,7 +121,7 @@ export const ScoreNode = ({ data, id, selected }: any) => {
                 <button
                   type="button"
                   onClick={() => updateModel({ criteria: spec.criteria.filter((_, position) => position !== index) })}
-                  className="pressable rounded p-1 text-slate-400 hover:bg-white hover:text-rose-600"
+                  className="pressable rounded p-1 text-slate-500 hover:bg-white hover:text-rose-600"
                   aria-label={`Remove criterion ${index + 1}`}
                 >
                   <X className="h-3 w-3" />
@@ -139,14 +139,14 @@ export const ScoreNode = ({ data, id, selected }: any) => {
                   className="h-1 flex-1 accent-purple-600"
                   aria-label={`Criterion ${index + 1} weight`}
                 />
-                <span className="w-9 shrink-0 text-right text-[10px] font-bold tabular-nums text-purple-700">
+                <span className="w-9 shrink-0 text-right text-[11px] font-bold tabular-nums text-purple-700">
                   {Math.round((shares.get(criterion.field) || 0) * 100)}%
                 </span>
               </div>
 
               <div className="mt-1 grid grid-cols-2 gap-1">
                 <select
-                  className={cn(selectClass, 'text-[10px]')}
+                  className={cn(selectClass, 'text-[11px]')}
                   value={criterion.direction}
                   onChange={(e) => updateCriterion(index, { direction: e.target.value as ScoreCriterion['direction'] })}
                   aria-label={`Criterion ${index + 1} direction`}
@@ -155,7 +155,7 @@ export const ScoreNode = ({ data, id, selected }: any) => {
                   <option value="lower">Lower is better</option>
                 </select>
                 <select
-                  className={cn(selectClass, 'text-[10px]')}
+                  className={cn(selectClass, 'text-[11px]')}
                   value={criterion.normalisation}
                   onChange={(e) => updateCriterion(index, { normalisation: e.target.value as ScoreCriterion['normalisation'] })}
                   aria-label={`Criterion ${index + 1} normalisation`}
@@ -170,11 +170,11 @@ export const ScoreNode = ({ data, id, selected }: any) => {
         </div>
 
         {!spec.criteria.length && (
-          <p className="text-[10px] leading-4 text-slate-500">Add the columns that should decide the ranking.</p>
+          <p className="text-[11px] leading-4 text-slate-500">Add the columns that should decide the ranking.</p>
         )}
       </div>
 
-      <label className="flex items-center gap-1.5 text-[10px] text-slate-600">
+      <label className="flex items-center gap-1.5 text-[11px] text-slate-600">
         <input
           type="checkbox"
           checked={config.includeContributions !== false}
@@ -183,7 +183,7 @@ export const ScoreNode = ({ data, id, selected }: any) => {
         Keep a column per criterion showing what it contributed
       </label>
 
-      {errors.length > 0 && <p className="text-[10px] leading-4 text-amber-700">{errors[0]}</p>}
+      {errors.length > 0 && <p className="text-[11px] leading-4 text-amber-700">{errors[0]}</p>}
 
       <Handle type="target" position={Position.Left} className={nodeHandleClass('purple')} />
       <Handle type="source" position={Position.Right} className={nodeHandleClass('purple')} />

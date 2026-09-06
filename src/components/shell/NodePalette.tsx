@@ -423,7 +423,7 @@ export const NodePalette = () => {
       <div className="shrink-0 border-b bg-slate-50 px-4 py-3">
         <h3 className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
           <Workflow className="h-3.5 w-3.5" /> Workflow
-          <span className="ml-auto rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-slate-500 ring-1 ring-slate-200">
+          <span className="ml-auto rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-slate-500 ring-1 ring-slate-200">
             {nodeCount} {nodeCount === 1 ? "node" : "nodes"}
           </span>
         </h3>
@@ -488,7 +488,7 @@ export const NodePalette = () => {
                     onClick={() => removeFragment(fragment.id)}
                     title={`Forget "${fragment.name}"`}
                     aria-label={`Forget ${fragment.name}`}
-                    className="pressable shrink-0 rounded p-1 text-slate-300 opacity-0 transition-opacity hover:text-rose-600 group-hover:opacity-100"
+                    className="pressable shrink-0 rounded p-1 text-slate-400 opacity-0 transition-opacity hover:text-rose-600 group-hover:opacity-100"
                   >
                     <Trash2 className="h-3 w-3" />
                   </button>
@@ -530,9 +530,9 @@ export const NodePalette = () => {
                   className="rounded-xl border border-slate-200 bg-slate-50/60 [&[open]>summary_svg]:rotate-180"
                 >
                   <summary className="flex cursor-pointer select-none items-center gap-2 px-3 py-2.5 text-[11px] font-semibold text-slate-600">
-                    <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform" />
+                    <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-500 transition-transform" />
                     {group.title}
-                    <span className="ml-auto rounded-full bg-white px-1.5 py-0.5 text-[10px] font-normal text-slate-500 ring-1 ring-slate-200">
+                    <span className="ml-auto rounded-full bg-white px-1.5 py-0.5 text-[11px] font-normal text-slate-500 ring-1 ring-slate-200">
                       {items.length}
                     </span>
                   </summary>
@@ -601,10 +601,10 @@ export const NodePalette = () => {
           <button
             type="button"
             onClick={() => navigate("scenarios")}
-            className="pressable flex items-center gap-1.5 self-start rounded-full border border-slate-200 bg-white px-2 py-1 text-[10px] text-slate-600 transition-colors duration-hover hover:bg-slate-50"
+            className="pressable flex items-center gap-1.5 self-start rounded-full border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-600 transition-colors duration-hover hover:bg-slate-50"
             title="Open scenarios"
           >
-            <GitBranch className="h-3 w-3 text-slate-400" />
+            <GitBranch className="h-3 w-3 text-slate-500" />
             <span className="max-w-[11rem] truncate font-semibold">
               {activeVariant.name}
             </span>

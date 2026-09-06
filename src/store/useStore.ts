@@ -49,6 +49,7 @@ import {
 } from "../types/datasets";
 import { migrateLocalStorageKey } from "../utils/storageMigration";
 import type { WorkflowFragment } from "../utils/workflowFragments";
+import { wouldCreateCycle } from "../utils/workflowGraph";
 import { assumptionsBehindDatasets } from "../utils/variantLineage";
 import type { AlurStory } from "../types/story";
 import {
@@ -383,6 +384,12 @@ export interface AppState {
    */
   workflowFitRequest: number;
   nodeSchemas: Record<string, any[]>;
+  /**
+   * The compiler's complaint about the workflow as it currently stands, anchored
+   * to the node that caused it. One at a time, because compilation stops at the
+   * first problem — the node wears the message instead of the console eating it.
+   */
+  workflowIssue: { nodeId: string | null; message: string } | null;
   nodeExecutionStates: Record<string, NodeExecutionState>;
   visualAnalytics: HydratedVisualAnalyticsState;
   toasts: Toast[];
@@ -438,6 +445,7 @@ export interface AppState {
   focusLayer: (layerId: string) => void;
   focusLayerBounds: (layerId: string, bounds: LayerBounds) => void;
   setNodeSchema: (id: string, schema: any[]) => void;
+  setWorkflowIssue: (issue: { nodeId: string | null; message: string } | null) => void;
   setNodeExecutionState: (id: string, state: NodeExecutionState) => void;
   resetNodeExecutionStates: () => void;
   resetWorkspace: () => void;
@@ -1122,6 +1130,7 @@ export const useStore = create<AppState>()(
       layerFocusRequest: null,
       workflowFitRequest: 0,
       nodeSchemas: {},
+      workflowIssue: null,
       nodeExecutionStates: {},
       visualAnalytics: emptyVisualAnalytics(),
       toasts: [],
@@ -1421,6 +1430,14 @@ export const useStore = create<AppState>()(
             layerFocusRequest: { layerId, bounds, requestedAt: Date.now() },
           };
         }),
+      setWorkflowIssue: (issue) =>
+        set((state) =>
+          state.workflowIssue?.message === issue?.message &&
+          state.workflowIssue?.nodeId === issue?.nodeId
+            ? {}
+            : { workflowIssue: issue },
+        ),
+
       setNodeSchema: (id, schema) =>
         set((state) => ({
           nodeSchemas: { ...state.nodeSchemas, [id]: schema },
@@ -1913,6 +1930,23 @@ export const useStore = create<AppState>()(
       },
 
       onConnect: (connection) => {
+        // Guarded here as well as on the canvas, because the copilot's tools and
+        // a loaded project file both reach this action without passing through
+        // React Flow's isValidConnection.
+        if (
+          !connection.source ||
+          !connection.target ||
+          wouldCreateCycle(get().edges, connection.source, connection.target)
+        ) {
+          get().addToast({
+            type: "warning",
+            message:
+              connection.source === connection.target
+                ? "A step cannot feed itself."
+                : "That connection would loop the workflow back on itself.",
+          });
+          return;
+        }
         set({
           edges: addEdge(
             {

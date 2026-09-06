@@ -128,7 +128,7 @@ export const LeftRail = () => {
       {GROUPS.map((group, index) => (
         <div key={group.id} className={cn('flex flex-col gap-0.5', isRailExpanded ? 'w-full' : 'items-center')}>
           {isRailExpanded ? (
-            <h2 className="px-2.5 pb-1 pt-3 text-[9px] font-bold uppercase tracking-[.14em] text-slate-500">
+            <h2 className="px-2.5 pb-1 pt-3 text-[11px] font-bold uppercase tracking-[.14em] text-slate-500">
               {group.title}
             </h2>
           ) : (

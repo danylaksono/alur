@@ -114,7 +114,7 @@ export const LayerManager = ({ onEditStyle }: { onEditStyle?: (layerId: string) 
                         event.dataTransfer.effectAllowed = 'move';
                         event.dataTransfer.setData('text/plain', layer.id);
                       }}
-                      className="flex h-7 w-3.5 shrink-0 cursor-grab items-center justify-center rounded text-slate-300 hover:bg-slate-100 hover:text-slate-500 active:cursor-grabbing"
+                      className="flex h-7 w-3.5 shrink-0 cursor-grab items-center justify-center rounded text-slate-400 hover:bg-slate-100 hover:text-slate-500 active:cursor-grabbing"
                       title="Drag to reorder layer"
                     >
                       <GripVertical className="h-3.5 w-3.5" />
@@ -128,7 +128,7 @@ export const LayerManager = ({ onEditStyle }: { onEditStyle?: (layerId: string) 
                       <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-xs font-semibold leading-tight text-slate-800">{layer.name}</span>
-                        <span className="block truncate text-[10px] uppercase leading-tight tracking-wide text-slate-600">
+                        <span className="block truncate text-[11px] uppercase leading-tight tracking-wide text-slate-600">
                           {KIND_LABEL[layer.sourceKind || 'workflow']} · {sourceName(layer)}
                         </span>
                       </span>
@@ -139,7 +139,7 @@ export const LayerManager = ({ onEditStyle }: { onEditStyle?: (layerId: string) 
                         title="Rendering layer…"
                       />
                     )}
-                    <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700">
+                    <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-700">
                       {layer.visualisation?.kind || layer.featureCount.toLocaleString()}
                     </span>
                   </div>
@@ -188,7 +188,7 @@ export const LayerManager = ({ onEditStyle }: { onEditStyle?: (layerId: string) 
                     <button
                       type="button"
                       onClick={() => removeMapLayer(layer.id)}
-                      className="pressable rounded p-1 text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
+                      className="pressable rounded p-1 text-slate-500 transition-colors hover:bg-rose-50 hover:text-rose-600"
                       title="Remove layer"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
@@ -220,7 +220,7 @@ export const LayerManager = ({ onEditStyle }: { onEditStyle?: (layerId: string) 
                   )}
 
                   {(selectedFeatureCount > 0 || filterCount > 0) && (
-                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5 pl-5 text-[10px] font-semibold">
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5 pl-5 text-[11px] font-semibold">
                       {selectedFeatureCount > 0 && (
                         <span className="flex items-center gap-1 rounded bg-orange-50 px-1.5 py-0.5 text-orange-700">
                           {selectedFeatureCount.toLocaleString()} selected

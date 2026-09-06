@@ -105,29 +105,29 @@ export const CommandPalette = () => {
     <div className="fixed inset-0 z-[10000] flex justify-center bg-slate-950/30 px-4 pt-[12vh]" onMouseDown={(event) => { if (event.target === event.currentTarget) setOpen(false); }}>
       <section role="dialog" aria-modal="true" aria-label="Command palette" className="h-fit w-full max-w-xl overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
         <div className="flex h-12 items-center border-b px-3">
-          <Search className="h-4 w-4 shrink-0 text-slate-400" />
+          <Search className="h-4 w-4 shrink-0 text-slate-500" />
           <input ref={inputRef} value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => {
             if (event.key === 'Escape') setOpen(false);
             else if (event.key === 'ArrowDown') { event.preventDefault(); setActiveIndex((index) => Math.min(filtered.length - 1, index + 1)); }
             else if (event.key === 'ArrowUp') { event.preventDefault(); setActiveIndex((index) => Math.max(0, index - 1)); }
             else if (event.key === 'Enter') { event.preventDefault(); run(filtered[activeIndex]); }
-          }} placeholder="Search commands…" aria-label="Search commands" aria-controls="command-palette-results" className="min-w-0 flex-1 px-3 text-sm text-slate-700 outline-none placeholder:text-slate-400" />
-          <kbd className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono text-[10px] text-slate-400">Esc</kbd>
+          }} placeholder="Search commands…" aria-label="Search commands" aria-controls="command-palette-results" className="min-w-0 flex-1 px-3 text-sm text-slate-700 outline-none placeholder:text-slate-500" />
+          <kbd className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono text-[11px] text-slate-500">Esc</kbd>
         </div>
         <div id="command-palette-results" role="listbox" className="max-h-[55vh] overflow-y-auto p-2">
-          {!filtered.length && <div className="px-3 py-8 text-center text-xs text-slate-400">No matching commands</div>}
+          {!filtered.length && <div className="px-3 py-8 text-center text-xs text-slate-500">No matching commands</div>}
           {filtered.map((command, index) => {
             const Icon = command.icon;
             return (
               <button key={command.id} type="button" role="option" aria-selected={index === activeIndex} disabled={command.disabled} onMouseEnter={() => setActiveIndex(index)} onClick={() => run(command)} className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm ${index === activeIndex ? 'bg-sky-50 text-sky-900' : 'text-slate-600 hover:bg-slate-50'} disabled:cursor-not-allowed disabled:opacity-35`}>
                 <Icon className="h-4 w-4 shrink-0" />
                 <span className="min-w-0 flex-1 truncate font-medium">{command.label}</span>
-                {command.shortcut && <kbd className="rounded border border-slate-200 bg-white px-1.5 py-0.5 font-mono text-[9px] text-slate-400">{command.shortcut}</kbd>}
+                {command.shortcut && <kbd className="rounded border border-slate-200 bg-white px-1.5 py-0.5 font-mono text-[11px] text-slate-500">{command.shortcut}</kbd>}
               </button>
             );
           })}
         </div>
-        <footer className="flex items-center justify-between border-t bg-slate-50 px-3 py-2 text-[10px] text-slate-400">
+        <footer className="flex items-center justify-between border-t bg-slate-50 px-3 py-2 text-[11px] text-slate-500">
           <span>↑↓ navigate · Enter run</span>
           <span>{selectedLayer ? `Active: ${selectedLayer.name}` : 'No active layer'}</span>
         </footer>

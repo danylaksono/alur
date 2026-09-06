@@ -45,7 +45,7 @@ export const AllocateNode = ({ data, id, selected }: any) => {
   const columnField = (label: string, value: string, key: string, placeholder: string, optional = false) => (
     <div>
       <label className={cn(fieldLabelClass, 'mb-1')}>
-        {label}{optional && <span className="normal-case text-slate-400"> (optional)</span>}
+        {label}{optional && <span className="normal-case text-slate-500"> (optional)</span>}
       </label>
       {columnNames.length ? (
         <select className={selectClass} value={value} onChange={(e) => updateConfig({ [key]: e.target.value })} aria-label={label}>
@@ -115,16 +115,16 @@ export const AllocateNode = ({ data, id, selected }: any) => {
         <select className={selectClass} value={mode} onChange={(e) => updateConfig({ mode: e.target.value })}>
           {MODE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select>
-        <p className="mt-1 text-[10px] leading-4 text-slate-500">{activeMode.detail}</p>
+        <p className="mt-1 text-[11px] leading-4 text-slate-500">{activeMode.detail}</p>
       </div>
 
       {amountField && (
-        <p className="font-mono text-[9px] leading-4 text-slate-400">
+        <p className="font-mono text-[11px] leading-4 text-slate-500">
           → {columns.cumulative}, {columns.status}{mode === 'scale' ? `, ${columns.allocated}` : ''}
         </p>
       )}
 
-      {errors.length > 0 && <p className="text-[10px] leading-4 text-amber-700">{errors[0]}</p>}
+      {errors.length > 0 && <p className="text-[11px] leading-4 text-amber-700">{errors[0]}</p>}
 
       <Handle type="target" position={Position.Left} className={nodeHandleClass('amber')} />
       <Handle type="source" position={Position.Right} className={nodeHandleClass('amber')} />

@@ -78,7 +78,7 @@ export const FragmentNode = ({ data, id, selected }: any) => {
         </div>
       }
     >
-      <div className="text-[10px] leading-4 text-slate-500">{summary}</div>
+      <div className="text-[11px] leading-4 text-slate-500">{summary}</div>
 
       {fragment?.parameters.map((parameter) => (
         <div key={parameter.id}>

@@ -80,7 +80,7 @@ export const SettingsDialog = () => {
           <button
             type="button"
             onClick={() => setSettingsOpen(false)}
-            className="pressable rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+            className="pressable rounded p-1 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-600"
             title="Close"
           >
             <X className="h-4 w-4" />
@@ -124,7 +124,7 @@ export const SettingsDialog = () => {
                 <button
                   type="button"
                   onClick={() => setShowKey((v) => !v)}
-                  className="pressable absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-slate-400 hover:text-slate-600"
+                  className="pressable absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-slate-500 hover:text-slate-600"
                   title={showKey ? 'Hide key' : 'Show key'}
                 >
                   {showKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
@@ -141,7 +141,7 @@ export const SettingsDialog = () => {
                 placeholder="openai/gpt-4o-mini"
                 className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 font-mono text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
               />
-              <span className="mt-1 block text-[11px] text-slate-400">
+              <span className="mt-1 block text-[11px] text-slate-500">
                 Any OpenRouter model ID, e.g. <code>anthropic/claude-haiku-4.5</code> or <code>openai/gpt-4o-mini</code>.
               </span>
             </label>

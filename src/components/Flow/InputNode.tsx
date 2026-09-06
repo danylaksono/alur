@@ -83,7 +83,7 @@ export const InputNode = ({ data, id, selected }: any) => {
             {config.loadStatus === 'error' ? 'Try another URL' : 'Choose a remote file'}
           </span>
           {config.loadStatus === 'error' && (
-            <span className="mt-1 max-w-[180px] truncate text-[9px] text-rose-500" title={config.loadError}>
+            <span className="mt-1 max-w-[180px] truncate text-[11px] text-rose-500" title={config.loadError}>
               {config.loadError}
             </span>
           )}
@@ -95,7 +95,7 @@ export const InputNode = ({ data, id, selected }: any) => {
             {config.loadStatus === 'error' ? 'Try another data file' : 'Upload data file'}
           </span>
           {config.loadStatus === 'error' && (
-            <span className="mt-1 max-w-[180px] truncate text-[9px] text-rose-500" title={config.loadError}>
+            <span className="mt-1 max-w-[180px] truncate text-[11px] text-rose-500" title={config.loadError}>
               Load failed
             </span>
           )}

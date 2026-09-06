@@ -85,10 +85,10 @@ export const SessionAccount = ({
       <History className="h-4 w-4 text-slate-500" />
       <h3 className="text-sm font-bold text-slate-800">How this came about</h3>
       {!events && session && (
-        <span className="truncate text-[9px] font-semibold text-indigo-600">{session.name}</span>
+        <span className="truncate text-[11px] font-semibold text-indigo-600">{session.name}</span>
       )}
       {all.length > 0 && (
-        <span className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
           {all.length} step{all.length === 1 ? '' : 's'}
         </span>
       )}
@@ -99,7 +99,7 @@ export const SessionAccount = ({
     return (
       <div>
         {heading}
-        <p className="mt-3 text-xs leading-5 text-slate-400">
+        <p className="mt-3 text-xs leading-5 text-slate-500">
           Nothing recorded yet. Filter, weight, branch or run something and it will be written here.
         </p>
       </div>
@@ -110,21 +110,21 @@ export const SessionAccount = ({
     <div className="flex h-full flex-col">
       {heading}
       {all.length > shown.length && (
-        <p className="mt-2 text-[9px] text-slate-400">
+        <p className="mt-2 text-[11px] text-slate-500">
           Showing the most recent {shown.length} of {all.length}.
         </p>
       )}
       <ol className={cn('mt-3 space-y-4 overflow-y-auto pr-1', presenting ? 'text-sm' : 'text-xs')}>
         {days.map((day) => (
           <li key={`${day.label}-${day.events[0].id}`}>
-            <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">{day.label}</p>
+            <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{day.label}</p>
             <ul className="mt-2 space-y-1.5 border-l border-slate-200 pl-3">
               {day.events.map((event) => (
                 <li key={event.id} className="flex items-baseline gap-2">
-                  <span className="w-10 shrink-0 tabular-nums text-[9px] text-slate-400">{timeLabel(event.timestamp)}</span>
+                  <span className="w-10 shrink-0 tabular-nums text-[11px] text-slate-500">{timeLabel(event.timestamp)}</span>
                   <span
                     className={cn(
-                      'shrink-0 rounded px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide',
+                      'shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide',
                       TONE[family(event.activity)] || 'bg-slate-100 text-slate-500',
                     )}
                   >

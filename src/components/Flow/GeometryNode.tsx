@@ -87,7 +87,7 @@ export const GeometryNode = ({ data, id, selected }: any) => {
               aria-pressed={active?.kind === kind}
               aria-label={`Draw ${label.toLowerCase()}`}
               className={cn(
-                'pressable flex flex-1 items-center justify-center gap-1 rounded-md border px-2 py-1.5 text-[10px] font-bold',
+                'pressable flex flex-1 items-center justify-center gap-1 rounded-md border px-2 py-1.5 text-[11px] font-bold',
                 active?.kind === kind ? 'border-indigo-300 bg-indigo-50 text-indigo-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50',
               )}
             >
@@ -97,14 +97,14 @@ export const GeometryNode = ({ data, id, selected }: any) => {
         </div>
 
         {active && (
-          <p className="rounded-md bg-indigo-50 px-2 py-1.5 text-[9px] leading-4 text-indigo-800">
+          <p className="rounded-md bg-indigo-50 px-2 py-1.5 text-[11px] leading-4 text-indigo-800">
             {active.kind === 'point'
               ? 'Click the map to place points. Esc to stop.'
               : `Click to add points (${active.positions.length}/${minimumVertices(active.kind)} minimum). Enter or double-click to finish, Backspace to undo, Esc to stop.`}
           </p>
         )}
 
-        <div className="flex items-center justify-between rounded-md bg-slate-50 px-2 py-1.5 text-[9px] font-semibold text-slate-500">
+        <div className="flex items-center justify-between rounded-md bg-slate-50 px-2 py-1.5 text-[11px] font-semibold text-slate-500">
           <span>{summary.total} feature{summary.total === 1 ? '' : 's'}</span>
           <span>{summary.point}p · {summary.line}l · {summary.polygon}a</span>
         </div>
@@ -112,9 +112,9 @@ export const GeometryNode = ({ data, id, selected }: any) => {
         {layer.features.length > 0 && (
           <div className="max-h-24 space-y-1 overflow-y-auto">
             {layer.features.map((feature, index) => (
-              <div key={feature.id} className="flex items-center gap-1.5 rounded px-1.5 py-1 text-[9px] text-slate-600 hover:bg-slate-50">
+              <div key={feature.id} className="flex items-center gap-1.5 rounded px-1.5 py-1 text-[11px] text-slate-600 hover:bg-slate-50">
                 <span className="flex-1 truncate">{index + 1}. {feature.kind}</span>
-                <button type="button" onClick={() => setLayer(removeFeature(layer, feature.id))} aria-label={`Delete feature ${index + 1}`} className="pressable rounded p-0.5 text-slate-400 hover:text-rose-600">
+                <button type="button" onClick={() => setLayer(removeFeature(layer, feature.id))} aria-label={`Delete feature ${index + 1}`} className="pressable rounded p-0.5 text-slate-500 hover:text-rose-600">
                   <Trash2 className="h-3 w-3" />
                 </button>
               </div>
@@ -123,24 +123,24 @@ export const GeometryNode = ({ data, id, selected }: any) => {
         )}
 
         <div className="border-t border-slate-100 pt-2">
-          <p className="mb-1 text-[9px] font-bold uppercase tracking-wide text-slate-400">Columns</p>
+          <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-slate-500">Columns</p>
           {layer.fields.map((field) => (
             <div key={field.name} className="mb-1 flex items-center gap-1">
               <input
                 defaultValue={field.name}
                 onBlur={(event) => renameColumn(field.name, event.target.value)}
                 aria-label={`Column name ${field.name}`}
-                className="min-w-0 flex-1 rounded border border-slate-200 px-1.5 py-1 text-[9px]"
+                className="min-w-0 flex-1 rounded border border-slate-200 px-1.5 py-1 text-[11px]"
               />
               <select
                 value={field.type}
                 onChange={(event) => setLayer(updateField(layer, field.name, { type: event.target.value as DrawnFieldType }))}
                 aria-label={`Column type ${field.name}`}
-                className="rounded border border-slate-200 px-1 py-1 text-[9px]"
+                className="rounded border border-slate-200 px-1 py-1 text-[11px]"
               >
                 {FIELD_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
               </select>
-              <button type="button" onClick={() => setLayer(removeField(layer, field.name))} aria-label={`Remove column ${field.name}`} className="pressable rounded p-0.5 text-slate-400 hover:text-rose-600">
+              <button type="button" onClick={() => setLayer(removeField(layer, field.name))} aria-label={`Remove column ${field.name}`} className="pressable rounded p-0.5 text-slate-500 hover:text-rose-600">
                 <X className="h-3 w-3" />
               </button>
             </div>
@@ -152,7 +152,7 @@ export const GeometryNode = ({ data, id, selected }: any) => {
               onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addColumn(); } }}
               placeholder="Add a column"
               aria-label="New column name"
-              className="min-w-0 flex-1 rounded border border-slate-200 px-1.5 py-1 text-[9px]"
+              className="min-w-0 flex-1 rounded border border-slate-200 px-1.5 py-1 text-[11px]"
             />
             <button type="button" onClick={addColumn} aria-label="Add column" className="pressable rounded border border-slate-200 px-1.5 text-slate-600 hover:bg-slate-50">
               <Plus className="h-3 w-3" />
@@ -164,17 +164,17 @@ export const GeometryNode = ({ data, id, selected }: any) => {
           type="button"
           onClick={create}
           disabled={!layer.features.length || committing}
-          className="pressable flex w-full items-center justify-center gap-1.5 rounded-md bg-cyan-600 px-2 py-1.5 text-[10px] font-bold text-white disabled:bg-slate-300"
+          className="pressable flex w-full items-center justify-center gap-1.5 rounded-md bg-cyan-600 px-2 py-1.5 text-[11px] font-bold text-white disabled:bg-slate-300"
         >
           {committing ? <Loader2 className="h-3 w-3 animate-spin" /> : committed ? <Check className="h-3 w-3" /> : <Table2 className="h-3 w-3" />}
           {committed ? 'Update dataset' : 'Create dataset'}
         </button>
 
         <div className="flex gap-1">
-          <button type="button" onClick={() => downloadDrawnLayerGeoJson(layer)} disabled={!layer.features.length} className="pressable flex flex-1 items-center justify-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-[9px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-40">
+          <button type="button" onClick={() => downloadDrawnLayerGeoJson(layer)} disabled={!layer.features.length} className="pressable flex flex-1 items-center justify-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-[11px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-40">
             <Download className="h-3 w-3" /> GeoJSON
           </button>
-          <button type="button" onClick={() => void downloadDrawnLayerParquet(config.tableName, layer.name)} disabled={!committed} title={committed ? undefined : 'Create the dataset first'} className="pressable flex flex-1 items-center justify-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-[9px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-40">
+          <button type="button" onClick={() => void downloadDrawnLayerParquet(config.tableName, layer.name)} disabled={!committed} title={committed ? undefined : 'Create the dataset first'} className="pressable flex flex-1 items-center justify-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-[11px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-40">
             <Download className="h-3 w-3" /> Parquet
           </button>
         </div>

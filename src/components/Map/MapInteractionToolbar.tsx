@@ -85,7 +85,7 @@ export const MapInteractionToolbar = ({
         {isPinning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
       </button>
       <button type="button" onClick={() => setBasemapsOpen(!basemapsOpen)} aria-expanded={basemapsOpen} aria-label="Choose basemap" title="Basemap" className={cn('pressable flex h-9 w-9 items-center justify-center rounded-b-lg text-slate-600 hover:bg-slate-50', basemapsOpen && 'bg-slate-900 text-white hover:bg-slate-900')}><MapIcon className="h-4 w-4" /></button>
-      {basemapsOpen && <div className="absolute right-11 top-0 w-40 rounded-lg border border-slate-200 bg-white p-1 shadow-lg"><p className="px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-slate-400">Basemap</p>{BASEMAPS.map((basemap) => <button key={basemap.id} type="button" onClick={() => { setSelectedBasemapId(basemap.id); setBasemapsOpen(false); }} className="pressable flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-[11px] font-semibold text-slate-600 hover:bg-slate-50">{basemap.name}{selectedBasemapId === basemap.id && <Check className="h-3 w-3" />}</button>)}</div>}
+      {basemapsOpen && <div className="absolute right-11 top-0 w-40 rounded-lg border border-slate-200 bg-white p-1 shadow-lg"><p className="px-2 py-1 text-[11px] font-bold uppercase tracking-wider text-slate-500">Basemap</p>{BASEMAPS.map((basemap) => <button key={basemap.id} type="button" onClick={() => { setSelectedBasemapId(basemap.id); setBasemapsOpen(false); }} className="pressable flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-[11px] font-semibold text-slate-600 hover:bg-slate-50">{basemap.name}{selectedBasemapId === basemap.id && <Check className="h-3 w-3" />}</button>)}</div>}
     </div>
     {selectionMode && (
       <div className="pointer-events-none absolute right-14 top-3 z-20 rounded-md border border-orange-200 bg-white/95 px-2.5 py-2 text-[11px] font-medium text-slate-600 shadow backdrop-blur">
@@ -93,7 +93,7 @@ export const MapInteractionToolbar = ({
       </div>
     )}
     {coordinates && (
-      <button type="button" onClick={onCopyCoordinates} style={{ bottom: 'calc(0.625rem + var(--alur-map-chrome-bottom, 0px))' }} className="pressable pointer-events-auto absolute left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-md border border-slate-200 bg-white/90 px-2 py-1 font-mono text-[10px] tabular-nums text-slate-500 shadow-sm backdrop-blur hover:bg-white hover:text-slate-800" title="Copy pointer coordinates">
+      <button type="button" onClick={onCopyCoordinates} style={{ bottom: 'calc(0.625rem + var(--alur-map-chrome-bottom, 0px))' }} className="pressable pointer-events-auto absolute left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-md border border-slate-200 bg-white/90 px-2 py-1 font-mono text-[11px] tabular-nums text-slate-500 shadow-sm backdrop-blur hover:bg-white hover:text-slate-800" title="Copy pointer coordinates">
         <Crosshair className="h-3 w-3" /> {coordinates}
       </button>
     )}

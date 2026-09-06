@@ -146,8 +146,8 @@ export const AnalysisNode = ({ data, id, selected }: any) => {
             className={nodeHandleClass('purple')}
             style={{ top: '62%' }}
           />
-          <span className="pointer-events-none absolute left-1.5 top-[38%] -translate-y-1/2 text-[10px] font-bold uppercase text-slate-300">A</span>
-          <span className="pointer-events-none absolute left-1.5 top-[62%] -translate-y-1/2 text-[10px] font-bold uppercase text-slate-300">B</span>
+          <span className="pointer-events-none absolute left-1.5 top-[38%] -translate-y-1/2 text-[11px] font-bold uppercase text-slate-500">A</span>
+          <span className="pointer-events-none absolute left-1.5 top-[62%] -translate-y-1/2 text-[11px] font-bold uppercase text-slate-500">B</span>
         </>
       )}
       <Handle type="source" position={Position.Right} className={nodeHandleClass('purple')} />

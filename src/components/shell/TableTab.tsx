@@ -116,7 +116,7 @@ export const TableTab = ({ table }: { table: ReturnType<typeof useAttributeTable
       <div className="flex h-9 shrink-0 items-center justify-between border-b bg-slate-50 px-3">
         <span className="max-w-96 truncate text-xs font-semibold text-slate-600">
           {table.sourceLabel}
-          {table.selectedDataset && !table.selectedLayer && <span className="ml-2 rounded bg-slate-200 px-1.5 py-0.5 text-[9px] font-medium text-slate-500" title={`Stable row identity: ${table.selectedDataset.rowIdColumn} (${table.selectedDataset.rowIdQuality})`}>ID {table.selectedDataset.rowIdQuality === 'validated-unique' ? 'validated' : 'materialised'}</span>}
+          {table.selectedDataset && !table.selectedLayer && <span className="ml-2 rounded bg-slate-200 px-1.5 py-0.5 text-[11px] font-medium text-slate-500" title={`Stable row identity: ${table.selectedDataset.rowIdColumn} (${table.selectedDataset.rowIdQuality})`}>ID {table.selectedDataset.rowIdQuality === 'validated-unique' ? 'validated' : 'materialised'}</span>}
         </span>
         <div className="flex items-center gap-2">
           {table.selectedLayer && (
@@ -132,7 +132,7 @@ export const TableTab = ({ table }: { table: ReturnType<typeof useAttributeTable
               title="Add a calculated field"
             >
               <FunctionSquare className="h-3 w-3" /> Calculate
-              {table.computedFields.length > 0 && <span className="rounded bg-violet-50 px-1 text-[9px] text-violet-600">{table.computedFields.length}</span>}
+              {table.computedFields.length > 0 && <span className="rounded bg-violet-50 px-1 text-[11px] text-violet-600">{table.computedFields.length}</span>}
             </button>
           )}
           {(selectedNodeId || table.selectedLayer) && (

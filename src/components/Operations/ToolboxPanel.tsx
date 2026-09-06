@@ -183,7 +183,7 @@ export const ToolboxPanel = () => {
     <div className="flex h-full flex-col overflow-hidden" role="region" aria-label="Calculations toolbox">
       <div className="border-b border-slate-100 px-3 py-3">
         <div className="relative">
-          <Search className="pointer-events-none absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-slate-400" />
+          <Search className="pointer-events-none absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-slate-500" />
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -193,7 +193,7 @@ export const ToolboxPanel = () => {
           />
         </div>
         {query.trim() && (
-          <p className="mt-1 text-[9px] text-slate-400">
+          <p className="mt-1 text-[11px] text-slate-500">
             {matched.length} of {entries.length} {entries.length === 1 ? 'calculation' : 'calculations'}
           </p>
         )}
@@ -201,7 +201,7 @@ export const ToolboxPanel = () => {
 
       <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
         {!entries.length && (
-          <p className="flex items-start gap-1.5 px-1 py-3 text-[10px] leading-relaxed text-slate-400">
+          <p className="flex items-start gap-1.5 px-1 py-3 text-[11px] leading-relaxed text-slate-500">
             <Plug className="mt-0.5 h-3 w-3 shrink-0" />
             Nothing is installed yet. Add a plugin below and its calculations appear here.
           </p>
@@ -217,10 +217,10 @@ export const ToolboxPanel = () => {
                 onClick={() => toggle(pluginKey)}
                 className="pressable flex w-full items-center gap-1 rounded-md px-1 py-1 text-left hover:bg-slate-50"
               >
-                {pluginOpen ? <ChevronDown className="h-3 w-3 shrink-0 text-slate-400" /> : <ChevronRight className="h-3 w-3 shrink-0 text-slate-400" />}
-                <Package className="h-3 w-3 shrink-0 text-slate-400" />
-                <span className="min-w-0 flex-1 truncate text-[10px] font-bold text-slate-700">{plugin.plugin.label}</span>
-                <span className="shrink-0 text-[9px] text-slate-400">{plugin.plugin.version}</span>
+                {pluginOpen ? <ChevronDown className="h-3 w-3 shrink-0 text-slate-500" /> : <ChevronRight className="h-3 w-3 shrink-0 text-slate-500" />}
+                <Package className="h-3 w-3 shrink-0 text-slate-500" />
+                <span className="min-w-0 flex-1 truncate text-[11px] font-bold text-slate-700">{plugin.plugin.label}</span>
+                <span className="shrink-0 text-[11px] text-slate-500">{plugin.plugin.version}</span>
               </button>
 
               {pluginOpen && [...groups.entries()]
@@ -236,8 +236,8 @@ export const ToolboxPanel = () => {
                           onClick={() => toggle(groupKey)}
                           className="pressable flex w-full items-center gap-1 rounded-md px-1 py-0.5 text-left hover:bg-slate-50"
                         >
-                          {groupOpen ? <ChevronDown className="h-2.5 w-2.5 shrink-0 text-slate-300" /> : <ChevronRight className="h-2.5 w-2.5 shrink-0 text-slate-300" />}
-                          <span className="min-w-0 flex-1 truncate text-[9px] font-bold uppercase tracking-wider text-slate-400">{group}</span>
+                          {groupOpen ? <ChevronDown className="h-2.5 w-2.5 shrink-0 text-slate-400" /> : <ChevronRight className="h-2.5 w-2.5 shrink-0 text-slate-400" />}
+                          <span className="min-w-0 flex-1 truncate text-[11px] font-bold uppercase tracking-wider text-slate-500">{group}</span>
                         </button>
                       )}
                       {(groupOpen || !group) && items.map((entry) => (
@@ -248,15 +248,15 @@ export const ToolboxPanel = () => {
                             title={entry.manifest.description}
                             className="pressable flex min-w-0 flex-1 items-center gap-1.5 py-1 pl-4 pr-1 text-left"
                           >
-                            <Play className="h-2.5 w-2.5 shrink-0 text-slate-300 group-hover:text-blue-500" />
-                            <span className="min-w-0 flex-1 truncate text-[10px] text-slate-700 group-hover:text-blue-700">{entry.manifest.label}</span>
+                            <Play className="h-2.5 w-2.5 shrink-0 text-slate-400 group-hover:text-blue-500" />
+                            <span className="min-w-0 flex-1 truncate text-[11px] text-slate-700 group-hover:text-blue-700">{entry.manifest.label}</span>
                           </button>
                           <button
                             type="button"
                             onClick={() => place(entry)}
                             title="Add to the workflow as a step"
                             aria-label={`Add ${entry.manifest.label} to the workflow`}
-                            className="pressable mr-1 shrink-0 rounded p-1 text-slate-300 opacity-0 hover:bg-white hover:text-blue-600 focus:opacity-100 group-hover:opacity-100"
+                            className="pressable mr-1 shrink-0 rounded p-1 text-slate-400 opacity-0 hover:bg-white hover:text-blue-600 focus:opacity-100 group-hover:opacity-100"
                           >
                             <Workflow className="h-2.5 w-2.5" />
                           </button>
@@ -271,7 +271,7 @@ export const ToolboxPanel = () => {
       </div>
 
       <div className="border-t border-slate-100 px-3 py-3">
-        <h3 className="mb-1.5 text-[9px] font-bold uppercase tracking-wider text-slate-400">Add a plugin</h3>
+        <h3 className="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">Add a plugin</h3>
         {known.length > 0 && (
           <select
             value=""
@@ -296,7 +296,7 @@ export const ToolboxPanel = () => {
             type="button"
             onClick={() => void load()}
             disabled={loading || !url.trim()}
-            className="pressable flex items-center gap-1 rounded-md bg-slate-800 px-2 py-1 text-[10px] font-bold text-white hover:bg-slate-700 disabled:opacity-40"
+            className="pressable flex items-center gap-1 rounded-md bg-slate-800 px-2 py-1 text-[11px] font-bold text-white hover:bg-slate-700 disabled:opacity-40"
           >
             {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />} Add
           </button>

@@ -11,10 +11,10 @@ const COHORT_COLOURS = ['#0284c7', '#f97316', '#16a34a', '#db2777', '#7c3aed', '
 const format = (value: number | null, digits = 2) => value === null ? 'n/a' : value.toLocaleString(undefined, { maximumFractionDigits: digits });
 
 const ComparisonResult = ({ result, cohortA, cohortB }: { result: CohortComparisonResult; cohortA: CohortSpec; cohortB?: CohortSpec }) => (
-  <div className="space-y-3 border-t p-3 text-[10px]">
+  <div className="space-y-3 border-t p-3 text-[11px]">
     <div className="grid grid-cols-3 gap-2">
-      <div><span className="block font-semibold uppercase tracking-wide text-slate-400">{cohortA.name}</span><b className="text-sm tabular-nums text-slate-800">{result.aRows.toLocaleString()}</b></div>
-      <div><span className="block font-semibold uppercase tracking-wide text-slate-400">{cohortB?.name || 'Remainder'}</span><b className="text-sm tabular-nums text-slate-800">{result.bRows.toLocaleString()}</b></div>
+      <div><span className="block font-semibold uppercase tracking-wide text-slate-500">{cohortA.name}</span><b className="text-sm tabular-nums text-slate-800">{result.aRows.toLocaleString()}</b></div>
+      <div><span className="block font-semibold uppercase tracking-wide text-slate-500">{cohortB?.name || 'Remainder'}</span><b className="text-sm tabular-nums text-slate-800">{result.bRows.toLocaleString()}</b></div>
       <div><span className="block font-semibold uppercase tracking-wide text-violet-500">Overlap</span><b className="text-sm tabular-nums text-violet-700">{result.overlapRows.toLocaleString()}</b></div>
     </div>
     <div className="rounded-md bg-slate-50 p-2 leading-4 text-slate-500">{result.denominatorNote}<br />{result.missingValueNote}</div>
@@ -22,8 +22,8 @@ const ComparisonResult = ({ result, cohortA, cohortB }: { result: CohortComparis
     {result.numeric.map((metric) => {
       const maxBin = Math.max(1, ...metric.bins.flatMap((bin) => [bin.aCount, bin.bCount]));
       return <div key={metric.field} className="rounded-md border border-slate-200 p-2">
-        <div className="flex justify-between gap-2"><b className="truncate text-slate-700">{metric.field}</b><span className="shrink-0 text-slate-400">effect {format(metric.effectSize)}</span></div>
-        <div className="mt-1 grid grid-cols-2 gap-2 tabular-nums"><span><i className="not-italic text-slate-400">A mean </i>{format(metric.aMean)} <i className="not-italic text-slate-300">({metric.aMissing} missing)</i></span><span><i className="not-italic text-slate-400">B mean </i>{format(metric.bMean)} <i className="not-italic text-slate-300">({metric.bMissing} missing)</i></span></div>
+        <div className="flex justify-between gap-2"><b className="truncate text-slate-700">{metric.field}</b><span className="shrink-0 text-slate-500">effect {format(metric.effectSize)}</span></div>
+        <div className="mt-1 grid grid-cols-2 gap-2 tabular-nums"><span><i className="not-italic text-slate-500">A mean </i>{format(metric.aMean)} <i className="not-italic text-slate-500">({metric.aMissing} missing)</i></span><span><i className="not-italic text-slate-500">B mean </i>{format(metric.bMean)} <i className="not-italic text-slate-500">({metric.bMissing} missing)</i></span></div>
         {metric.bins.length > 0 && <div className="mt-2 flex h-12 items-end gap-0.5" aria-label={`Distribution comparison for ${metric.field}`}>
           {metric.bins.map((bin) => <div key={bin.label} className="flex h-full min-w-0 flex-1 items-end gap-px" title={`${bin.label}: A ${bin.aCount}, B ${bin.bCount}`}><span className="w-1/2 bg-sky-600" style={{ height: `${Math.max(2, bin.aCount / maxBin * 100)}%` }} /><span className="w-1/2 bg-orange-500" style={{ height: `${Math.max(2, bin.bCount / maxBin * 100)}%` }} /></div>)}
         </div>}
@@ -37,7 +37,7 @@ const ComparisonResult = ({ result, cohortA, cohortB }: { result: CohortComparis
 
     {result.temporal && result.temporal.points.length > 0 && <div className="rounded-md border border-slate-200 p-2">
       <b className="text-slate-700">{result.temporal.field} · monthly trend</b>
-      <div className="mt-1 max-h-28 overflow-y-auto"><table className="w-full tabular-nums"><thead className="text-slate-400"><tr><th className="text-left">Period</th><th className="text-right">A</th><th className="text-right">B</th></tr></thead><tbody>{result.temporal.points.map((point) => <tr key={point.period}><td>{point.period.slice(0, 7)}</td><td className="text-right text-sky-700">{point.aCount}</td><td className="text-right text-orange-600">{point.bCount}</td></tr>)}</tbody></table></div>
+      <div className="mt-1 max-h-28 overflow-y-auto"><table className="w-full tabular-nums"><thead className="text-slate-500"><tr><th className="text-left">Period</th><th className="text-right">A</th><th className="text-right">B</th></tr></thead><tbody>{result.temporal.points.map((point) => <tr key={point.period}><td>{point.period.slice(0, 7)}</td><td className="text-right text-sky-700">{point.aCount}</td><td className="text-right text-orange-600">{point.bCount}</td></tr>)}</tbody></table></div>
     </div>}
     <div className="flex items-center gap-3 text-slate-500"><span className="flex items-center gap-1"><span className="h-2 w-4 bg-sky-600" /> A · {cohortA.name}</span><span className="flex items-center gap-1"><span className="h-2 w-4 bg-orange-500" /> B · {cohortB?.name || 'Remainder'}</span><span className="flex items-center gap-1"><span className="h-2 w-4 bg-violet-600" /> overlap</span></div>
   </div>
@@ -165,34 +165,34 @@ export const CohortPanel = () => {
 
   return (
     <section className="min-h-full bg-white">
-      <div className="flex items-center justify-between border-b bg-slate-50 px-3 py-3"><div><h3 className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500"><Users className="h-3.5 w-3.5" /> Cohorts</h3><p className="mt-1 text-[10px] text-slate-400">Save subsets, compare groups, and revisit analytical states.</p></div>{comparison && <button type="button" onClick={() => setComparison(undefined)} className="pressable rounded p-1 text-slate-400 hover:bg-slate-100" title="Close comparison"><X className="h-3.5 w-3.5" /></button>}</div>
-      {!layer ? <p className="px-3 pb-3 text-[10px] text-slate-400">Select a layer to save and compare subsets.</p> : <div className="space-y-3 px-3 pb-3">
+      <div className="flex items-center justify-between border-b bg-slate-50 px-3 py-3"><div><h3 className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500"><Users className="h-3.5 w-3.5" /> Cohorts</h3><p className="mt-1 text-[11px] text-slate-500">Save subsets, compare groups, and revisit analytical states.</p></div>{comparison && <button type="button" onClick={() => setComparison(undefined)} className="pressable rounded p-1 text-slate-500 hover:bg-slate-100" title="Close comparison"><X className="h-3.5 w-3.5" /></button>}</div>
+      {!layer ? <p className="px-3 pb-3 text-[11px] text-slate-500">Select a layer to save and compare subsets.</p> : <div className="space-y-3 px-3 pb-3">
         <div className="space-y-1.5 rounded-md border border-slate-200 bg-slate-50 p-2">
-          <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Cohort name (optional)" className="h-7 w-full rounded border border-slate-200 bg-white px-2 text-[10px] outline-none focus:border-sky-400" />
-          <div className="grid grid-cols-2 gap-1.5"><button type="button" onClick={saveActive} className="pressable flex h-7 items-center justify-center gap-1 rounded bg-white text-[10px] font-semibold text-slate-600 ring-1 ring-slate-200 hover:bg-sky-50"><Plus className="h-3 w-3" /> Active subset</button><button type="button" onClick={() => { void saveSelection(); }} disabled={!interaction?.selectedFeatureIds.length || isSavingSelection} className="pressable flex h-7 items-center justify-center gap-1 rounded bg-white text-[10px] font-semibold text-slate-600 ring-1 ring-slate-200 hover:bg-sky-50 disabled:opacity-40">{isSavingSelection ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />} Selection</button></div>
+          <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Cohort name (optional)" className="h-7 w-full rounded border border-slate-200 bg-white px-2 text-[11px] outline-none focus:border-sky-400" />
+          <div className="grid grid-cols-2 gap-1.5"><button type="button" onClick={saveActive} className="pressable flex h-7 items-center justify-center gap-1 rounded bg-white text-[11px] font-semibold text-slate-600 ring-1 ring-slate-200 hover:bg-sky-50"><Plus className="h-3 w-3" /> Active subset</button><button type="button" onClick={() => { void saveSelection(); }} disabled={!interaction?.selectedFeatureIds.length || isSavingSelection} className="pressable flex h-7 items-center justify-center gap-1 rounded bg-white text-[11px] font-semibold text-slate-600 ring-1 ring-slate-200 hover:bg-sky-50 disabled:opacity-40">{isSavingSelection ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />} Selection</button></div>
         </div>
 
         {cohorts.map((cohort) => <div key={cohort.id} className="flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1.5">
           <input type="color" value={cohort.colour} onChange={(event) => updateCohort(cohort.id, { colour: event.target.value })} className="h-5 w-5 cursor-pointer border-0 bg-transparent p-0" aria-label={`Colour for ${cohort.name}`} />
-          <input value={cohort.name} onChange={(event) => updateCohort(cohort.id, { name: event.target.value })} className="min-w-0 flex-1 bg-transparent text-[10px] font-semibold text-slate-600 outline-none" aria-label="Cohort name" />
-          <span className="rounded bg-slate-100 px-1 text-[8px] uppercase text-slate-400">{cohort.definition.kind === 'filters' ? 'filters' : 'selection'}</span>
-          <button type="button" onClick={() => duplicateCohort(cohort.id)} className="pressable rounded p-1 text-slate-400 hover:bg-slate-100" title="Duplicate cohort"><Copy className="h-3 w-3" /></button>
-          <button type="button" onClick={() => removeCohort(cohort.id)} className="pressable rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600" title="Remove cohort"><Trash2 className="h-3 w-3" /></button>
+          <input value={cohort.name} onChange={(event) => updateCohort(cohort.id, { name: event.target.value })} className="min-w-0 flex-1 bg-transparent text-[11px] font-semibold text-slate-600 outline-none" aria-label="Cohort name" />
+          <span className="rounded bg-slate-100 px-1 text-[10px] uppercase text-slate-500">{cohort.definition.kind === 'filters' ? 'filters' : 'selection'}</span>
+          <button type="button" onClick={() => duplicateCohort(cohort.id)} className="pressable rounded p-1 text-slate-500 hover:bg-slate-100" title="Duplicate cohort"><Copy className="h-3 w-3" /></button>
+          <button type="button" onClick={() => removeCohort(cohort.id)} className="pressable rounded p-1 text-slate-500 hover:bg-rose-50 hover:text-rose-600" title="Remove cohort"><Trash2 className="h-3 w-3" /></button>
         </div>)}
 
         {cohorts.length > 0 && <div className="grid grid-cols-[1fr_1fr_auto] gap-1.5">
-          <select value={cohortAId} onChange={(event) => setCohortAId(event.target.value)} className="h-7 min-w-0 rounded border border-slate-200 bg-white px-1 text-[9px]"><option value="">Cohort A</option>{cohorts.map((cohort) => <option key={cohort.id} value={cohort.id}>{cohort.name}</option>)}</select>
-          <select value={cohortBId} onChange={(event) => setCohortBId(event.target.value)} className="h-7 min-w-0 rounded border border-slate-200 bg-white px-1 text-[9px]"><option value="remainder">Active remainder</option>{cohorts.filter((cohort) => cohort.id !== cohortAId).map((cohort) => <option key={cohort.id} value={cohort.id}>{cohort.name}</option>)}</select>
-          <button type="button" onClick={compare} disabled={!cohortAId} className="pressable rounded bg-slate-900 px-2 text-[9px] font-bold text-white disabled:opacity-40">Compare</button>
+          <select value={cohortAId} onChange={(event) => setCohortAId(event.target.value)} className="h-7 min-w-0 rounded border border-slate-200 bg-white px-1 text-[11px]"><option value="">Cohort A</option>{cohorts.map((cohort) => <option key={cohort.id} value={cohort.id}>{cohort.name}</option>)}</select>
+          <select value={cohortBId} onChange={(event) => setCohortBId(event.target.value)} className="h-7 min-w-0 rounded border border-slate-200 bg-white px-1 text-[11px]"><option value="remainder">Active remainder</option>{cohorts.filter((cohort) => cohort.id !== cohortAId).map((cohort) => <option key={cohort.id} value={cohort.id}>{cohort.name}</option>)}</select>
+          <button type="button" onClick={compare} disabled={!cohortAId} className="pressable rounded bg-slate-900 px-2 text-[11px] font-bold text-white disabled:opacity-40">Compare</button>
         </div>}
-        {comparison && (cohortA?.definition.kind === 'selection-table' || cohortB?.definition.kind === 'selection-table') && <p className="rounded bg-amber-50 px-2 py-1.5 text-[9px] leading-4 text-amber-700">Selection-table cohorts are compared in DuckDB. Simultaneous map colouring is available when both cohorts have filter definitions.</p>}
-        {isComparing && <div className="flex items-center justify-center gap-2 py-3 text-[10px] text-slate-400"><Loader2 className="h-3 w-3 animate-spin" /> Comparing cohorts…</div>}
-        {comparisonError && <div className="rounded bg-rose-50 px-2 py-1.5 text-[10px] text-rose-600">{comparisonError}</div>}
+        {comparison && (cohortA?.definition.kind === 'selection-table' || cohortB?.definition.kind === 'selection-table') && <p className="rounded bg-amber-50 px-2 py-1.5 text-[11px] leading-4 text-amber-700">Selection-table cohorts are compared in DuckDB. Simultaneous map colouring is available when both cohorts have filter definitions.</p>}
+        {isComparing && <div className="flex items-center justify-center gap-2 py-3 text-[11px] text-slate-500"><Loader2 className="h-3 w-3 animate-spin" /> Comparing cohorts…</div>}
+        {comparisonError && <div className="rounded bg-rose-50 px-2 py-1.5 text-[11px] text-rose-600">{comparisonError}</div>}
       </div>}
       {comparisonResult && cohortA && <ComparisonResult result={comparisonResult} cohortA={cohortA} cohortB={cohortB} />}
 
       {filterCohorts.length > 0 && layer && <div className="space-y-1.5 border-t bg-slate-50/60 px-3 py-2.5">
-        <select value={addCohortId} onChange={(event) => setAddCohortId(event.target.value)} aria-label="Cohort to add" className="h-7 w-full rounded border border-slate-200 bg-white px-1.5 text-[10px] text-slate-700">
+        <select value={addCohortId} onChange={(event) => setAddCohortId(event.target.value)} aria-label="Cohort to add" className="h-7 w-full rounded border border-slate-200 bg-white px-1.5 text-[11px] text-slate-700">
           {filterCohorts.map((cohort) => <option key={cohort.id} value={cohort.id}>{cohort.name}</option>)}
         </select>
         <AddToScenario
@@ -212,12 +212,12 @@ export const CohortPanel = () => {
 
       <div className="border-t px-3 py-2"><h3 className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500"><Bookmark className="h-3.5 w-3.5" /> Bookmarks</h3></div>
       <div className="space-y-2 px-3 pb-3">
-        <input value={bookmarkName} onChange={(event) => setBookmarkName(event.target.value)} placeholder="Bookmark name" className="h-7 w-full rounded border border-slate-200 px-2 text-[10px] outline-none focus:border-sky-400" />
-        <textarea value={bookmarkNote} onChange={(event) => setBookmarkNote(event.target.value)} placeholder="Optional note" className="h-12 w-full resize-none rounded border border-slate-200 p-2 text-[10px] outline-none focus:border-sky-400" />
-        <button type="button" onClick={saveBookmark} disabled={!bookmarkName.trim()} className="pressable flex h-7 w-full items-center justify-center gap-1 rounded bg-slate-900 text-[10px] font-bold text-white disabled:opacity-40"><Bookmark className="h-3 w-3" /> Save analytical state</button>
+        <input value={bookmarkName} onChange={(event) => setBookmarkName(event.target.value)} placeholder="Bookmark name" className="h-7 w-full rounded border border-slate-200 px-2 text-[11px] outline-none focus:border-sky-400" />
+        <textarea value={bookmarkNote} onChange={(event) => setBookmarkNote(event.target.value)} placeholder="Optional note" className="h-12 w-full resize-none rounded border border-slate-200 p-2 text-[11px] outline-none focus:border-sky-400" />
+        <button type="button" onClick={saveBookmark} disabled={!bookmarkName.trim()} className="pressable flex h-7 w-full items-center justify-center gap-1 rounded bg-slate-900 text-[11px] font-bold text-white disabled:opacity-40"><Bookmark className="h-3 w-3" /> Save analytical state</button>
         {bookmarks.map((bookmark) => <div key={bookmark.id} className="rounded-md border border-slate-200 p-2">
-          <div className="flex items-center gap-1"><input value={bookmark.name} onChange={(event) => updateBookmark(bookmark.id, { name: event.target.value })} className="min-w-0 flex-1 text-[10px] font-semibold text-slate-700 outline-none" aria-label="Bookmark name" /><button type="button" onClick={() => restoreBookmark(bookmark.id)} className="pressable rounded px-1.5 py-1 text-[9px] font-bold text-sky-700 hover:bg-sky-50">Restore</button><button type="button" onClick={() => removeBookmark(bookmark.id)} className="pressable rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600" title="Delete bookmark"><Trash2 className="h-3 w-3" /></button></div>
-          {bookmark.note && <p className="mt-1 text-[9px] leading-4 text-slate-400">{bookmark.note}</p>}
+          <div className="flex items-center gap-1"><input value={bookmark.name} onChange={(event) => updateBookmark(bookmark.id, { name: event.target.value })} className="min-w-0 flex-1 text-[11px] font-semibold text-slate-700 outline-none" aria-label="Bookmark name" /><button type="button" onClick={() => restoreBookmark(bookmark.id)} className="pressable rounded px-1.5 py-1 text-[11px] font-bold text-sky-700 hover:bg-sky-50">Restore</button><button type="button" onClick={() => removeBookmark(bookmark.id)} className="pressable rounded p-1 text-slate-500 hover:bg-rose-50 hover:text-rose-600" title="Delete bookmark"><Trash2 className="h-3 w-3" /></button></div>
+          {bookmark.note && <p className="mt-1 text-[11px] leading-4 text-slate-500">{bookmark.note}</p>}
         </div>)}
       </div>
     </section>

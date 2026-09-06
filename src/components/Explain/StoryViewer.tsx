@@ -33,17 +33,17 @@ const StoryCardContent = ({ card }: { card: ExplainCard }) => {
       <div>
         <div className="flex flex-wrap items-center gap-2">
           <NotebookPen className="h-5 w-5 text-amber-500" />
-          <span className={cn('rounded-full px-2 py-1 text-[9px] font-bold uppercase tracking-wide',
+          <span className={cn('rounded-full px-2 py-1 text-[11px] font-bold uppercase tracking-wide',
             card.conclusionStatus === 'supported' ? 'bg-emerald-50 text-emerald-700'
               : card.conclusionStatus === 'contested' ? 'bg-rose-50 text-rose-700'
                 : 'bg-slate-100 text-slate-600')}>
             {card.conclusionStatus || 'draft'}
           </span>
-          <span className="text-[9px] font-semibold capitalize text-slate-500">{card.confidence || 'tentative'} confidence</span>
+          <span className="text-[11px] font-semibold capitalize text-slate-500">{card.confidence || 'tentative'} confidence</span>
         </div>
         <h3 className="mt-3 text-base font-extrabold leading-6 text-slate-900">{card.claim || 'Untitled finding'}</h3>
         {card.interpretation && <p className="mt-3 text-xs leading-5 text-slate-600">{card.interpretation}</p>}
-        {card.caveat && <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-[10px] leading-4 text-amber-900"><strong>Caveat:</strong> {card.caveat}</p>}
+        {card.caveat && <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-[11px] leading-4 text-amber-900"><strong>Caveat:</strong> {card.caveat}</p>}
       </div>
     );
   }
@@ -66,7 +66,7 @@ const StoryCardContent = ({ card }: { card: ExplainCard }) => {
       <div>
         <div className="flex items-center gap-2"><Database className="h-4 w-4 text-teal-600" /><h3 className="text-sm font-bold text-slate-800">{card.title || 'Table preview'}</h3></div>
         <div className="mt-3 overflow-x-auto rounded-lg border border-slate-200">
-          <table className="w-full text-left text-[10px]">
+          <table className="w-full text-left text-[11px]">
             <thead className="bg-slate-50 text-slate-600"><tr>{columns.map((column) => <th key={column} className="whitespace-nowrap px-2 py-1.5 font-bold">{column}</th>)}</tr></thead>
             <tbody>{rows.slice(0, 10).map((row, index) => <tr key={index} className="border-t border-slate-100">{columns.map((column) => <td key={column} className="max-w-40 truncate px-2 py-1.5 text-slate-600">{String(row[column] ?? '—')}</td>)}</tr>)}</tbody>
           </table>
@@ -93,7 +93,7 @@ const StoryCardContent = ({ card }: { card: ExplainCard }) => {
     if (typeof card.frozenValues !== 'number') return <EmptyCapture title={card.title || 'Metric'} />;
     return (
       <div>
-        <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-500"><Gauge className="h-3.5 w-3.5" />{card.title || 'Metric'}</p>
+        <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-500"><Gauge className="h-3.5 w-3.5" />{card.title || 'Metric'}</p>
         <p className="mt-6 text-4xl font-black tabular-nums text-slate-900">{card.frozenValues.toLocaleString()}</p>
       </div>
     );
@@ -114,12 +114,12 @@ const StoryCardContent = ({ card }: { card: ExplainCard }) => {
       <div className="space-y-4">
         {result.summaries.map((summary) => (
           <div key={summary.measureId}>
-            <h4 className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{spec?.measures.find((item) => item.id === summary.measureId)?.label || summary.measureId}</h4>
+            <h4 className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{spec?.measures.find((item) => item.id === summary.measureId)?.label || summary.measureId}</h4>
             <div className="mt-2 space-y-2">
               {summary.values.map((value) => {
                 const operand = spec?.operands.find((item) => item.id === value.operandId);
                 return (
-                  <div key={value.operandId} className="grid grid-cols-[100px_1fr_64px] items-center gap-2 text-[10px]">
+                  <div key={value.operandId} className="grid grid-cols-[100px_1fr_64px] items-center gap-2 text-[11px]">
                     <span className="truncate font-semibold text-slate-600">{operand?.label || value.operandId}</span>
                     <div className="h-2 rounded-full bg-slate-100"><div className="h-full rounded-full" style={{ width: `${Math.max(2, ((value.value || 0) / max) * 100)}%`, backgroundColor: operand?.colour || '#64748b' }} /></div>
                     <span className="text-right tabular-nums">{value.value?.toLocaleString(undefined, { maximumFractionDigits: 2 }) ?? '—'}</span>
@@ -145,7 +145,7 @@ const StoryCardContent = ({ card }: { card: ExplainCard }) => {
 const EmptyCapture = ({ title }: { title: string }) => (
   <div className="flex h-full min-h-24 flex-col items-center justify-center rounded-lg bg-slate-50 p-4 text-center">
     <p className="text-xs font-semibold text-slate-600">{title}</p>
-    <p className="mt-1 text-[10px] text-slate-500">The author shared this without its captured values.</p>
+    <p className="mt-1 text-[11px] text-slate-500">The author shared this without its captured values.</p>
   </div>
 );
 
@@ -176,7 +176,7 @@ export const StoryViewer = ({ story }: { story: AlurStory }) => {
       <header className="z-50 flex h-14 shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-white px-4">
         <div className="flex min-w-0 items-center gap-2.5">
           <img src="/alur-mark.svg" alt="" className="h-7 w-7 shrink-0" />
-          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-600">Story</span>
+          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider text-slate-600">Story</span>
           <span className="truncate text-[13px] font-semibold text-slate-800">{story.title}</span>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -200,7 +200,7 @@ export const StoryViewer = ({ story }: { story: AlurStory }) => {
           <header className="rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
             <h1 className="text-2xl font-black tracking-tight text-slate-950">{story.title}</h1>
             {story.summary && <p className="mt-2 max-w-4xl text-sm leading-6 text-slate-600">{story.summary}</p>}
-            <p className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-slate-100 pt-3 text-[10px] text-slate-500">
+            <p className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-slate-100 pt-3 text-[11px] text-slate-500">
               {story.author && <span className="font-semibold text-slate-600">By {story.author}</span>}
               {story.audience && <span>For {story.audience}</span>}
               <span>Exported {new Date(story.exportedAt).toLocaleDateString()}</span>
@@ -219,15 +219,15 @@ export const StoryViewer = ({ story }: { story: AlurStory }) => {
                     <article key={card.id} className={cn('flex flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-sm', widthClass[card.width], heightClass[card.height])} aria-label={`${card.title || card.kind} card`}>
                       <div className="min-h-0 flex-1"><StoryCardContent card={card} /></div>
                       {card.takeaway && <p className="mt-3 border-t border-slate-100 pt-2 text-[11px] leading-5 text-slate-700">{card.takeaway}</p>}
-                      {card.caption && <p className="mt-1 text-[10px] text-slate-500">{card.caption}</p>}
+                      {card.caption && <p className="mt-1 text-[11px] text-slate-500">{card.caption}</p>}
                       {card.provenance?.assumptions?.length ? (
                         <div className="mt-2 border-t border-slate-100 pt-2">
-                          <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Assumed</p>
-                          <ul className="mt-1 space-y-0.5">{card.provenance.assumptions.map((assumption) => <li key={assumption} className="text-[9px] leading-4 text-slate-600">· {assumption}</li>)}</ul>
+                          <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Assumed</p>
+                          <ul className="mt-1 space-y-0.5">{card.provenance.assumptions.map((assumption) => <li key={assumption} className="text-[11px] leading-4 text-slate-600">· {assumption}</li>)}</ul>
                         </div>
                       ) : null}
                       {card.provenance?.caveats.length ? (
-                        <p className="mt-2 text-[9px] leading-4 text-amber-800">{card.provenance.caveats.join(' · ')}</p>
+                        <p className="mt-2 text-[11px] leading-4 text-amber-800">{card.provenance.caveats.join(' · ')}</p>
                       ) : null}
                     </article>
                   ))}
@@ -236,7 +236,7 @@ export const StoryViewer = ({ story }: { story: AlurStory }) => {
             ))}
           </div>
 
-          <p className="mt-10 border-t border-slate-200 pt-4 text-[10px] leading-5 text-slate-500">
+          <p className="mt-10 border-t border-slate-200 pt-4 text-[11px] leading-5 text-slate-500">
             This is a frozen account. Values were captured when the author exported it and do not update.
             Built with ALUR {story.appVersion}.
           </p>

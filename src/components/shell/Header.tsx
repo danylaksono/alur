@@ -259,7 +259,7 @@ export const Header = () => {
         <h1 className="hidden items-center gap-1.5 text-[13px] font-extrabold leading-none tracking-[0.16em] text-slate-900 sm:flex">
           ALUR
           <span
-            className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[8px] font-extrabold leading-none tracking-[0.12em] text-primary"
+            className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-extrabold leading-none tracking-[0.12em] text-primary"
             aria-label="ALUR is in beta"
           >
             BETA
@@ -307,7 +307,7 @@ export const Header = () => {
               >
                 {projectName || UNTITLED_PROJECT_NAME}
               </span>
-              <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+              <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-500" />
             </button>
           )}
 
@@ -380,7 +380,7 @@ export const Header = () => {
         {hasWork && (
           <span
             className={cn(
-              "hidden shrink-0 text-[10px] font-medium lg:inline",
+              "hidden shrink-0 text-[11px] font-medium lg:inline",
               recoverySave.status === "error"
                 ? "text-rose-600"
                 : "text-slate-500",
@@ -424,7 +424,7 @@ export const Header = () => {
           title="Command palette (Ctrl+K)"
         >
           <Search className="h-3.5 w-3.5" /> Commands{" "}
-          <kbd className="rounded border border-slate-200 bg-slate-50 px-1 font-mono text-[9px]">
+          <kbd className="rounded border border-slate-200 bg-slate-50 px-1 font-mono text-[11px]">
             Ctrl K
           </kbd>
         </button>
@@ -547,7 +547,7 @@ export const Header = () => {
                 type="button"
                 onClick={() => setAddDataOpen(false)}
                 disabled={isRemoteLoading}
-                className="pressable rounded-md p-1.5 text-slate-400 hover:bg-slate-100 disabled:opacity-40"
+                className="pressable rounded-md p-1.5 text-slate-500 hover:bg-slate-100 disabled:opacity-40"
                 aria-label="Close add data dialog"
               >
                 <X className="h-4 w-4" />
@@ -578,7 +578,7 @@ export const Header = () => {
                     placeholder="https://…/data.geojson"
                     className="h-9 w-full rounded-md border border-slate-200 px-2.5 text-xs outline-none focus:border-sky-400"
                   />
-                  <p className="text-[10px] leading-4 text-slate-400">
+                  <p className="text-[11px] leading-4 text-slate-500">
                     Public HTTP(S), up to 50 MB. The host must allow browser
                     access.
                   </p>
@@ -609,7 +609,7 @@ export const Header = () => {
                     value={clipboardText}
                     onChange={(event) => setClipboardText(event.target.value)}
                     placeholder='[{"name":"A","value":1}]'
-                    className="h-[76px] w-full resize-none rounded-md border border-slate-200 p-2.5 font-mono text-[10px] outline-none focus:border-sky-400"
+                    className="h-[76px] w-full resize-none rounded-md border border-slate-200 p-2.5 font-mono text-[11px] outline-none focus:border-sky-400"
                   />
                   <button
                     type="button"
@@ -660,7 +660,7 @@ export const Header = () => {
               <button
                 type="button"
                 onClick={() => setRelinkOpen(false)}
-                className="pressable rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                className="pressable rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
                 aria-label="Close relink dialog"
               >
                 <X className="h-4 w-4" />
@@ -679,7 +679,7 @@ export const Header = () => {
                     >
                       {source.name}
                     </div>
-                    <div className="mt-0.5 text-[10px] text-slate-400">
+                    <div className="mt-0.5 text-[11px] text-slate-500">
                       {source.format?.toUpperCase() || "Data file"}
                       {source.size !== undefined
                         ? ` · ${source.size.toLocaleString()} bytes`

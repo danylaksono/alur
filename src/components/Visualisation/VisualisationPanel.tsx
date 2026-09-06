@@ -108,7 +108,7 @@ const DistributionPreview = ({
               title={`Filter ${field} by ${bin.label}: ${formatCount(bin.count)}`}
             />
             <span
-              className="w-full truncate text-center text-[10px] text-slate-400"
+              className="w-full truncate text-center text-[11px] text-slate-500"
               title={bin.label}
             >
               {bin.label}
@@ -156,7 +156,7 @@ const DistributionPreview = ({
               />
             </div>
           </div>
-          <span className="text-right font-bold text-slate-400">
+          <span className="text-right font-bold text-slate-500">
             {formatCount(category.count)}
           </span>
         </button>
@@ -830,7 +830,7 @@ export const VisualisationPanel = ({
         ) : (
           <div className="space-y-3">
             <div>
-              <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+              <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                 Layer
               </div>
               <div className="truncate text-[11px] font-bold text-slate-700">
@@ -840,7 +840,7 @@ export const VisualisationPanel = ({
 
             <div className="grid grid-cols-2 gap-2">
               <label className="space-y-1">
-                <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                   Type
                 </span>
                 <select
@@ -880,7 +880,7 @@ export const VisualisationPanel = ({
                 </select>
               </label>
               <label className="space-y-1">
-                <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                   {kind === "bivariate" ? "Field X" : "Field"}
                 </span>
                 <select
@@ -905,7 +905,7 @@ export const VisualisationPanel = ({
               <div className="grid grid-cols-3 gap-2">
                 {kind === "choropleth" && (
                   <label className="space-y-1">
-                    <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                       Method
                     </span>
                     <select
@@ -922,7 +922,7 @@ export const VisualisationPanel = ({
                 )}
                 {(kind === "choropleth" || kind === "extrusion") && (
                   <label className="space-y-1">
-                    <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                       Classes
                     </span>
                     <input
@@ -939,7 +939,7 @@ export const VisualisationPanel = ({
                 )}
                 {kind === "extrusion" && (
                   <label className="space-y-1">
-                    <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                       Height ×
                     </span>
                     <input
@@ -956,7 +956,7 @@ export const VisualisationPanel = ({
                 )}
                 {kind === "hexbin" && (
                   <label className="space-y-1">
-                    <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                       Cell size
                     </span>
                     <select
@@ -977,7 +977,7 @@ export const VisualisationPanel = ({
                 )}
                 {kind === "hexbin" && (
                   <label className="space-y-1">
-                    <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                       Aggregate
                     </span>
                     <select
@@ -1006,7 +1006,7 @@ export const VisualisationPanel = ({
                 )}
                 {kind === "h3grid" && h3Extruded && (
                   <label className="space-y-1">
-                    <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                       Height ×
                     </span>
                     <input
@@ -1022,7 +1022,7 @@ export const VisualisationPanel = ({
                   </label>
                 )}
                 <label className="space-y-1">
-                  <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                     Palette
                   </span>
                   <select
@@ -1041,7 +1041,7 @@ export const VisualisationPanel = ({
             )}
 
             {kind === "h3grid" && (
-              <p className="text-[10px] leading-tight text-slate-500">
+              <p className="text-[11px] leading-tight text-slate-500">
                 Drawn by deck.gl on its own canvas — analysis-only, not part of
                 the exported map style.
               </p>
@@ -1051,7 +1051,7 @@ export const VisualisationPanel = ({
               <div className="space-y-2">
                 <div className="grid grid-cols-3 gap-2">
                   <label className="space-y-1">
-                    <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                       Shape
                     </span>
                     <select
@@ -1066,7 +1066,7 @@ export const VisualisationPanel = ({
                     </select>
                   </label>
                   <label className="space-y-1">
-                    <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                       Glyph
                     </span>
                     <select
@@ -1085,7 +1085,7 @@ export const VisualisationPanel = ({
                     </select>
                   </label>
                   <label className="space-y-1">
-                    <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                       Cell {glyphCellSize}px
                     </span>
                     <input
@@ -1105,7 +1105,7 @@ export const VisualisationPanel = ({
                 {(glyphType === "density" || glyphType === "circle") && (
                   <div className="grid grid-cols-2 gap-2">
                     <label className="space-y-1">
-                      <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                      <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                         Aggregate
                       </span>
                       <select
@@ -1124,7 +1124,7 @@ export const VisualisationPanel = ({
                     </label>
                     {glyphType === "density" && (
                       <label className="space-y-1">
-                        <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                        <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                           Palette
                         </span>
                         <select
@@ -1145,7 +1145,7 @@ export const VisualisationPanel = ({
 
                 {["pie", "donut", "bars", "radial"].includes(glyphType) && (
                   <div className="space-y-1">
-                    <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                       Glyph fields ({glyphFields.length}/6)
                     </span>
                     <div className="max-h-40 space-y-0.5 overflow-y-auto rounded-md border border-slate-200 bg-white p-1.5">
@@ -1189,7 +1189,7 @@ export const VisualisationPanel = ({
                   </div>
                 )}
 
-                <p className="text-[11px] leading-relaxed text-slate-400">
+                <p className="text-[11px] leading-relaxed text-slate-500">
                   Screen-space glyphs re-aggregate as you pan and zoom. Click a
                   cell to select its features. Not included in map style
                   exports.
@@ -1200,7 +1200,7 @@ export const VisualisationPanel = ({
             {kind === "bivariate" && (
               <div className="grid grid-cols-[1fr_1fr_auto] items-end gap-2">
                 <label className="space-y-1">
-                  <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                     Field Y
                   </span>
                   <select
@@ -1219,7 +1219,7 @@ export const VisualisationPanel = ({
                   </select>
                 </label>
                 <label className="space-y-1">
-                  <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                     Palette
                   </span>
                   <select
@@ -1330,7 +1330,7 @@ export const VisualisationPanel = ({
             {/* Which grid produced the cells changes what the counts mean, so
                 it is stated rather than left to be inferred from the shapes. */}
             {kind === "hexbin" && hexbinMethod && (
-              <p className="text-[10px] leading-4 text-slate-500">
+              <p className="text-[11px] leading-4 text-slate-500">
                 {hexbinMethod.method === "h3"
                   ? `Equal-area H3 cells at resolution ${hexbinMethod.resolution}${
                       hexbinMethod.cellEdgeMetres
@@ -1349,7 +1349,7 @@ export const VisualisationPanel = ({
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2">
                 <div className="grid grid-cols-2 gap-2">
                   <label className="space-y-1">
-                    <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                       Dot value
                     </span>
                     <input
@@ -1380,7 +1380,7 @@ export const VisualisationPanel = ({
                     />
                   </label>
                   <label className="space-y-1">
-                    <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                       Radius
                     </span>
                     <input
@@ -1477,7 +1477,7 @@ export const VisualisationPanel = ({
             {geometryKind === "point" && (
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                     Point Clustering
                   </span>
                   <label className="flex items-center gap-1.5 cursor-pointer">
@@ -1501,7 +1501,7 @@ export const VisualisationPanel = ({
                 {typeof selectedLayer?.clusterRadius === "number" && (
                   <div className="grid grid-cols-2 gap-2">
                     <label className="space-y-1">
-                      <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                      <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                         Radius
                       </span>
                       <input
@@ -1519,7 +1519,7 @@ export const VisualisationPanel = ({
                       />
                     </label>
                     <label className="space-y-1">
-                      <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                      <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                         Max Zoom
                       </span>
                       <input
@@ -1550,7 +1550,7 @@ export const VisualisationPanel = ({
                     : "border-amber-200 bg-amber-50",
                 )}
               >
-                <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                   <BarChart3 className="h-3.5 w-3.5" />
                   Distribution
                 </div>
@@ -1586,7 +1586,7 @@ export const VisualisationPanel = ({
             {/* Only offered when the layer actually has date/time-like fields. */}
             {temporalCandidates.length > 0 && (
               <div className="rounded-lg border border-slate-200 bg-white p-3">
-                <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                   Temporal Filter
                 </div>
                 <select

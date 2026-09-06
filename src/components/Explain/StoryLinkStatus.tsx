@@ -27,11 +27,11 @@ export const StoryLinkStatus = ({ state, onDismiss }: { state: StoryLinkState; o
           <h2 id="story-link-error" className="flex items-center gap-2 text-sm font-bold text-slate-800">
             <AlertTriangle className="h-4 w-4 text-amber-500" /> This story link could not be opened
           </h2>
-          <button type="button" onClick={onDismiss} className="pressable rounded-md p-1.5 text-slate-400 hover:bg-slate-100" aria-label="Dismiss"><X className="h-4 w-4" /></button>
+          <button type="button" onClick={onDismiss} className="pressable rounded-md p-1.5 text-slate-500 hover:bg-slate-100" aria-label="Dismiss"><X className="h-4 w-4" /></button>
         </div>
         <div className="space-y-3 px-5 py-4">
           <p className="text-xs leading-5 text-slate-700">{state.message}</p>
-          <p className="break-all rounded-lg bg-slate-50 px-3 py-2 font-mono text-[10px] text-slate-600">{state.url}</p>
+          <p className="break-all rounded-lg bg-slate-50 px-3 py-2 font-mono text-[11px] text-slate-600">{state.url}</p>
           <p className="text-[11px] leading-5 text-slate-600">
             The file must be reachable over HTTP(S) and its host must allow browser access from this site.
             Ask whoever shared it to check the link, or open the downloaded story file directly.

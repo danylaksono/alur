@@ -128,7 +128,7 @@ export const RemoteSourceDialog = ({ nodeId, onClose }: { nodeId?: string; onClo
             <Cloud className="h-4 w-4 text-blue-600" />
             Read remote data
           </h2>
-          <button type="button" onClick={onClose} className="pressable rounded p-1 text-slate-400 hover:bg-slate-100" aria-label="Close">
+          <button type="button" onClick={onClose} className="pressable rounded p-1 text-slate-500 hover:bg-slate-100" aria-label="Close">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -157,7 +157,7 @@ export const RemoteSourceDialog = ({ nodeId, onClose }: { nodeId?: string; onClo
                 {inspecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Inspect'}
               </button>
             </div>
-            <p className="mt-1 text-[10px] leading-4 text-slate-400">
+            <p className="mt-1 text-[11px] leading-4 text-slate-500">
               The file stays where it is. Only the parts you ask for are fetched, so the host must allow
               cross-origin reads and honour range requests.
             </p>
@@ -176,10 +176,10 @@ export const RemoteSourceDialog = ({ nodeId, onClose }: { nodeId?: string; onClo
                   >
                     <span className="flex items-baseline justify-between gap-2">
                       <span className="truncate text-xs font-semibold text-foreground">{entry.name}</span>
-                      <span className="shrink-0 text-[10px] text-slate-400">{formatBytes(entry.byteSize)}</span>
+                      <span className="shrink-0 text-[11px] text-slate-500">{formatBytes(entry.byteSize)}</span>
                     </span>
                     <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">{entry.description}</span>
-                    <span className="mt-0.5 block truncate text-[10px] text-slate-400">{entry.publisher}</span>
+                    <span className="mt-0.5 block truncate text-[11px] text-slate-500">{entry.publisher}</span>
                   </button>
                 ))}
               </div>
@@ -201,7 +201,7 @@ export const RemoteSourceDialog = ({ nodeId, onClose }: { nodeId?: string; onClo
                   {inspection.rowCount !== null && ` · ${inspection.rowCount.toLocaleString()} rows`}
                   {` · ${inspection.fields.length} columns`}
                 </p>
-                <p className="mt-1 text-[10px]">
+                <p className="mt-1 text-[11px]">
                   {inspection.bboxPushdown
                     ? 'Has a bbox column, so an area filter skips row groups without reading them.'
                     : 'No bbox column, so an area filter still reads every row — a row limit is the cheaper guard.'}
@@ -214,8 +214,8 @@ export const RemoteSourceDialog = ({ nodeId, onClose }: { nodeId?: string; onClo
                   <span className="mb-1 block text-[11px] font-semibold text-slate-600">Area</span>
                   {bbox ? (
                     <div className="rounded-lg border border-blue-200 bg-blue-50 px-2 py-1.5">
-                      <p className="font-mono text-[10px] leading-4 text-blue-900">{roundedBbox(bbox)}</p>
-                      <button type="button" onClick={() => setBbox(null)} className="pressable mt-1 text-[10px] font-semibold text-blue-700 hover:underline">
+                      <p className="font-mono text-[11px] leading-4 text-blue-900">{roundedBbox(bbox)}</p>
+                      <button type="button" onClick={() => setBbox(null)} className="pressable mt-1 text-[11px] font-semibold text-blue-700 hover:underline">
                         Clear
                       </button>
                     </div>
@@ -252,7 +252,7 @@ export const RemoteSourceDialog = ({ nodeId, onClose }: { nodeId?: string; onClo
               <div>
                 <div className="mb-1 flex items-center justify-between">
                   <span className="text-[11px] font-semibold text-slate-600">Columns</span>
-                  <span className="text-[10px] text-slate-400">
+                  <span className="text-[11px] text-slate-500">
                     {selectedColumns.length ? `${selectedColumns.length} selected` : 'All columns'}
                   </span>
                 </div>
@@ -264,7 +264,7 @@ export const RemoteSourceDialog = ({ nodeId, onClose }: { nodeId?: string; onClo
                       onClick={() => toggleColumn(field.name)}
                       title={field.type}
                       className={cn(
-                        'pressable rounded px-1.5 py-0.5 font-mono text-[10px] transition-colors',
+                        'pressable rounded px-1.5 py-0.5 font-mono text-[11px] transition-colors',
                         selectedColumns.includes(field.name)
                           ? 'bg-blue-600 text-white'
                           : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
@@ -274,7 +274,7 @@ export const RemoteSourceDialog = ({ nodeId, onClose }: { nodeId?: string; onClo
                     </button>
                   ))}
                 </div>
-                <p className="mt-1 text-[10px] leading-4 text-slate-400">
+                <p className="mt-1 text-[11px] leading-4 text-slate-500">
                   Picking columns is the cheapest saving there is — Parquet stores them separately, so the
                   ones you leave out are never fetched. Geometry is always kept.
                 </p>

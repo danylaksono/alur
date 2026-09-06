@@ -48,7 +48,7 @@ export const ScenarioBar = () => {
         // Switching is the whole point of the bar and happens constantly, so it
         // is a colour change and a press, never a movement.
         className={cn(
-          'pressable flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[10px] transition-colors duration-hover',
+          'pressable flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] transition-colors duration-hover',
           !activeVariantId
             ? 'border-slate-900 bg-slate-900 font-bold text-white'
             : 'border-slate-200 text-slate-600 hover:bg-slate-50',
@@ -68,7 +68,7 @@ export const ScenarioBar = () => {
             aria-pressed={isActive}
             title={ready ? `${variant.name} — result ready` : `${variant.name} — not run`}
             className={cn(
-              'pressable flex max-w-[14rem] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[10px] transition-colors duration-hover',
+              'pressable flex max-w-[14rem] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] transition-colors duration-hover',
               isActive
                 ? 'border-slate-900 bg-slate-900 font-bold text-white'
                 : 'border-slate-200 text-slate-600 hover:bg-slate-50',
@@ -93,7 +93,7 @@ export const ScenarioBar = () => {
         onClick={() => (active ? branchVariant(active.id) : navigate('scenarios'))}
         title={active ? `Branch ${active.name}` : 'Open scenarios'}
         aria-label={active ? `Branch ${active.name}` : 'Open scenarios'}
-        className="pressable flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-dashed border-slate-300 px-2.5 py-1 text-[10px] text-slate-400 transition-colors duration-hover hover:border-slate-400 hover:text-slate-600"
+        className="pressable flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-dashed border-slate-300 px-2.5 py-1 text-[11px] text-slate-500 transition-colors duration-hover hover:border-slate-400 hover:text-slate-600"
       >
         <GitBranch className="h-3 w-3" /> Branch
       </button>
@@ -101,7 +101,7 @@ export const ScenarioBar = () => {
       {/* A scenario with no result shows the baseline, and saying so is better
           than letting the analyst read baseline numbers as this scenario's. */}
       {active && !active.workflowOutputDatasetId && (
-        <span className="ml-auto shrink-0 whitespace-nowrap rounded-full bg-amber-50 px-2 py-1 text-[9px] font-semibold text-amber-700">
+        <span className="ml-auto shrink-0 whitespace-nowrap rounded-full bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-700">
           Not run — showing baseline
         </span>
       )}
