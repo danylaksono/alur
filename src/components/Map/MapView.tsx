@@ -288,6 +288,7 @@ export const MapView = () => {
   const lensOverlay = useRef<{
     setCenter: (c: [number, number]) => void;
     update: (patch: Record<string, unknown>) => void;
+    state: () => { center: [number, number]; radius?: number; bins?: unknown };
     destroy: () => void;
   } | null>(null);
   const lensFields = useMemo(() => {
@@ -336,6 +337,7 @@ export const MapView = () => {
   const lensDataGroup = useRef<string | null>(null);
   /** What the placed lens is not showing: dropped categories, and sampling. */
   const [lensCaveats, setLensCaveats] = useState({ categories: 0, categoryTotal: 0, sampled: false });
+  const [lensPlaced, setLensPlaced] = useState(false);
   /**
    * True while a tool is reading map clicks for itself.
    *
@@ -1290,6 +1292,7 @@ export const MapView = () => {
       lensOverlay.current = null;
       lensData.current = null;
       lensDataGroup.current = null;
+      setLensPlaced(false);
     };
 
     const canvas = m.getCanvas();
@@ -1348,6 +1351,7 @@ export const MapView = () => {
           m,
           lensOptionsFor(centre, metresPerPixel, data, lensConfigRef.current),
         );
+        setLensPlaced(true);
       } catch (error) {
         addToast({
           type: "error",
@@ -2043,6 +2047,22 @@ export const MapView = () => {
           sampled={lensCaveats.sampled}
           onChange={(patch) => setLensConfig((current) => ({ ...current, ...patch }))}
           onClose={() => setLensMode(false)}
+          onPin={
+            lensPlaced
+              ? () => {
+                  const reading = lensOverlay.current?.state();
+                  const layer = activeLensLayer(mapLayers, selectedLayerId);
+                  if (!reading || !layer) return;
+                  void import("../../services/explainCapture").then(({ pinLensEvidence }) =>
+                    pinLensEvidence(layer, lensConfig, reading, {
+                      categoryCount: lensCaveats.categories,
+                      categoryTotal: lensCaveats.categoryTotal,
+                      sampled: lensCaveats.sampled,
+                    }),
+                  );
+                }
+              : undefined
+          }
         />
       )}
       {selectionBox && (

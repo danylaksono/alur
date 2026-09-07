@@ -1,7 +1,15 @@
-import { useStore } from '../store/useStore';
+import { useStore, type MapLayer } from '../store/useStore';
 import type { MapEvidenceCapture } from '../types/story';
 import type { ExplainCard } from '../types/visualAnalytics';
 import { captureMapSnapshot } from './mapRegistry';
+import {
+  lensAssumptions,
+  lensCaveats,
+  lensEvidenceRows,
+  lensEvidenceTitle,
+  type LensConfig,
+  type LensCoverage,
+} from './lensService';
 
 /**
  * Pins the current map view to the explanation.
@@ -56,4 +64,49 @@ export const pinMapEvidence = async (): Promise<boolean> => {
       : 'Pinned the current map view to your explanation.',
   });
   return !snapshot.failureReason;
+};
+
+/**
+ * Pins what a lens is reading to the explanation.
+ *
+ * Pinned as a table, not a picture: the numbers on the bars are the finding,
+ * and a frozen table already renders in the report and in a shared story, so
+ * the reading survives being sent to someone else. The caveats travel with it
+ * — a warning the analyst saw on screen but the reader of the report does not
+ * is worse than no warning at all.
+ */
+export const pinLensEvidence = (
+  layer: MapLayer,
+  config: LensConfig,
+  reading: { center: [number, number]; radius?: number; bins?: unknown },
+  coverage: LensCoverage,
+): boolean => {
+  const state = useStore.getState();
+  const rows = lensEvidenceRows(reading.bins, config);
+  if (!rows.length) {
+    state.addToast({ type: 'warning', message: 'The lens has nothing under it to pin.' });
+    return false;
+  }
+
+  const filters = state.visualAnalytics.datasets[layer.id]?.filters || [];
+  state.addExplainCard({
+    id: `explain-lens-${Date.now()}`,
+    sectionId: 'evidence',
+    kind: 'table',
+    title: lensEvidenceTitle(config, layer.name),
+    width: 6,
+    height: 'standard',
+    behaviour: 'frozen',
+    frozenValues: rows,
+    provenance: {
+      capturedAt: Date.now(),
+      datasetIds: [layer.id],
+      sourceVersions: { [layer.id]: state.datasetRegistry[layer.id]?.sourceUpdatedAt },
+      filtersByDataset: filters.length ? { [layer.id]: filters } : {},
+      caveats: lensCaveats(config, coverage),
+      assumptions: lensAssumptions(config, reading.center, reading.radius),
+    },
+  });
+  state.addToast({ type: 'success', message: 'Pinned this lens reading to your explanation.' });
+  return true;
 };

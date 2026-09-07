@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_LENS_CONFIG,
   lensReadsAbsoluteMagnitude,
+  lensAssumptions,
+  lensCaveats,
+  lensEvidenceRows,
+  lensEvidenceTitle,
   activeLensLayer,
   lensBinningFor,
   lensPlacementFor,
@@ -111,6 +115,75 @@ describe('lensReadsAbsoluteMagnitude', () => {
     expect(
       lensReadsAbsoluteMagnitude(config({ field: 'alpha', statistic: 'mean', normalisation: 'density' })),
     ).toBe(false);
+  });
+});
+
+describe('lensEvidenceRows', () => {
+  const bins = [
+    { key: 'b0', label: 'N', value: 0.25, raw: 500, count: 40 },
+    { key: 'b1', label: 'NE', value: 0.75, raw: 1500, count: 60 },
+  ];
+
+  // Both renderers derive their columns from Object.keys(rows[0]), so a row
+  // shape that varies within one capture would silently drop columns.
+  it('gives every row the same columns', () => {
+    const rows = lensEvidenceRows(bins, config({ normalisation: 'share' }));
+    expect(rows.map((row) => Object.keys(row))).toEqual([
+      ['Bar', 'Value', 'Raw', 'Points'],
+      ['Bar', 'Value', 'Raw', 'Points'],
+    ]);
+  });
+
+  it('drops the raw column when it would just repeat the value', () => {
+    expect(Object.keys(lensEvidenceRows(bins, config())[0])).toEqual(['Bar', 'Value', 'Points']);
+  });
+
+  it('rounds for reading: three significant figures, whole once large', () => {
+    const rows = lensEvidenceRows(
+      [{ label: 'N', value: 0.123456, raw: 1234.56, count: 3 }],
+      config({ normalisation: 'share' }),
+    );
+    expect(rows[0]).toEqual({ Bar: 'N', Value: 0.123, Raw: 1235, Points: 3 });
+  });
+
+  // The bins come from a vendored library that types them as unknown.
+  it('survives anything that is not a list of bins', () => {
+    for (const junk of [undefined, null, 'bins', 42, [null, 'x']]) {
+      expect(lensEvidenceRows(junk, config())).toEqual([]);
+    }
+  });
+});
+
+describe('lensEvidenceTitle and lensAssumptions', () => {
+  it('says what was read, not merely that a lens was used', () => {
+    expect(lensEvidenceTitle(config({ field: 'height', statistic: 'mean', groupField: 'class' }), 'buildings')).toBe(
+      'Lens — mean height by class · buildings',
+    );
+    expect(lensEvidenceTitle(config({ normalisation: 'lq' }), 'shops')).toContain('points by compass sector');
+  });
+
+  it('records the settings that produced the numbers', () => {
+    const lines = lensAssumptions(config({ field: 'height', groupField: 'class' }), [-0.1276, 51.5072], 6543.21);
+    expect(lines[0]).toBe('Lens centred on 51.50720, -0.12760 with a 6543 m radius.');
+    expect(lines[1]).toContain('categories of class');
+    expect(lines[2]).toContain('total of height');
+  });
+
+  // A corridor lens is bounded by a width along a path and has no radius.
+  it('omits the radius when the selection has none', () => {
+    expect(lensAssumptions(config(), [0, 0], undefined)[0]).toBe('Lens centred on 0.00000, 0.00000.');
+  });
+});
+
+describe('lensCaveats', () => {
+  it('is silent when the reading is complete', () => {
+    expect(lensCaveats(config(), { categoryCount: 0, categoryTotal: 0, sampled: false })).toEqual([]);
+  });
+
+  it('names dropped categories only when grouping', () => {
+    const coverage = { categoryCount: 12, categoryTotal: 26, sampled: false };
+    expect(lensCaveats(config({ groupField: 'class' }), coverage)[0]).toContain('14 rarer categories');
+    expect(lensCaveats(config(), coverage)).toEqual([]);
   });
 });
 

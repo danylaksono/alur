@@ -1,6 +1,6 @@
-import { Aperture, X } from 'lucide-react';
+import { Aperture, Pin, X } from 'lucide-react';
 import { cn } from '../../utils/cn';
-import { lensReadsAbsoluteMagnitude, type LensConfig } from '../../services/lensService';
+import { lensCaveats, type LensConfig } from '../../services/lensService';
 
 /**
  * The lens's own controls.
@@ -63,6 +63,7 @@ export const LensPanel = ({
   sampled,
   onChange,
   onClose,
+  onPin,
 }: {
   config: LensConfig;
   /** Numeric fields on the layer the lens reads. */
@@ -77,9 +78,10 @@ export const LensPanel = ({
   sampled: boolean;
   onChange: (patch: Partial<LensConfig>) => void;
   onClose: () => void;
+  /** Absent until a lens is actually placed: there is nothing to pin before that. */
+  onPin?: () => void;
 }) => {
   const grouped = Boolean(config.groupField);
-  const dropped = grouped ? Math.max(0, categoryTotal - categoryCount) : 0;
   return (
     <aside
       className="pointer-events-auto absolute left-3 top-[3.75rem] z-10 w-60 space-y-2.5 rounded-lg border border-violet-200 bg-white/95 p-3 shadow-lg backdrop-blur"
@@ -191,21 +193,27 @@ export const LensPanel = ({
               : 'One bar per compass sector: which way it lies from here.'}
         </p>
 
-        {/* The two ways these bars can be telling less than the whole truth.
-            Both are stated where the numbers are read, not in a tooltip. */}
-        {dropped > 0 && (
-          <p className="text-amber-700">
-            {dropped} rarer {dropped === 1 ? 'category is' : 'categories are'} not shown, so the
-            bars are not the whole composition.
+        {/* The ways these bars tell less than the whole truth, stated where the
+            numbers are read. Taken from the same source the pinned card uses,
+            so a reader of the report is told exactly what the analyst was. */}
+        {lensCaveats(config, { categoryCount, categoryTotal, sampled }).map((caveat) => (
+          <p key={caveat} className="text-amber-700">
+            {caveat}
           </p>
-        )}
-        {sampled && lensReadsAbsoluteMagnitude(config) && (
-          <p className="text-amber-700">
-            Read from a sample of a large layer, so these are sample figures. Share and
-            &ldquo;unusual for around here&rdquo; are unaffected, and so is a mean.
-          </p>
-        )}
+        ))}
       </div>
+
+      {onPin && (
+        <button
+          type="button"
+          onClick={onPin}
+          className="pressable flex h-8 w-full items-center justify-center gap-1.5 rounded-md border border-violet-200 bg-violet-50 text-[11px] font-bold text-violet-800 hover:bg-violet-100"
+          title="Pin these numbers, and what they leave out, to your report"
+        >
+          <Pin className="h-3.5 w-3.5" aria-hidden="true" />
+          Pin this reading
+        </button>
+      )}
     </aside>
   );
 };

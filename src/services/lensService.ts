@@ -141,6 +141,113 @@ export const lensReadsAbsoluteMagnitude = (config: LensConfig) =>
   (config.normalisation === 'count' || config.normalisation === 'density') &&
   (config.field === null || config.statistic === 'total');
 
+/** What the placed lens could not tell you in full. */
+export type LensCoverage = { categoryCount: number; categoryTotal: number; sampled: boolean };
+
+/**
+ * The ways this reading is partial, in words.
+ *
+ * One source for both the panel and the pinned evidence. A caveat that shows
+ * on screen but not on the card it was pinned to is worse than no caveat: the
+ * reader of the report never sees the thing the analyst was told.
+ */
+export const lensCaveats = (config: LensConfig, coverage: LensCoverage): string[] => {
+  const out: string[] = [];
+  const dropped = config.groupField
+    ? Math.max(0, coverage.categoryTotal - coverage.categoryCount)
+    : 0;
+  if (dropped > 0) {
+    out.push(
+      `${dropped} rarer ${dropped === 1 ? 'category is' : 'categories are'} not shown, so the bars are not the whole composition.`,
+    );
+  }
+  if (coverage.sampled && lensReadsAbsoluteMagnitude(config)) {
+    out.push(
+      'Read from a sample of a large layer, so these are sample figures. Share and “unusual for around here” are unaffected, and so is a mean.',
+    );
+  }
+  return out;
+};
+
+const NORMALISATION_WORDS: Record<LensConfig['normalisation'], string> = {
+  count: 'raw',
+  share: 'share of the lens',
+  density: 'per km²',
+  lq: 'location quotient against the surrounding ring',
+};
+
+/** A title that says what was read, not merely that a lens was used. */
+export const lensEvidenceTitle = (config: LensConfig, layerName: string) => {
+  const what = config.field ? `${config.statistic} ${config.field}` : 'points';
+  const how = config.groupField ? `by ${config.groupField}` : 'by compass sector';
+  const as = config.normalisation === 'count' ? '' : `, as ${NORMALISATION_WORDS[config.normalisation]}`;
+  return `Lens — ${what} ${how}${as} · ${layerName}`.slice(0, 90);
+};
+
+/** The settings that produced these numbers, for the card's assumptions. */
+export const lensAssumptions = (
+  config: LensConfig,
+  centre: [number, number],
+  // Optional because not every selection shape has one — a corridor lens is
+  // bounded by a width along a path, not a radius.
+  radiusMetres: number | undefined,
+) => [
+  `Lens centred on ${centre[1].toFixed(5)}, ${centre[0].toFixed(5)}${
+    radiusMetres ? ` with a ${Math.round(radiusMetres)} m radius` : ''
+  }.`,
+  `Bars are ${config.groupField ? `categories of ${config.groupField}` : `${ANGULAR_BINS} compass sectors`}.`,
+  config.field
+    ? `Each bar is the ${config.statistic} of ${config.field} over the points inside it.`
+    : 'Each bar counts the points inside it.',
+  `Shown as ${NORMALISATION_WORDS[config.normalisation]}.`,
+];
+
+/** Rounded for a table: three significant figures, whole numbers once large. */
+const readable = (value: unknown) => {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return 0;
+  return Math.abs(number) >= 100 ? Math.round(number) : Number(number.toPrecision(3));
+};
+
+/**
+ * One bar, as glyphlens reports it.
+ *
+ * Narrowed rather than trusted: this crosses the boundary from a vendored
+ * library whose README says the API will move, and the declaration types
+ *  as unknown for that reason.
+ */
+/**
+ * One bar, as glyphlens reports it.
+ *
+ * Narrowed rather than trusted: this crosses the boundary from a vendored
+ * library whose README says the API will move, and whose declaration types
+ * the bins as unknown for exactly that reason.
+ */
+export type LensBin = { key?: string; label?: string; value?: number; raw?: number; count?: number };
+
+const asBins = (bins: unknown): LensBin[] =>
+  Array.isArray(bins)
+    ? bins.filter((bin): bin is LensBin => Boolean(bin) && typeof bin === 'object')
+    : [];
+
+/**
+ * A lens reading as table rows, one per bar.
+ *
+ * A table rather than a picture because the numbers are the finding — and
+ * because a frozen table already renders in both the report and a shared
+ * story, so a pinned lens survives being sent to someone else.
+ *
+ * `raw` is carried alongside the drawn value whenever normalisation has moved
+ * them apart, so a reader can see the count behind a share.
+ */
+export const lensEvidenceRows = (bins: unknown, config: LensConfig) =>
+  asBins(bins).map((bin) => ({
+    Bar: bin.label ?? bin.key ?? '',
+    Value: readable(bin.value),
+    ...(config.normalisation === 'count' ? {} : { Raw: readable(bin.raw) }),
+    Points: Number(bin.count ?? 0),
+  }));
+
 /**
  * The layer's points, carrying every field a lens can read.
  *
