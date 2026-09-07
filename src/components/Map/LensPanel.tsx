@@ -1,6 +1,6 @@
 import { Aperture, X } from 'lucide-react';
 import { cn } from '../../utils/cn';
-import type { LensConfig } from '../../services/lensService';
+import { lensReadsAbsoluteMagnitude, type LensConfig } from '../../services/lensService';
 
 /**
  * The lens's own controls.
@@ -59,6 +59,8 @@ export const LensPanel = ({
   fields,
   groupFields,
   categoryCount,
+  categoryTotal,
+  sampled,
   onChange,
   onClose,
 }: {
@@ -67,12 +69,17 @@ export const LensPanel = ({
   fields: string[];
   /** Text fields it can group by. */
   groupFields: string[];
-  /** Categories actually found, once a lens has been placed. */
+  /** Categories drawn, once a lens has been placed. */
   categoryCount: number;
+  /** Categories the grouping field actually has, drawn or not. */
+  categoryTotal: number;
+  /** Whether the extraction read a sample rather than the whole layer. */
+  sampled: boolean;
   onChange: (patch: Partial<LensConfig>) => void;
   onClose: () => void;
 }) => {
   const grouped = Boolean(config.groupField);
+  const dropped = grouped ? Math.max(0, categoryTotal - categoryCount) : 0;
   return (
     <aside
       className="pointer-events-auto absolute left-3 top-[3.75rem] z-10 w-60 space-y-2.5 rounded-lg border border-violet-200 bg-white/95 p-3 shadow-lg backdrop-blur"
@@ -175,13 +182,30 @@ export const LensPanel = ({
         </label>
       )}
 
-      <p className="border-t border-slate-100 pt-2 text-[10px] leading-snug text-slate-500">
-        {config.normalisation === 'lq'
-          ? 'Against the ring of points just outside the lens. Above 1 means this neighbourhood has more than its surroundings do.'
-          : grouped
-            ? `${categoryCount || 'No'} ${categoryCount === 1 ? 'category' : 'categories'} in view${categoryCount ? ', most common first' : ''}.`
-            : 'One bar per compass sector: which way it lies from here.'}
-      </p>
+      <div className="space-y-1.5 border-t border-slate-100 pt-2 text-[10px] leading-snug text-slate-500">
+        <p>
+          {config.normalisation === 'lq'
+            ? 'Against the ring of points just outside the lens. Above 1 means this neighbourhood has more than its surroundings do.'
+            : grouped
+              ? `${categoryCount || 'No'} ${categoryCount === 1 ? 'category' : 'categories'} drawn${categoryCount ? ', most common first' : ''}.`
+              : 'One bar per compass sector: which way it lies from here.'}
+        </p>
+
+        {/* The two ways these bars can be telling less than the whole truth.
+            Both are stated where the numbers are read, not in a tooltip. */}
+        {dropped > 0 && (
+          <p className="text-amber-700">
+            {dropped} rarer {dropped === 1 ? 'category is' : 'categories are'} not shown, so the
+            bars are not the whole composition.
+          </p>
+        )}
+        {sampled && lensReadsAbsoluteMagnitude(config) && (
+          <p className="text-amber-700">
+            Read from a sample of a large layer, so these are sample figures. Share and
+            &ldquo;unusual for around here&rdquo; are unaffected, and so is a mean.
+          </p>
+        )}
+      </div>
     </aside>
   );
 };

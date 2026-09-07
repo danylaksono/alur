@@ -1,6 +1,6 @@
 import type { MapLayer } from '../store/useStore';
 import type { VisualFilter } from '../types/visualAnalytics';
-import { queryLayerGlyphPoints } from './glyphGridService';
+import { GLYPH_MAX_POINTS, queryLayerGlyphPoints } from './glyphGridService';
 import { metadataForLayer } from '../utils/datasetMetadata';
 
 /**
@@ -33,6 +33,10 @@ export type LensPoints = {
   fields: string[];
   /** Distinct values of the grouping field, most common first. Empty if none. */
   categories: string[];
+  /** How many distinct values there were before the readable ones were kept. */
+  categoryTotal: number;
+  /** True when the extraction hit its cap and read a sample of the layer. */
+  sampled: boolean;
 };
 
 /**
@@ -105,17 +109,37 @@ export const lensGroupFieldsForLayer = (layer: MapLayer): string[] =>
  */
 const MAX_CATEGORIES = 12;
 
-const topCategories = (points: LensPoint[]): string[] => {
+const topCategories = (points: LensPoint[]) => {
   const counts = new Map<string, number>();
   for (const point of points) {
     if (!point.category) continue;
     counts.set(point.category, (counts.get(point.category) ?? 0) + 1);
   }
-  return [...counts.entries()]
+  const kept = [...counts.entries()]
     .sort((a, b) => b[1] - a[1])
     .slice(0, MAX_CATEGORIES)
     .map(([value]) => value);
+  // The total is reported, not just the kept ones: "8 categories" reads as all
+  // of them when it may be 8 of 40, and a necklace missing three quarters of
+  // its composition is a different picture from a complete one.
+  return { kept, total: counts.size };
 };
+
+/**
+ * Whether the numbers on the bars are population figures or sample ones.
+ *
+ * Only absolute magnitudes are affected. A share and a location quotient are
+ * ratios, so a uniform sample cancels out of both; a mean is an unbiased
+ * estimate of the population mean whatever fraction was read. A count, a total
+ * and a per-km² density are none of those things — read a tenth of the rows and
+ * they come out roughly a tenth of the size.
+ *
+ * Worth being exact about rather than warning on everything: a caveat attached
+ * to readings that are actually fine teaches people to ignore it.
+ */
+export const lensReadsAbsoluteMagnitude = (config: LensConfig) =>
+  (config.normalisation === 'count' || config.normalisation === 'density') &&
+  (config.field === null || config.statistic === 'total');
 
 /**
  * The layer's points, carrying every field a lens can read.
@@ -159,7 +183,18 @@ export const lensPointsForLayer = async (
     values: p.values,
     ...(p.category === undefined ? {} : { category: p.category }),
   }));
-  return { points: lensPoints, fields, categories: topCategories(lensPoints) };
+  const categories = topCategories(lensPoints);
+  return {
+    points: lensPoints,
+    fields,
+    categories: categories.kept,
+    categoryTotal: categories.total,
+    // The extraction reservoir-samples exactly the cap once the layer exceeds
+    // it, so coming back full is the signal. A layer of exactly this many rows
+    // is reported as sampled when it was not — over-disclosure by one row, and
+    // the alternative is a second count query on every lens.
+    sampled: lensPoints.length >= GLYPH_MAX_POINTS,
+  };
 };
 
 /**

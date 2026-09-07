@@ -16,7 +16,14 @@ export type GlyphPoint = {
   category?: string;
 };
 
-const GLYPH_MAX_POINTS = 60000;
+/**
+ * Rows an extraction will read before it starts sampling.
+ *
+ * Exported because a caller that reports absolute numbers has to say when they
+ * came from a sample: a glyph cell's colour survives sampling, but a lens that
+ * prints "3.4k" does not.
+ */
+export const GLYPH_MAX_POINTS = 60000;
 
 const normalizeRows = (rows: any[]) =>
   rows.map((row) => (typeof row?.toJSON === 'function' ? row.toJSON() : row));

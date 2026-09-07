@@ -334,7 +334,8 @@ export const MapView = () => {
    * glyphlens would animate into it.
    */
   const lensDataGroup = useRef<string | null>(null);
-  const [lensCategories, setLensCategories] = useState(0);
+  /** What the placed lens is not showing: dropped categories, and sampling. */
+  const [lensCaveats, setLensCaveats] = useState({ categories: 0, categoryTotal: 0, sampled: false });
   /**
    * True while a tool is reading map clicks for itself.
    *
@@ -1330,7 +1331,11 @@ export const MapView = () => {
         }
         lensData.current = data;
         lensDataGroup.current = lensConfigRef.current.groupField;
-        setLensCategories(data.categories.length);
+        setLensCaveats({
+          categories: data.categories.length,
+          categoryTotal: data.categoryTotal,
+          sampled: data.sampled,
+        });
         // The lens sizes itself in screen pixels, so it needs the scale of the
         // view it is being put down on to express its disc in metres.
         // zoom + 1 because MapLibre's zoom is defined against 512px tiles, not
@@ -1406,7 +1411,11 @@ export const MapView = () => {
         if (cancelled || !lensOverlay.current) return;
         lensData.current = data;
         lensDataGroup.current = lensConfig.groupField;
-        setLensCategories(data.categories.length);
+        setLensCaveats({
+          categories: data.categories.length,
+          categoryTotal: data.categoryTotal,
+          sampled: data.sampled,
+        });
         lensOverlay.current.update({
           data: data.points,
           binning: lensBinningFor(data, lensConfig),
@@ -2029,7 +2038,9 @@ export const MapView = () => {
           config={lensConfig}
           fields={lensFields.measures}
           groupFields={lensFields.groups}
-          categoryCount={lensCategories}
+          categoryCount={lensCaveats.categories}
+          categoryTotal={lensCaveats.categoryTotal}
+          sampled={lensCaveats.sampled}
           onChange={(patch) => setLensConfig((current) => ({ ...current, ...patch }))}
           onClose={() => setLensMode(false)}
         />

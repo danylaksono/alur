@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_LENS_CONFIG,
+  lensReadsAbsoluteMagnitude,
   activeLensLayer,
   lensBinningFor,
   lensPlacementFor,
@@ -18,6 +19,8 @@ const data: LensPoints = {
   ],
   fields: ['alpha', 'beta'],
   categories: ['shop', 'food'],
+  categoryTotal: 2,
+  sampled: false,
 };
 
 const ungrouped: LensPoints = { ...data, categories: [] };
@@ -86,6 +89,28 @@ describe('lensPlacementFor', () => {
       mode: 'morph',
       morph: 0.5,
     });
+  });
+});
+
+describe('lensReadsAbsoluteMagnitude', () => {
+  // The point of being exact: a sampling caveat pinned to readings that are
+  // actually fine is a caveat people learn to ignore.
+  it('is true for the readings a sample would shrink', () => {
+    expect(lensReadsAbsoluteMagnitude(config())).toBe(true); // point counts
+    expect(lensReadsAbsoluteMagnitude(config({ field: 'alpha' }))).toBe(true); // totals
+    expect(lensReadsAbsoluteMagnitude(config({ normalisation: 'density' }))).toBe(true);
+  });
+
+  it('is false for ratios, which a uniform sample cancels out of', () => {
+    expect(lensReadsAbsoluteMagnitude(config({ normalisation: 'share' }))).toBe(false);
+    expect(lensReadsAbsoluteMagnitude(config({ normalisation: 'lq' }))).toBe(false);
+  });
+
+  it('is false for a mean, which is unbiased at any sample fraction', () => {
+    expect(lensReadsAbsoluteMagnitude(config({ field: 'alpha', statistic: 'mean' }))).toBe(false);
+    expect(
+      lensReadsAbsoluteMagnitude(config({ field: 'alpha', statistic: 'mean', normalisation: 'density' })),
+    ).toBe(false);
   });
 });
 
