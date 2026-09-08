@@ -210,3 +210,26 @@ body {
   transition: bottom var(--dur-surface) var(--ease-out);
   bottom: var(--alur-map-chrome-bottom, 0px);
 }
+
+/**
+ * MapLibre asks for `grab`, and `grabbing` while panning. Windows has no system
+ * cursor for either, so Chromium draws them from its own bundled bitmaps rather
+ * than asking the OS: they ignore the Windows pointer scheme and get rescaled at
+ * fractional display scaling, which reads as a blurry, wrongly-tinted pointer
+ * next to the crisp system arrow every other surface in the app gets. `default`
+ * and `move` map onto real Windows cursors, so the map matches the rest of the
+ * UI at any DPI. The hover and tool cursors the map sets itself — `pointer` and
+ * `crosshair` — are system cursors already and are left alone.
+ *
+ * Specificity is deliberately one class higher than MapLibre's own rule so this
+ * wins regardless of stylesheet order.
+ */
+.maplibregl-map .maplibregl-canvas-container.maplibregl-interactive,
+.maplibregl-map .maplibregl-canvas-container.maplibregl-interactive .maplibregl-canvas {
+  cursor: default;
+}
+
+.maplibregl-map .maplibregl-canvas-container.maplibregl-interactive:active,
+.maplibregl-map .maplibregl-canvas-container.maplibregl-interactive:active .maplibregl-canvas {
+  cursor: move;
+}

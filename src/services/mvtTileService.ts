@@ -20,6 +20,37 @@ const parseTileUrl = (url: string) => {
   };
 };
 
+/**
+ * MapLibre asks for every tile in the viewport at once — six or more on a
+ * normal move. Handing all of them to DuckDB together is slower than feeding it
+ * a couple at a time: on a 146k-polygon layer the same six zoom-13 tiles took
+ * 22.6s dispatched together against 14.1s one after another, and running them
+ * in pairs matched the sequential total. Queueing also puts the first tile on
+ * screen far sooner, because a concurrent batch finishes all at once at the end
+ * whereas a queue delivers as it goes.
+ */
+const MAX_CONCURRENT_TILES = 2;
+let activeTileQueries = 0;
+const waitingForTileSlot: Array<() => void> = [];
+
+const withTileSlot = async <T>(run: () => Promise<T>): Promise<T> => {
+  if (activeTileQueries >= MAX_CONCURRENT_TILES) {
+    await new Promise<void>((resolve) => waitingForTileSlot.push(resolve));
+  } else {
+    activeTileQueries += 1;
+  }
+  try {
+    return await run();
+  } finally {
+    // Hand the slot straight to one waiter rather than releasing and letting it
+    // re-take: the count only drops when nobody is queued, so the number in
+    // flight can never climb past the limit.
+    const next = waitingForTileSlot.shift();
+    if (next) next();
+    else activeTileQueries -= 1;
+  }
+};
+
 export const registerMvtProtocol = () => {
   if (protocolRegistered) return;
   maplibregl.addProtocol(PROTOCOL, async (params) => {
@@ -29,7 +60,7 @@ export const registerMvtProtocol = () => {
       return { data: new ArrayBuffer(0) };
     }
 
-    const tile = await duckdbService.getMvtTile(source, z, x, y);
+    const tile = await withTileSlot(() => duckdbService.getMvtTile(source, z, x, y));
     return { data: tile };
   });
   protocolRegistered = true;

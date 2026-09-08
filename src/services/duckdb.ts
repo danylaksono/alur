@@ -817,6 +817,25 @@ class DuckDBService {
             WHERE ${geomExpr} IS NOT NULL;
         `);
 
+        // Every map tile asks this table which geometries fall inside one small
+        // envelope, and without an index that is a full scan per tile. On a
+        // 146k-polygon layer, panning and zooming around zoom 16 to 19 cost
+        // 800-1250ms a tile before this index and 90-200ms after, which is the
+        // difference between the layer redrawing as you move and appearing to
+        // drop out. It cannot help at low zoom, where the tile genuinely holds
+        // most of the dataset and every row has to be encoded regardless.
+        // Building it costs ~350ms once, here. Purely an optimisation — if it
+        // fails the tile queries still work, just slowly, so a failure must not
+        // take the layer down with it.
+        try {
+            await this.query(`DROP INDEX IF EXISTS ${qi(`${tileTable}_rtree`)};`);
+            await this.query(
+                `CREATE INDEX ${qi(`${tileTable}_rtree`)} ON ${qi(tileTable)} USING RTREE (__alur_tile_geom);`
+            );
+        } catch {
+            /* index unavailable — tiles fall back to a sequential scan */
+        }
+
         const typeResult = await this.query(
             `SELECT ST_GeometryType(__alur_tile_geom) AS geometry_type FROM ${qi(tileTable)} WHERE __alur_tile_geom IS NOT NULL LIMIT 1;`
         );
@@ -898,19 +917,23 @@ class DuckDBService {
         const filterClause = source.filterWhereClause
             ? `AND (${source.filterWhereClause.replace(/^WHERE\s+/i, '')})`
             : '';
+        // The tile envelope is repeated inline rather than joined in from a CTE.
+        // Read from a CTE it is a value from another relation, which the planner
+        // will not match against the RTREE index built above — measured on a
+        // 146k-polygon layer at zoom 14, the same tile took 169ms with the CTE
+        // and 39ms with the constant below, and the index was simply unused in
+        // the first case. Repeating the call is free: it folds to a constant.
+        const envelope = `ST_TileEnvelope(${z}, ${x}, ${y})`;
         const result = await this.query(`
-            WITH bounds AS (
-                SELECT ST_TileEnvelope(${z}, ${x}, ${y}) AS tile_bounds
-            ),
-            tile_rows AS (
+            WITH tile_rows AS (
                 SELECT {
-                    "geom": ST_AsMVTGeom(__alur_tile_geom, ST_Extent(tile_bounds), 4096, 64, true),
+                    "geom": ST_AsMVTGeom(__alur_tile_geom, ST_Extent(${envelope}), 4096, 64, true),
                     "__alur_mvt_id": __alur_mvt_id,
                     "_alur_feature_id": CAST(__alur_mvt_id AS VARCHAR)
                     ${properties}
                 } AS tile_row
-                FROM ${qi(source.tableName)}, bounds
-                WHERE ST_Intersects(__alur_tile_geom, tile_bounds)
+                FROM ${qi(source.tableName)}
+                WHERE ST_Intersects(__alur_tile_geom, ${envelope})
                 ${filterClause}
             )
             SELECT ST_AsMVT(tile_row, ${`'${escapeSqlString(source.layerName)}'`}, 4096, 'geom', '__alur_mvt_id') AS tile

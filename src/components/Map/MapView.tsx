@@ -297,6 +297,10 @@ export const MapView = () => {
       ? { measures: lensFieldsForLayer(layer), groups: lensGroupFieldsForLayer(layer) }
       : { measures: [], groups: [] };
   }, [mapLayers, selectedLayerId]);
+  // Bumped every time the map starts over with a fresh style. Every source and
+  // layer this component adds lives inside the style, so a style swap wipes all
+  // of them; the effects that own them depend on this counter and rebuild.
+  const [styleEpoch, setStyleEpoch] = useState(0);
   const [chosenLensConfig, setLensConfig] = useState<LensConfig>(DEFAULT_LENS_CONFIG);
   // Derived rather than reset, so moving to a layer without one of these fields
   // falls back to counting compass sectors instead of leaving a choice that
@@ -395,10 +399,38 @@ export const MapView = () => {
       new maplibregl.ScaleControl({ unit: "metric", maxWidth: 120 }),
       "bottom-right",
     );
-    // Fires on the initial style load and after every setStyle — unlike
-    // isStyleLoaded(), it is not perturbed by ongoing tile loads.
-    m.on("style.load", () => {
+    // The style the map is about to draw has none of the sources or layers this
+    // component added, so the render bookkeeping now describes things that no
+    // longer exist. Forget it and bump the epoch, which re-runs every effect
+    // that owns map content.
+    const onStyleSettled = () => {
       styleReady.current = true;
+      layerEventHandlers.current.forEach((handlers) =>
+        handlers.forEach(({ event, mapLayerId, fn }) =>
+          m.off(event, mapLayerId, fn as any),
+        ),
+      );
+      layerEventHandlers.current.clear();
+      renderedLayerIds.current.clear();
+      renderedSourceVersions.current.clear();
+      nodeLayerMap.current.clear();
+      glyphLayers.current.clear();
+      setStyleEpoch((epoch) => epoch + 1);
+    };
+    // Fires on the initial style load, and on a setStyle that MapLibre could not
+    // diff and so rebuilt from scratch. Unlike isStyleLoaded(), it is not
+    // perturbed by ongoing tile loads.
+    m.on("style.load", onStyleSettled);
+    // A setStyle that MapLibre *can* diff never reaches style.load: it patches
+    // the live style in place, and because the incoming basemap does not list
+    // the layers added here, the patch removes every one of them and reports
+    // nothing but styledata. Without this the map keeps the new basemap and
+    // silently loses all its data layers. styledata is chatty, so this only
+    // listens while a style swap is actually in flight — styleReady is false
+    // from the moment setStyle is called until the style settles.
+    m.on("styledata", () => {
+      if (styleReady.current) return;
+      onStyleSettled();
     });
     map.current = m;
     registerMap(m);
@@ -790,16 +822,11 @@ export const MapView = () => {
     };
 
     // Style readiness is a ref, so an effect that returned early on it would
-    // never run again — the drawing would stay invisible until some other
-    // state changed. Same deferral the layer sync uses.
-    if (!styleReady.current) {
-      m.once("style.load", syncDrawing);
-      return () => {
-        m.off("style.load", syncDrawing);
-      };
-    }
-    syncDrawing();
-  }, [drawing, nodes]);
+    // never run again — the drawing would stay invisible until some other state
+    // changed. styleEpoch is the state that changes: it re-runs this effect
+    // once the style has settled, and again after any later style swap.
+    if (styleReady.current) syncDrawing();
+  }, [styleEpoch, drawing, nodes]);
 
   useEffect(() => {
     const m = map.current;
@@ -858,11 +885,10 @@ export const MapView = () => {
     const syncLayers = () => {
       // Gate on style readiness, not isStyleLoaded(): the latter is false
       // whenever any tile is still loading, which on DuckDB MVT layers is
-      // most of the time — deferring syncs indefinitely.
-      if (!styleReady.current) {
-        m.once("style.load", syncLayers);
-        return;
-      }
+      // most of the time — deferring syncs indefinitely. A sync attempted
+      // before the style is ready is simply dropped; bumping styleEpoch re-runs
+      // this effect once there is a style to add layers to.
+      if (!styleReady.current) return;
 
       // On the first dataset, position the camera before registering its vector
       // source. Otherwise MapLibre immediately asks DuckDB for a world-scale
@@ -1269,6 +1295,7 @@ export const MapView = () => {
 
     syncLayers();
   }, [
+    styleEpoch,
     mapLayers,
     selectedBasemapId,
     layerFilterKey,
@@ -1545,7 +1572,7 @@ export const MapView = () => {
     return () => {
       cancelled = true;
     };
-  }, [mapLayers, addToast]);
+  }, [styleEpoch, mapLayers, addToast]);
 
   // Glyph-grid layers: screengrid custom canvas layers fed from DuckDB points.
   useEffect(() => {
@@ -1645,6 +1672,7 @@ export const MapView = () => {
       cancelled = true;
     };
   }, [
+    styleEpoch,
     mapLayers,
     layerFilterKey,
     selectedBasemapId,
