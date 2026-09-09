@@ -75,6 +75,8 @@ interface DataTableProps {
   onToggleSelection?: (featureId: string) => void;
   onSetSelection?: (featureIds: string[]) => void;
   onZoomSelection?: () => void;
+  onZoomFeature?: (featureId: string) => void;
+  zoomingFeatureId?: string | null;
   isZoomingSelection?: boolean;
   isSelectionActionLoading?: boolean;
   onSelectAllFiltered?: () => void;
@@ -99,6 +101,9 @@ interface DataTableProps {
   onQuickStyle?: (field: string) => void;
   onPinMetric?: (field: string) => void;
   onAddFilter?: (filter: VisualFilter) => void;
+  searchField?: string | null;
+  searchableFields?: string[];
+  onSearchFieldChange?: (field: string | null) => void;
   onSearchChange: (search: string) => void;
   onSortChange: (column: string) => void;
   onProfileColumn: (column: string) => void;
@@ -190,6 +195,8 @@ export const DataTable = ({
   onToggleSelection,
   onSetSelection,
   onZoomSelection,
+  onZoomFeature,
+  zoomingFeatureId,
   isZoomingSelection,
   isSelectionActionLoading,
   onSelectAllFiltered,
@@ -214,6 +221,9 @@ export const DataTable = ({
   onQuickStyle,
   onPinMetric,
   onAddFilter,
+  searchField = null,
+  searchableFields = [],
+  onSearchFieldChange,
   onSearchChange,
   onSortChange,
   onProfileColumn,
@@ -288,12 +298,16 @@ export const DataTable = ({
     ?? row.__alur_mvt_id
     ?? '',
   );
+  // Leading sticky column: the select checkbox, plus a zoom control when the
+  // rows are map features.
+  const showRowActions = Boolean(onToggleSelection || onZoomFeature);
+  const rowActionsWidth = onZoomFeature ? 62 : 40;
   const widthForColumn = useCallback((column: string) => columnWidths[column] || 158, [columnWidths]);
   const pinnedOffset = useCallback((column: string) => {
     if (!pinnedColumns.includes(column)) return undefined;
     const preceding = visiblePinnedColumns.slice(0, visiblePinnedColumns.indexOf(column));
-    return (onToggleSelection ? 40 : 0) + preceding.reduce((sum, item) => sum + widthForColumn(item), 0);
-  }, [onToggleSelection, pinnedColumns, visiblePinnedColumns, widthForColumn]);
+    return (showRowActions ? rowActionsWidth : 0) + preceding.reduce((sum, item) => sum + widthForColumn(item), 0);
+  }, [showRowActions, rowActionsWidth, pinnedColumns, visiblePinnedColumns, widthForColumn]);
 
   useEffect(() => setLastSelectedIndex(null), [pageIndex, signature]);
 
@@ -448,18 +462,39 @@ export const DataTable = ({
   return (
     <div className="flex h-full w-full flex-col bg-white">
       <div className="flex min-h-11 shrink-0 items-center gap-2 border-b bg-slate-50 px-2.5 py-1.5">
-        <label className="relative min-w-[180px] max-w-md flex-1">
-          <span className="sr-only">Search table</span>
-          <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
-          <input
-            type="search"
-            value={search}
-            onChange={(event) => { onSearchChange(event.target.value); onPageChange(0); }}
-            placeholder="Search every field…"
-            className="h-8 w-full rounded-md border border-slate-200 bg-white pl-7 pr-7 text-xs outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
-          />
-          {search && <button type="button" onClick={() => onSearchChange('')} aria-label="Clear search" className="pressable absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700"><X className="h-3.5 w-3.5" /></button>}
-        </label>
+        <div className="flex h-8 min-w-[260px] max-w-xl flex-1 items-stretch rounded-md border border-slate-200 bg-white focus-within:border-slate-400 focus-within:ring-2 focus-within:ring-slate-100">
+          {onSearchFieldChange && searchableFields.length > 0 && (
+            <label className="flex items-center border-r border-slate-200">
+              <span className="sr-only">Field to search</span>
+              <select
+                value={searchField ?? ''}
+                onChange={(event) => { onSearchFieldChange(event.target.value || null); onPageChange(0); }}
+                title={
+                  searchField
+                    ? `Searching ${searchField} only`
+                    : `Searching all ${searchableFields.length} fields — pick one field to make the search quick on a wide table`
+                }
+                className="h-full max-w-[150px] rounded-l-md bg-transparent px-2 text-[11px] font-semibold text-slate-600 outline-none"
+              >
+                <option value="">All fields</option>
+                {searchableFields.map((field) => <option key={field} value={field}>{field}</option>)}
+              </select>
+            </label>
+          )}
+          <label className="relative min-w-0 flex-1">
+            <span className="sr-only">Search table</span>
+            <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => { onSearchChange(event.target.value); onPageChange(0); }}
+              placeholder={searchField ? `Search ${searchField}…` : 'Search every field…'}
+              title={searchableFields.length ? `Tip: type ${searchableFields[0]}=value to search one field without touching the picker` : undefined}
+              className="h-full w-full rounded-r-md bg-transparent pl-7 pr-7 text-xs outline-none"
+            />
+            {search && <button type="button" onClick={() => onSearchChange('')} aria-label="Clear search" className="pressable absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700"><X className="h-3.5 w-3.5" /></button>}
+          </label>
+        </div>
 
         <button type="button" aria-pressed={showHistograms} onClick={() => setShowHistograms((current) => !current)} className={cn('pressable inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-[11px] font-bold', showHistograms ? 'border-slate-800 bg-slate-800 text-white' : 'border-slate-200 bg-white text-slate-600')}>
           <BarChart3 className="h-3.5 w-3.5" /> Histograms
@@ -566,9 +601,12 @@ export const DataTable = ({
           <thead className="sticky top-0 z-20 bg-slate-50 shadow-sm">
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id}>
-                {onToggleSelection && (
-                  <th className="sticky left-0 z-30 w-10 min-w-10 border-b border-r border-slate-200 bg-slate-50 p-2 align-top">
-                    <input
+                {showRowActions && (
+                  <th
+                    className="sticky left-0 z-30 border-b border-r border-slate-200 bg-slate-50 p-2 align-top"
+                    style={{ width: rowActionsWidth, minWidth: rowActionsWidth }}
+                  >
+                    {onToggleSelection && <input
                       type="checkbox"
                       aria-label="Select all rows on this page"
                       checked={allPageSelected}
@@ -583,7 +621,7 @@ export const DataTable = ({
                         });
                       }}
                       className="h-3.5 w-3.5 rounded border-slate-300 accent-orange-500"
-                    />
+                    />}
                   </th>
                 )}
                 {headerGroup.headers.map((header) => (
@@ -628,9 +666,29 @@ export const DataTable = ({
                     selected ? 'bg-orange-50' : hoveredFeatureId === featureId ? 'bg-sky-50' : 'odd:bg-white even:bg-slate-50/40 hover:bg-slate-50',
                   )}
                 >
-                  {onToggleSelection && (
-                    <td className={cn('sticky left-0 z-10 w-10 min-w-10 border-b border-r border-slate-100 p-2 text-center', selected ? 'bg-orange-50' : 'bg-white group-even:bg-slate-50')}>
-                      {featureId && <input type="checkbox" aria-label={`Select row ${featureId}`} checked={selected} onClick={(event) => { event.stopPropagation(); selectRow(rowIndex, featureId, event.shiftKey); }} onChange={() => {}} className="h-3.5 w-3.5 rounded border-slate-300 accent-orange-500" />}
+                  {showRowActions && (
+                    <td
+                      className={cn('sticky left-0 z-10 border-b border-r border-slate-100 px-1.5 text-center', selected ? 'bg-orange-50' : 'bg-white group-even:bg-slate-50')}
+                      style={{ width: rowActionsWidth, minWidth: rowActionsWidth }}
+                    >
+                      <div className="flex items-center justify-center gap-1">
+                        {onToggleSelection && featureId && <input type="checkbox" aria-label={`Select row ${featureId}`} checked={selected} onClick={(event) => { event.stopPropagation(); selectRow(rowIndex, featureId, event.shiftKey); }} onChange={() => {}} className="h-3.5 w-3.5 rounded border-slate-300 accent-orange-500" />}
+                        {onZoomFeature && featureId && (
+                          <button
+                            type="button"
+                            title="Zoom the map to this row"
+                            aria-label={`Zoom to row ${featureId}`}
+                            disabled={zoomingFeatureId === featureId}
+                            onClick={(event) => { event.stopPropagation(); onZoomFeature(featureId); }}
+                            className={cn(
+                              'pressable rounded p-0.5 text-slate-400 transition-opacity hover:bg-orange-100 hover:text-orange-700 focus-visible:opacity-100',
+                              selected || zoomingFeatureId === featureId ? 'text-orange-600 opacity-100' : 'opacity-40 group-hover:opacity-100',
+                            )}
+                          >
+                            <LocateFixed className={cn('h-3.5 w-3.5', zoomingFeatureId === featureId && 'animate-pulse')} />
+                          </button>
+                        )}
+                      </div>
                     </td>
                   )}
                   {row.getVisibleCells().map((cell) => (

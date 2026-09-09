@@ -116,6 +116,45 @@ export const mvtPropertyTypeForDuckDbType = (type: string): MvtPropertyType | nu
     }
 };
 
+/** How long a background query gives way to foreground work before proceeding. */
+const BACKGROUND_YIELD_LIMIT_MS = 2000;
+
+/**
+ * Below zoom 9 a tile holds most of a large layer and the RTREE cannot prune
+ * it, so every feature is encoded into an image a few hundred pixels wide.
+ * Measured on a 946k-polygon building layer, one tile held 278k features and
+ * cost 14.4s at z8, 500k and 21.0s at z7, and the entire layer and 36.5s at z6
+ * — and because duckdb-wasm runs a single worker with no threads, nothing else
+ * in the app could run for that whole time.
+ *
+ * At those zooms a building is far smaller than a pixel and what the analyst
+ * reads is density, so we encode a uniform 1-in-N sample. The moduli below hold
+ * a tile to roughly 32k features, which is what a z9 tile already carries
+ * unsampled — so crossing into full detail at z9 does not visibly change how
+ * dense the layer looks. `__alur_mvt_id` is a dense ROW_NUMBER, which makes the
+ * modulo an even sample and, being deterministic, keeps the same features in
+ * the same tiles across pans, redraws and sessions.
+ *
+ * From zoom 9 up every feature is drawn, so anything an analyst can pick out
+ * individually — or zoom to from the table — is always there.
+ */
+const TILE_SAMPLE_MODULUS: Record<number, number> = { 8: 8, 7: 16, 6: 32 };
+const LOWEST_FULL_DETAIL_ZOOM = 9;
+
+export const tileSampleModulus = (z: number) => {
+    if (z >= LOWEST_FULL_DETAIL_ZOOM) return 1;
+    // Below z6 the whole layer already fits one tile, so the count stops
+    // growing and the sample need not keep thinning with it.
+    return TILE_SAMPLE_MODULUS[z] ?? 64;
+};
+
+export const abortError = () =>
+    Object.assign(new Error('Query aborted'), { name: 'AbortError' });
+
+const throwIfAborted = (signal?: AbortSignal) => {
+    if (signal?.aborted) throw abortError();
+};
+
 class DuckDBService {
     private db: duckdb.AsyncDuckDB | null = null;
     private conn: duckdb.AsyncDuckDBConnection | null = null;
@@ -246,8 +285,68 @@ class DuckDBService {
         return this.httpfsPromise;
     }
 
+    /**
+     * Every query in the app shares one worker, and the `eh` bundle has no
+     * pthreads, so DuckDB runs them strictly one at a time. Map tiles are by
+     * far the most numerous — one pan queues a dozen — so without a priority an
+     * analyst's search sits behind whatever backlog the last camera move
+     * produced. `query` is the foreground path; tile work goes through
+     * `backgroundQuery` and holds off while anything in the foreground is
+     * outstanding.
+     *
+     * This reorders what has not started yet. It cannot preempt a query already
+     * running: cancelling needs either pthreads or `send()` + `cancelSent()` on
+     * a connection whose worker is free to read the cancel message, and a
+     * blocked worker is exactly the case that matters.
+     */
+    private foregroundDepth = 0;
+    private foregroundIdleWaiters: Array<() => void> = [];
+
+    private releaseForeground() {
+        this.foregroundDepth -= 1;
+        if (this.foregroundDepth > 0) return;
+        const waiters = this.foregroundIdleWaiters.splice(0);
+        waiters.forEach((wake) => wake());
+    }
+
+    /** True while a foreground query is queued or running. */
+    get hasForegroundWork() {
+        return this.foregroundDepth > 0;
+    }
+
     async query(sql: string) {
         if (!this.conn) throw new Error('DuckDB not initialized');
+        this.foregroundDepth += 1;
+        try {
+            return await this.conn.query(sql);
+        } finally {
+            this.releaseForeground();
+        }
+    }
+
+    /**
+     * Runs `sql` only once no foreground query is waiting, and gives up if
+     * `signal` aborts first — MapLibre aborts the tiles for a viewport you have
+     * panned away from, and at low zoom each of those costs seconds of worker
+     * time nobody is waiting on.
+     */
+    async backgroundQuery(sql: string, signal?: AbortSignal) {
+        if (!this.conn) throw new Error('DuckDB not initialized');
+        // Yielding is a courtesy, not a lock. An exploration session can keep
+        // foreground queries overlapping for a long stretch, and a tile that
+        // waited for true idle would leave the map blank the whole time, so
+        // give way for at most this long and then take a turn regardless.
+        const deadline = Date.now() + BACKGROUND_YIELD_LIMIT_MS;
+        while (this.foregroundDepth > 0) {
+            throwIfAborted(signal);
+            const remaining = deadline - Date.now();
+            if (remaining <= 0) break;
+            await Promise.race([
+                new Promise<void>((resolve) => this.foregroundIdleWaiters.push(resolve)),
+                new Promise<void>((resolve) => setTimeout(resolve, remaining)),
+            ]);
+        }
+        throwIfAborted(signal);
         return await this.conn.query(sql);
     }
 
@@ -906,7 +1005,7 @@ class DuckDBService {
         return Number(row?.feature_count ?? row?.count_star ?? 0);
     }
 
-    async getMvtTile(source: MvtTileSource, z: number, x: number, y: number): Promise<ArrayBuffer> {
+    async getMvtTile(source: MvtTileSource, z: number, x: number, y: number, signal?: AbortSignal): Promise<ArrayBuffer> {
         const availableProperties = new Set(source.propertyColumns);
         const renderedProperties = source.renderPropertyColumns ?? source.propertyColumns;
         const propertyEntries = renderedProperties
@@ -924,7 +1023,9 @@ class DuckDBService {
         // and 39ms with the constant below, and the index was simply unused in
         // the first case. Repeating the call is free: it folds to a constant.
         const envelope = `ST_TileEnvelope(${z}, ${x}, ${y})`;
-        const result = await this.query(`
+        const modulus = tileSampleModulus(z);
+        const sampleClause = modulus > 1 ? `AND __alur_mvt_id % ${modulus} = 0` : '';
+        const result = await this.backgroundQuery(`
             WITH tile_rows AS (
                 SELECT {
                     "geom": ST_AsMVTGeom(__alur_tile_geom, ST_Extent(${envelope}), 4096, 64, true),
@@ -934,11 +1035,12 @@ class DuckDBService {
                 } AS tile_row
                 FROM ${qi(source.tableName)}
                 WHERE ST_Intersects(__alur_tile_geom, ${envelope})
+                ${sampleClause}
                 ${filterClause}
             )
             SELECT ST_AsMVT(tile_row, ${`'${escapeSqlString(source.layerName)}'`}, 4096, 'geom', '__alur_mvt_id') AS tile
             FROM tile_rows;
-        `);
+        `, signal);
         const rawRow = result.toArray()[0];
         const row = typeof rawRow?.toJSON === 'function' ? rawRow.toJSON() : rawRow;
         const tile = row?.tile;

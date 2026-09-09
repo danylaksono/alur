@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useStore, type WorkflowNode } from '../store/useStore';
 import {
+  analyticsFieldsForLayer,
   materializeLayerSelection,
   queryLayerColumnProfile,
   queryLayerFeatureIds,
@@ -67,6 +68,7 @@ export function useAttributeTable() {
   const [pageIndex, setPageIndex] = useState(0);
   const [pageSize, setPageSize] = useState(50);
   const [search, setSearch] = useState('');
+  const [searchField, setSearchField] = useState<string | null>(null);
   const debouncedSearch = useDebouncedValue(search, 300);
   const [sortBy, setSortBy] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
@@ -81,6 +83,7 @@ export function useAttributeTable() {
   const [layerTotal, setLayerTotal] = useState<number | undefined>(undefined);
   const [isLayerLoading, setIsLayerLoading] = useState(false);
   const [isZoomingSelection, setIsZoomingSelection] = useState(false);
+  const [zoomingFeatureId, setZoomingFeatureId] = useState<string | null>(null);
   const [isSelectionActionLoading, setIsSelectionActionLoading] = useState(false);
   const [savedViewsBySource, setSavedViewsBySource] = useState<Record<string, SavedTableView[]>>(loadSavedViews);
   const [appliedLayout, setAppliedLayout] = useState<AppliedTableLayout | null>(null);
@@ -128,6 +131,21 @@ export function useAttributeTable() {
     : selectedNode?.data.label || 'No node or layer selected';
   const computedFields = computedFieldsBySource[sourceKey] || EMPTY_COMPUTED_FIELDS;
   const savedViews = savedViewsBySource[sourceKey] || [];
+  // Offered in the table's field picker. Taken from the schema rather than the
+  // loaded page so every column is scopable, not just the ones on screen.
+  const searchableFields = useMemo(() => {
+    const schemaFields = selectedLayer
+      ? analyticsFieldsForLayer(selectedLayer)
+      : (nodeSchemas[selectedNodeId || ''] || []).map((column: any) => column.name || column.column_name);
+    return [
+      ...schemaFields.filter((name: unknown): name is string => (
+        typeof name === 'string'
+        && !['geojson', 'geometry', 'geom', 'wkb_geometry', '_alur_feature_id'].includes(name.toLowerCase())
+        && !name.startsWith('__alur_')
+      )),
+      ...computedFields.map((field) => field.name),
+    ];
+  }, [selectedLayer, nodeSchemas, selectedNodeId, computedFields]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -139,6 +157,7 @@ export function useAttributeTable() {
   useEffect(() => {
     setPageIndex(0);
     setSearch('');
+    setSearchField(null);
     setSortBy(null);
     setSortDirection('asc');
     setColumnProfiles({});
@@ -149,11 +168,11 @@ export function useAttributeTable() {
 
   useEffect(() => {
     setPageIndex(0);
-  }, [debouncedSearch]);
+  }, [debouncedSearch, searchField]);
 
   useEffect(() => {
     setColumnProfiles({});
-  }, [debouncedSearch, filters, computedFields]);
+  }, [debouncedSearch, searchField, filters, computedFields]);
 
   // Layer branch — DuckDB-backed filtered rows.
   useEffect(() => {
@@ -171,6 +190,7 @@ export function useAttributeTable() {
           layer: selectedLayer,
           filters,
           search: debouncedSearch,
+          searchField,
           sortBy,
           sortDirection,
           pageIndex,
@@ -193,7 +213,7 @@ export function useAttributeTable() {
 
     fetchLayerRows();
     return () => { cancelled = true; };
-  }, [selectedLayer, filters, debouncedSearch, sortBy, sortDirection, pageIndex, pageSize, computedFields, addToast]);
+  }, [selectedLayer, filters, debouncedSearch, searchField, sortBy, sortDirection, pageIndex, pageSize, computedFields, addToast]);
 
   // Node branch — workflow CTE preview.
   useEffect(() => {
@@ -222,6 +242,7 @@ export function useAttributeTable() {
           nodeId: selectedNodeId,
           schema: nodeSchemas[selectedNodeId],
           search: debouncedSearch,
+          searchField,
           sortBy,
           sortDirection,
           pageIndex,
@@ -248,7 +269,7 @@ export function useAttributeTable() {
       fetchNodePreview();
     }
     return () => { cancelled = true; };
-  }, [selectedNodeId, nodes, edges, isManualSQL, pageIndex, pageSize, debouncedSearch, sortBy, sortDirection, nodeSchemas, filters, computedFields]);
+  }, [selectedNodeId, nodes, edges, isManualSQL, pageIndex, pageSize, debouncedSearch, searchField, sortBy, sortDirection, nodeSchemas, filters, computedFields]);
 
   const data = selectedLayer ? layerRows : selectedNodeId ? nodeRows : manualPreview ?? [];
 
@@ -287,6 +308,7 @@ export function useAttributeTable() {
         nodeId: selectedNodeId,
         schema: nodeSchemas[selectedNodeId],
         search: debouncedSearch,
+        searchField,
         column,
         filters,
         computedFields,
@@ -301,7 +323,7 @@ export function useAttributeTable() {
     } finally {
       setProfileLoadingColumns((current) => current.filter((item) => item !== column));
     }
-  }, [columnProfiles, computedFields, selectedLayer, selectedNodeId, filters, nodes, edges, nodeSchemas, debouncedSearch, addToast]);
+  }, [columnProfiles, computedFields, selectedLayer, selectedNodeId, filters, nodes, edges, nodeSchemas, debouncedSearch, searchField, addToast]);
 
   const onApplyProfileFilter = useCallback((profile: ColumnProfile, bin: HistogramBin) => {
     const nextFilter: VisualFilter = profile.kind === 'numeric'
@@ -374,15 +396,39 @@ export function useAttributeTable() {
     }
   }, [addToast, focusLayerBounds, selectedFeatureIds, selectedLayer]);
 
+  /**
+   * Zoom straight to one row. Selecting the feature as well keeps the map
+   * highlight, the "Selection" overlay and the table row in agreement, so
+   * finding a building is one click rather than tick-box then Zoom.
+   */
+  const onZoomFeature = useCallback(async (featureId: string) => {
+    if (!selectedLayer || !featureId) return;
+    try {
+      setZoomingFeatureId(featureId);
+      const bounds = await queryLayerSelectionBounds(selectedLayer, [featureId]);
+      if (!bounds) {
+        addToast({ type: 'warning', message: 'That row does not have zoomable geometry.' });
+        return;
+      }
+      if (linkedDatasetId) setFeatureSelection(linkedDatasetId, [featureId]);
+      focusLayerBounds(selectedLayer.id, bounds);
+    } catch (error) {
+      addToast({ type: 'error', message: `Zoom to row failed: ${error instanceof Error ? error.message : 'Unknown error'}` });
+    } finally {
+      setZoomingFeatureId(null);
+    }
+  }, [addToast, focusLayerBounds, linkedDatasetId, selectedLayer, setFeatureSelection]);
+
   const fetchFilteredFeatureIds = useCallback(async () => {
     if (!selectedLayer) return [];
     return queryLayerFeatureIds({
       layer: selectedLayer,
       filters,
       search: debouncedSearch,
+      searchField,
       computedFields,
     });
-  }, [computedFields, debouncedSearch, filters, selectedLayer]);
+  }, [computedFields, debouncedSearch, searchField, filters, selectedLayer]);
 
   const onSelectAllFiltered = useCallback(async () => {
     if (!selectedLayer) return;
@@ -558,6 +604,8 @@ export function useAttributeTable() {
     pageIndex,
     pageSize,
     search,
+    searchField,
+    searchableFields,
     sortBy,
     sortDirection,
     columnProfiles,
@@ -567,11 +615,13 @@ export function useAttributeTable() {
     selectedFeatureIds,
     hoveredFeatureId,
     isZoomingSelection,
+    zoomingFeatureId,
     isSelectionActionLoading,
     computedFields,
     savedViews,
     appliedLayout,
     onSearchChange: setSearch,
+    onSearchFieldChange: setSearchField,
     onSortChange,
     onProfileColumn,
     onPageChange: setPageIndex,
@@ -585,6 +635,7 @@ export function useAttributeTable() {
     onToggleSelection,
     onSetSelection,
     onZoomSelection,
+    onZoomFeature,
     onSelectAllFiltered,
     onInvertSelection,
     onHoverFeature,

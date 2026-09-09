@@ -1942,7 +1942,15 @@ export const MapView = () => {
         boundsForLayer(layer) ||
         (layer.geojson ? getLayerBounds(layer.geojson) : null);
       if (bounds) {
-        m.fitBounds(bounds, { padding: 50, duration: 600, maxZoom: 16 });
+        // Zoom 16 is right for a whole-layer extent but leaves a single
+        // building as a dot in the middle of a suburb. An extent only a few
+        // hundred metres across means the caller is pointing at one feature,
+        // so let the camera go in far enough to actually see it.
+        const span = Math.max(
+          Math.abs(bounds[1][0] - bounds[0][0]),
+          Math.abs(bounds[1][1] - bounds[0][1]),
+        );
+        m.fitBounds(bounds, { padding: 50, duration: 600, maxZoom: span < 0.005 ? 19 : 16 });
       }
     };
 

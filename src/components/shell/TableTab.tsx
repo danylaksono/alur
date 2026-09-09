@@ -68,6 +68,7 @@ export const TableTab = ({ table }: { table: ReturnType<typeof useAttributeTable
         layer: table.selectedLayer,
         filters: table.filters,
         search: table.search,
+        searchField: table.searchField,
         sortBy: table.sortBy,
         sortDirection: table.sortDirection,
         computedFields: table.computedFields,
@@ -82,6 +83,7 @@ export const TableTab = ({ table }: { table: ReturnType<typeof useAttributeTable
         schema: nodeSchemas[selectedNodeId],
         filters: table.filters,
         search: table.search,
+        searchField: table.searchField,
         sortBy: table.sortBy,
         sortDirection: table.sortDirection,
         computedFields: table.computedFields,
@@ -182,6 +184,8 @@ export const TableTab = ({ table }: { table: ReturnType<typeof useAttributeTable
             onToggleSelection={table.selectedDataset ? table.onToggleSelection : undefined}
             onSetSelection={table.selectedDataset ? table.onSetSelection : undefined}
             onZoomSelection={table.selectedLayer ? table.onZoomSelection : undefined}
+            onZoomFeature={table.selectedLayer ? table.onZoomFeature : undefined}
+            zoomingFeatureId={table.zoomingFeatureId}
             isZoomingSelection={table.isZoomingSelection}
             isSelectionActionLoading={table.isSelectionActionLoading}
             onSelectAllFiltered={table.selectedLayer ? table.onSelectAllFiltered : undefined}
@@ -206,6 +210,9 @@ export const TableTab = ({ table }: { table: ReturnType<typeof useAttributeTable
             onQuickStyle={table.selectedLayer ? (field) => { void runQuickCommand({ type: 'open-layer-style', datasetId: table.selectedLayer!.id, field }); } : undefined}
             onPinMetric={table.selectedLayer ? (field) => { void runQuickCommand({ type: 'pin-kpi', datasetId: table.selectedLayer!.id, field }); } : table.selectedDataset ? (field) => addKpi({ id: `kpi-${Date.now()}`, datasetId: table.selectedDataset!.id, source: table.selectedDataset!.source, title: `${field} mean`, field, aggregation: 'avg', comparison: 'total', format: 'compact' }) : undefined}
             onAddFilter={table.selectedLayer || table.selectedNode ? table.onAddFilter : undefined}
+            searchField={table.searchField}
+            searchableFields={table.searchableFields}
+            onSearchFieldChange={table.onSearchFieldChange}
             onSearchChange={table.onSearchChange}
             onSortChange={table.onSortChange}
             onProfileColumn={table.onProfileColumn}

@@ -241,6 +241,68 @@ describe('visual analytics cache helpers', () => {
     expect(result.rows[0].__alur_mvt_id).toBe(7);
   });
 
+  it('searches one column when the table search is scoped to a field', async () => {
+    const query = vi.spyOn(duckdbService, 'query')
+      .mockResolvedValueOnce({ toArray: () => [{ row_count: 1 }] } as any)
+      .mockResolvedValueOnce({ toArray: () => [{ __alur_mvt_id: 7 }] } as any);
+    const source = {
+      kind: 'duckdb-table' as const,
+      tableName: 'buildings',
+      geometryColumn: 'geometry',
+      crs: 'EPSG:4326',
+      geometryKind: 'polygon' as const,
+      featureIdColumn: '__alur_mvt_id',
+      fields: [{ name: 'UPRN', type: 'BIGINT' }, { name: 'Post Code', type: 'VARCHAR' }],
+      tileSource: { tableName: '__alur_mvt_buildings', layerName: 'features', geometryKind: 'polygon' as const, propertyColumns: ['UPRN', 'Post Code'] },
+      renderVersion: 1,
+    };
+
+    await queryLayerRows({
+      layer: { id: 'buildings', source },
+      filters: [],
+      search: '10012775204',
+      searchField: 'UPRN',
+      sortBy: null,
+      sortDirection: 'asc',
+      pageIndex: 0,
+      pageSize: 50,
+    });
+
+    expect(query.mock.calls[0][0]).toContain(`CAST("UPRN" AS VARCHAR) ILIKE '%10012775204%'`);
+    expect(query.mock.calls[0][0]).not.toContain('"Post Code"');
+  });
+
+  it('skips fields the rendered MVT table does not carry when searching every field', async () => {
+    const query = vi.spyOn(duckdbService, 'query')
+      .mockResolvedValueOnce({ toArray: () => [{ row_count: 0 }] } as any)
+      .mockResolvedValueOnce({ toArray: () => [] } as any);
+    const source = {
+      kind: 'duckdb-table' as const,
+      tableName: 'buildings',
+      geometryColumn: 'geometry',
+      crs: 'EPSG:4326',
+      geometryKind: 'polygon' as const,
+      featureIdColumn: '__alur_mvt_id',
+      // `bbox` is a STRUCT on the origin table, so prepareMvtTileSource drops it.
+      fields: [{ name: 'UPRN', type: 'BIGINT' }, { name: 'bbox', type: 'STRUCT(xmin DOUBLE)' }],
+      tileSource: { tableName: '__alur_mvt_buildings', layerName: 'features', geometryKind: 'polygon' as const, propertyColumns: ['UPRN'] },
+      renderVersion: 1,
+    };
+
+    await queryLayerRows({
+      layer: { id: 'buildings', source },
+      filters: [],
+      search: '10012775204',
+      sortBy: null,
+      sortDirection: 'asc',
+      pageIndex: 0,
+      pageSize: 50,
+    });
+
+    expect(query.mock.calls[0][0]).toContain('"UPRN"');
+    expect(query.mock.calls[0][0]).not.toContain('"bbox"');
+  });
+
   it('queries scatter points with a context flag that ignores the chart axes', async () => {
     vi.spyOn(duckdbService, 'registerJsonRows').mockResolvedValue(undefined);
     const query = vi.spyOn(duckdbService, 'query')
