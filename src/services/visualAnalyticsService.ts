@@ -20,6 +20,7 @@ import {
   quoteIdentifier,
 } from "../utils/visualFilterSql";
 import { visualFilterKey } from "../utils/visualFilters";
+import { searchPredicateFor } from "../utils/tableSearch";
 import {
   CATEGORICAL_PALETTE,
   CATEGORICAL_PALETTE_META,
@@ -184,14 +185,26 @@ export const queryLayerSelectionBounds = async (
   ];
 };
 
-const analyticsFieldsForLayer = (
+/**
+ * The columns a search or profile can actually reference. For a DuckDB layer
+ * the queries run against the tile table, which only carries the properties MVT
+ * can encode — `source.fields` still lists the origin table's columns, so a
+ * STRUCT or LIST column (the standardised buildings extract has a `bbox`
+ * struct) is named there but absent from the relation being queried, and
+ * referencing it fails the whole query.
+ */
+export const analyticsFieldsForLayer = (
   layer: Pick<AnalyticsLayer, "source" | "geojson">,
 ) => {
   if (
     layer.source?.kind === "duckdb-table" ||
     layer.source?.kind === "duckdb-query"
   ) {
-    return layer.source.fields.map((field) => field.name);
+    const available = layer.source.tileSource?.propertyColumns;
+    const names = layer.source.fields.map((field) => field.name);
+    if (!available?.length) return names;
+    const present = new Set(available);
+    return names.filter((name) => present.has(name));
   }
   return Object.keys(layer.geojson?.features[0]?.properties || {}).filter(
     (key) => key !== FEATURE_ID_PROPERTY,
@@ -272,6 +285,7 @@ export const queryLayerRows = async ({
   layer,
   filters,
   search,
+  searchField = null,
   sortBy,
   sortDirection,
   pageIndex,
@@ -281,6 +295,7 @@ export const queryLayerRows = async ({
   layer: AnalyticsLayer;
   filters: VisualFilter[];
   search: string;
+  searchField?: string | null;
   sortBy: string | null;
   sortDirection: "asc" | "desc";
   pageIndex: number;
@@ -296,11 +311,11 @@ export const queryLayerRows = async ({
     ...computedFields.map((field) => field.name),
   ];
   const filterClause = compileVisualFiltersWhereClause(filters);
-  const normalizedSearch = search.trim();
-  const searchPredicate =
-    normalizedSearch && searchableColumns.length
-      ? `(${searchableColumns.map((column) => `CAST(${quoteIdentifier(column)} AS VARCHAR) ILIKE '%${normalizedSearch.replace(/'/g, "''")}%'`).join(" OR ")})`
-      : "";
+  const searchPredicate = searchPredicateFor(
+    search,
+    searchableColumns,
+    searchField,
+  );
   const predicates = [
     filterClause.replace(/^WHERE\s+/, ""),
     searchPredicate,
@@ -313,12 +328,21 @@ export const queryLayerRows = async ({
     : "";
   const offset = pageIndex * pageSize;
 
+  // The table never shows geometry — DataTable drops the column client-side —
+  // but selecting it still encodes a page of Web Mercator polygons into Arrow
+  // and ships them over the worker boundary for nothing.
+  const excludeGeometry =
+    layer.source?.kind === "duckdb-table" ||
+    layer.source?.kind === "duckdb-query"
+      ? "EXCLUDE (__alur_tile_geom)"
+      : "";
+
   const [countResult, rowsResult] = await Promise.all([
     duckdbService.query(
       `SELECT COUNT(*) AS row_count FROM ${relation} ${whereClause};`,
     ),
     duckdbService.query(
-      `SELECT * FROM ${relation} ${whereClause} ${sortClause} LIMIT ${pageSize} OFFSET ${offset};`,
+      `SELECT * ${excludeGeometry} FROM ${relation} ${whereClause} ${sortClause} LIMIT ${pageSize} OFFSET ${offset};`,
     ),
   ]);
   const countRaw = normalizeRows(countResult.toArray())[0] || {};
@@ -418,6 +442,7 @@ const layerSearchWhereClause = (
   filters: VisualFilter[],
   search: string,
   computedFields: ComputedField[],
+  searchField: string | null = null,
 ) => {
   const searchableColumns = [
     ...analyticsFieldsForLayer(layer).filter(
@@ -425,11 +450,11 @@ const layerSearchWhereClause = (
     ),
     ...computedFields.map((field) => field.name),
   ];
-  const normalizedSearch = search.trim();
-  const searchPredicate =
-    normalizedSearch && searchableColumns.length
-      ? `(${searchableColumns.map((column) => `CAST(${quoteIdentifier(column)} AS VARCHAR) ILIKE '%${normalizedSearch.replace(/'/g, "''")}%'`).join(" OR ")})`
-      : "";
+  const searchPredicate = searchPredicateFor(
+    search,
+    searchableColumns,
+    searchField,
+  );
   const predicates = [
     compileVisualFiltersWhereClause(filters).replace(/^WHERE\s+/, ""),
     searchPredicate,
@@ -441,11 +466,13 @@ export const queryLayerFeatureIds = async ({
   layer,
   filters,
   search,
+  searchField = null,
   computedFields = [],
 }: {
   layer: AnalyticsLayer;
   filters: VisualFilter[];
   search: string;
+  searchField?: string | null;
   computedFields?: ComputedField[];
 }) => {
   const tableName = await analyticsTableForLayer(layer);
@@ -455,6 +482,7 @@ export const queryLayerFeatureIds = async ({
     filters,
     search,
     computedFields,
+    searchField,
   );
   const idColumn =
     layer.source?.kind === "duckdb-table" ||
@@ -473,6 +501,7 @@ export const buildLayerExportSql = async ({
   layer,
   filters,
   search,
+  searchField = null,
   sortBy,
   sortDirection,
   computedFields = [],
@@ -480,6 +509,7 @@ export const buildLayerExportSql = async ({
   layer: AnalyticsLayer;
   filters: VisualFilter[];
   search: string;
+  searchField?: string | null;
   sortBy: string | null;
   sortDirection: "asc" | "desc";
   computedFields?: ComputedField[];
@@ -491,6 +521,7 @@ export const buildLayerExportSql = async ({
     filters,
     search,
     computedFields,
+    searchField,
   );
   const sortClause = sortBy
     ? `ORDER BY ${quoteIdentifier(sortBy)} ${sortDirection.toUpperCase()} NULLS LAST`

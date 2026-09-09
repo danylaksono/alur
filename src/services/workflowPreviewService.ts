@@ -10,6 +10,7 @@ import {
   buildComputedRelation,
   type ComputedField,
 } from "../utils/fieldCalculator";
+import { searchPredicateFor } from "../utils/tableSearch";
 
 export const qi = (name: string) => `"${name.replace(/"/g, '""')}"`;
 export const escapeSql = (value: string) => value.replace(/'/g, "''");
@@ -50,34 +51,20 @@ export const isNumericType = (type: string) =>
 const rowToJson = (row: any) =>
   typeof row?.toJSON === "function" ? row.toJSON() : row;
 
-const searchPredicate = (
-  schema: any[] | undefined,
-  search: string,
-  computedFields: ComputedField[] = [],
-) => {
-  const normalizedSearch = search.trim();
-  const columns = [
-    ...searchableColumnNames(schema),
-    ...computedFields.map((field) => field.name),
-  ];
-  if (!normalizedSearch || !columns.length) return "";
-  return columns
-    .map(
-      (name) =>
-        `CAST(${qi(name)} AS VARCHAR) ILIKE '%${escapeSql(normalizedSearch)}%'`,
-    )
-    .join(" OR ");
-};
-
 const combinedWhereClause = (
   schema: any[] | undefined,
   search: string,
   filters: VisualFilter[] = [],
   computedFields: ComputedField[] = [],
+  searchField: string | null = null,
 ) => {
+  const columns = [
+    ...searchableColumnNames(schema),
+    ...computedFields.map((field) => field.name),
+  ];
   const predicates = [
     compileVisualFiltersWhereClause(filters).replace(/^WHERE\s+/, ""),
-    searchPredicate(schema, search, computedFields),
+    searchPredicateFor(search, columns, searchField),
   ].filter(Boolean);
   return predicates.length ? ` WHERE (${predicates.join(") AND (")})` : "";
 };
@@ -99,6 +86,7 @@ export const buildNodeTableExportSql = ({
   schema,
   filters,
   search,
+  searchField = null,
   sortBy,
   sortDirection,
   computedFields,
@@ -111,6 +99,7 @@ export const buildNodeTableExportSql = ({
   schema: any[] | undefined;
   filters: VisualFilter[];
   search: string;
+  searchField?: string | null;
   sortBy: string | null;
   sortDirection: "asc" | "desc";
   computedFields: ComputedField[];
@@ -122,6 +111,7 @@ export const buildNodeTableExportSql = ({
     search,
     filters,
     computedFields,
+    searchField,
   );
   const sortClause = sortBy
     ? ` ORDER BY ${qi(sortBy)} ${sortDirection.toUpperCase()} NULLS LAST`
@@ -135,6 +125,7 @@ export const queryNodePreviewRows = async ({
   nodeId,
   schema,
   search,
+  searchField = null,
   sortBy,
   sortDirection,
   pageIndex,
@@ -150,6 +141,7 @@ export const queryNodePreviewRows = async ({
   nodeId: string;
   schema: any[] | undefined;
   search: string;
+  searchField?: string | null;
   sortBy: string | null;
   sortDirection: "asc" | "desc";
   pageIndex: number;
@@ -177,6 +169,7 @@ export const queryNodePreviewRows = async ({
     search,
     filters,
     computedFields,
+    searchField,
   );
   const sortClause = sortBy
     ? ` ORDER BY ${qi(sortBy)} ${sortDirection.toUpperCase()} NULLS LAST`
@@ -202,6 +195,7 @@ export const queryNodeColumnProfile = async ({
   nodeId,
   schema,
   search,
+  searchField = null,
   column,
   filters = [],
   computedFields = [],
@@ -213,6 +207,7 @@ export const queryNodeColumnProfile = async ({
   nodeId: string;
   schema: any[] | undefined;
   search: string;
+  searchField?: string | null;
   column: string;
   filters?: VisualFilter[];
   computedFields?: ComputedField[];
@@ -227,6 +222,7 @@ export const queryNodeColumnProfile = async ({
     search,
     filters,
     computedFields,
+    searchField,
   );
 
   const totalSql = `${withClause} SELECT COUNT(*) AS total, SUM(CASE WHEN ${qi(column)} IS NULL THEN 1 ELSE 0 END) AS null_count FROM ${relation}${whereClause};`;
