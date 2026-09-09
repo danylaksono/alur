@@ -212,6 +212,8 @@ export const queryNodeColumnProfile = async ({
   filters?: VisualFilter[];
   computedFields?: ComputedField[];
 }): Promise<ColumnProfile> => {
+  // Ambient, like the layer histograms: run these behind the rows the analyst
+  // asked for rather than ahead of them. See queryLayerColumnProfile.
   const { withClause, needsH3 } = buildWorkflowSQL(nodes, edges, { fragments });
   if (needsH3) await duckdbService.ensureH3();
   const targetAlias = cteAlias(nodeId);
@@ -226,13 +228,13 @@ export const queryNodeColumnProfile = async ({
   );
 
   const totalSql = `${withClause} SELECT COUNT(*) AS total, SUM(CASE WHEN ${qi(column)} IS NULL THEN 1 ELSE 0 END) AS null_count FROM ${relation}${whereClause};`;
-  const totalResult = await duckdbService.query(totalSql);
+  const totalResult = await duckdbService.backgroundQuery(totalSql);
   const totalRaw = rowToJson(totalResult.toArray()[0]);
   const total = Number(totalRaw?.total ?? 0);
   const nullCount = Number(totalRaw?.null_count ?? 0);
 
   const statsSql = `${withClause} SELECT MIN(TRY_CAST(${qi(column)} AS DOUBLE)) AS min_value, MAX(TRY_CAST(${qi(column)} AS DOUBLE)) AS max_value, COUNT(TRY_CAST(${qi(column)} AS DOUBLE)) AS numeric_count, COUNT(${qi(column)}) AS non_null_count FROM ${relation}${whereClause};`;
-  const statsResult = await duckdbService.query(statsSql);
+  const statsResult = await duckdbService.backgroundQuery(statsSql);
   const statsRaw = rowToJson(statsResult.toArray()[0]);
   const numericCount = Number(statsRaw?.numeric_count ?? 0);
   const nonNullCount = Number(statsRaw?.non_null_count ?? 0);
@@ -251,7 +253,7 @@ export const queryNodeColumnProfile = async ({
         ? "0"
         : `LEAST(${binCount - 1}, CAST(FLOOR((TRY_CAST(${qi(column)} AS DOUBLE) - ${min}) / ${(max - min) / binCount || 1}) AS INTEGER))`;
     const binsSql = `${withClause} SELECT ${bucketExpr} AS bucket, COUNT(*) AS count FROM ${relation}${whereClause}${whereClause ? " AND" : " WHERE"} ${qi(column)} IS NOT NULL GROUP BY bucket ORDER BY bucket;`;
-    const binsResult = await duckdbService.query(binsSql);
+    const binsResult = await duckdbService.backgroundQuery(binsSql);
     const binMap = new Map<number, number>();
     binsResult.toArray().forEach((row: any) => {
       const raw = rowToJson(row);
@@ -268,7 +270,7 @@ export const queryNodeColumnProfile = async ({
   }
 
   const binsSql = `${withClause} SELECT CAST(${qi(column)} AS VARCHAR) AS label, COUNT(*) AS count FROM ${relation}${whereClause}${whereClause ? " AND" : " WHERE"} ${qi(column)} IS NOT NULL GROUP BY label ORDER BY count DESC LIMIT 12;`;
-  const binsResult = await duckdbService.query(binsSql);
+  const binsResult = await duckdbService.backgroundQuery(binsSql);
   const bins = binsResult.toArray().map((row: any) => {
     const raw = rowToJson(row);
     return {

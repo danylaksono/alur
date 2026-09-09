@@ -73,14 +73,29 @@ describe('registerJsonRows', () => {
 });
 
 describe('query scheduling', () => {
+    type Internals = {
+        db: unknown;
+        conn: unknown;
+        foregroundDepth: number;
+        foregroundIdleWaiters: Array<() => void>;
+        backgroundLane: Promise<void>;
+    };
+    const internals = () => duckdbService as unknown as Internals;
+
     /** Fakes the one shared connection, with each query held open until released. */
-    const stub = () => {
+    const stub = (fail?: (sql: string) => boolean) => {
         const started: string[] = [];
         const pending: Array<() => void> = [];
-        const service = duckdbService as unknown as { db: unknown; conn: unknown };
+        const service = internals();
+        // The scheduler is state on a singleton; leaving a previous test's
+        // in-flight query counted would make the next one wait on it.
+        service.foregroundDepth = 0;
+        service.foregroundIdleWaiters = [];
+        service.backgroundLane = Promise.resolve();
         service.conn = {
             query: async (sql: string) => {
                 started.push(sql);
+                if (fail?.(sql)) throw new Error('bad column');
                 await new Promise<void>((resolve) => pending.push(resolve));
                 return { toArray: () => [] };
             },
@@ -109,6 +124,47 @@ describe('query scheduling', () => {
 
         releaseAll();
         await background;
+        restore();
+    });
+
+    it('runs background queries one at a time, so a burst cannot bury the next search', async () => {
+        const { started, releaseAll, restore } = stub();
+
+        // Opening a table fires a histogram per visible column at once.
+        const profiles = [
+            duckdbService.backgroundQuery('SELECT histogram 1'),
+            duckdbService.backgroundQuery('SELECT histogram 2'),
+            duckdbService.backgroundQuery('SELECT histogram 3'),
+        ];
+        await settle();
+        // Only one reached the worker, so a search now waits behind one query
+        // rather than the whole burst.
+        expect(started).toEqual(['SELECT histogram 1']);
+
+        const search = duckdbService.query('SELECT rows');
+        releaseAll();
+        await Promise.all([profiles[0], search]);
+        await settle();
+        expect(started.indexOf('SELECT rows')).toBeLessThan(started.indexOf('SELECT histogram 2'));
+
+        releaseAll();
+        await settle();
+        releaseAll();
+        await Promise.all(profiles);
+        restore();
+    });
+
+    it('lets a failed background query go without stalling the ones behind it', async () => {
+        const { started, releaseAll, restore } = stub((sql) => sql.includes('boom'));
+
+        const failing = duckdbService.backgroundQuery('SELECT boom');
+        const following = duckdbService.backgroundQuery('SELECT fine');
+
+        await expect(failing).rejects.toThrow('bad column');
+        await settle();
+        releaseAll();
+        await expect(following).resolves.toBeDefined();
+        expect(started).toEqual(['SELECT boom', 'SELECT fine']);
         restore();
     });
 

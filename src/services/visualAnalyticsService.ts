@@ -364,18 +364,24 @@ export const queryLayerColumnProfile = async ({
   column: string;
   computedFields?: ComputedField[];
 }) => {
+  // A histogram is ambient: it describes rows the analyst can already see.
+  // Every visible column asks for one, and the cache is dropped whenever the
+  // search or filters change, so a single settled search used to fire roughly
+  // three queries per column and leave the rows the analyst actually asked for
+  // queued behind all of them. Running these in the background lane puts the
+  // rows on screen first and lets the bars fill in after.
   const tableName = await analyticsTableForLayer(layer);
   const relation = buildComputedRelation(`"${tableName}"`, computedFields);
   const whereClause = compileVisualFiltersWhereClause(filters);
   const field = quoteIdentifier(column);
-  const totalResult = await duckdbService.query(
+  const totalResult = await duckdbService.backgroundQuery(
     `SELECT COUNT(*) AS total, SUM(CASE WHEN ${field} IS NULL THEN 1 ELSE 0 END) AS null_count FROM ${relation} ${whereClause};`,
   );
   const totalRaw = normalizeRows(totalResult.toArray())[0] || {};
   const total = Number(totalRaw.total ?? 0);
   const nullCount = Number(totalRaw.null_count ?? 0);
 
-  const statsResult = await duckdbService.query(
+  const statsResult = await duckdbService.backgroundQuery(
     `SELECT MIN(TRY_CAST(${field} AS DOUBLE)) AS min_value, MAX(TRY_CAST(${field} AS DOUBLE)) AS max_value, COUNT(TRY_CAST(${field} AS DOUBLE)) AS numeric_count, COUNT(${field}) AS non_null_count FROM ${relation} ${whereClause};`,
   );
   const stats = normalizeRows(statsResult.toArray())[0] || {};
@@ -397,7 +403,7 @@ export const queryLayerColumnProfile = async ({
         ? "0"
         : `LEAST(${binCount - 1}, CAST(FLOOR((TRY_CAST(${field} AS DOUBLE) - ${min}) / ${width || 1}) AS INTEGER))`;
     const andOrWhere = whereClause ? `${whereClause} AND` : "WHERE";
-    const binsResult = await duckdbService.query(
+    const binsResult = await duckdbService.backgroundQuery(
       `SELECT ${bucketExpr} AS bucket, COUNT(*) AS count FROM ${relation} ${andOrWhere} ${field} IS NOT NULL GROUP BY bucket ORDER BY bucket;`,
     );
     const binMap = new Map<number, number>();
@@ -421,7 +427,7 @@ export const queryLayerColumnProfile = async ({
   }
 
   const andOrWhere = whereClause ? `${whereClause} AND` : "WHERE";
-  const binsResult = await duckdbService.query(
+  const binsResult = await duckdbService.backgroundQuery(
     `SELECT CAST(${field} AS VARCHAR) AS label, COUNT(*) AS count FROM ${relation} ${andOrWhere} ${field} IS NOT NULL GROUP BY label ORDER BY count DESC LIMIT 12;`,
   );
   return {

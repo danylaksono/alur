@@ -301,6 +301,7 @@ class DuckDBService {
      */
     private foregroundDepth = 0;
     private foregroundIdleWaiters: Array<() => void> = [];
+    private backgroundLane: Promise<void> = Promise.resolve();
 
     private releaseForeground() {
         this.foregroundDepth -= 1;
@@ -329,9 +330,23 @@ class DuckDBService {
      * `signal` aborts first — MapLibre aborts the tiles for a viewport you have
      * panned away from, and at low zoom each of those costs seconds of worker
      * time nobody is waiting on.
+     *
+     * Background work also runs one query at a time. Yielding on its own is not
+     * enough: opening a table fires a histogram per visible column, and if they
+     * all cleared the foreground check together they would all reach the worker
+     * together, putting the next search behind every one of them. Single file,
+     * foreground can slip in after each.
      */
     async backgroundQuery(sql: string, signal?: AbortSignal) {
         if (!this.conn) throw new Error('DuckDB not initialized');
+        throwIfAborted(signal);
+        const run = this.backgroundLane.then(() => this.runBackgroundQuery(sql, signal));
+        // A failure must not poison the lane for everything queued behind it.
+        this.backgroundLane = run.then(() => undefined, () => undefined);
+        return run;
+    }
+
+    private async runBackgroundQuery(sql: string, signal?: AbortSignal) {
         // Yielding is a courtesy, not a lock. An exploration session can keep
         // foreground queries overlapping for a long stretch, and a tile that
         // waited for true idle would leave the map blank the whole time, so
@@ -347,7 +362,7 @@ class DuckDBService {
             ]);
         }
         throwIfAborted(signal);
-        return await this.conn.query(sql);
+        return await this.conn!.query(sql);
     }
 
     async registerFileBuffer(name: string, buffer: Uint8Array) {
