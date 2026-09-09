@@ -265,11 +265,22 @@ export function useAttributeTable() {
       }
     };
 
-    if (!isManualSQL && selectedNodeId) {
+    // Selecting a layer also selects its source node, but `data`, `totalRows`
+    // and `isLoading` below all prefer the layer — so this preview would be
+    // computed and thrown away. It is the more expensive of the two as well:
+    // it compiles against the origin table where the layer branch reads the
+    // narrower tile table, measured at 13.0s against 1.4s on a 946k-row layer,
+    // and the wasted query queued in front of the one being displayed.
+    if (!isManualSQL && selectedNodeId && !selectedLayer) {
       fetchNodePreview();
+    } else if (selectedLayer) {
+      // Drop what the previous node selection left behind, so deselecting the
+      // layer cannot flash stale rows before the refetch lands.
+      setNodeRows([]);
+      setNodeTotal(undefined);
     }
     return () => { cancelled = true; };
-  }, [selectedNodeId, nodes, edges, isManualSQL, pageIndex, pageSize, debouncedSearch, searchField, sortBy, sortDirection, nodeSchemas, filters, computedFields]);
+  }, [selectedNodeId, selectedLayer, nodes, edges, isManualSQL, pageIndex, pageSize, debouncedSearch, searchField, sortBy, sortDirection, nodeSchemas, filters, computedFields]);
 
   const data = selectedLayer ? layerRows : selectedNodeId ? nodeRows : manualPreview ?? [];
 
