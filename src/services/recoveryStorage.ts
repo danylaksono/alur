@@ -3,7 +3,7 @@ import type { ProjectManifest } from '../types/project';
 const DB_NAME = 'alur-recovery';
 const DB_VERSION = 1;
 const STORE_NAME = 'snapshots';
-export const MAX_RECOVERY_SNAPSHOTS = 5;
+const MAX_RECOVERY_SNAPSHOTS = 5;
 
 export type RecoverySnapshot = {
   id: string;
@@ -63,7 +63,7 @@ export const saveRecoverySnapshot = async (manifest: ProjectManifest) => {
   }
 };
 
-export const listRecoverySnapshots = async () => {
+const listRecoverySnapshots = async () => {
   const db = await openRecoveryDb();
   try {
     const transaction = db.transaction(STORE_NAME, 'readonly');

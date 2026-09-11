@@ -23,7 +23,7 @@ export type GeoExportFormat =
   | 'json'
   | 'parquet';
 
-export type GeoExportFormatSpec = {
+type GeoExportFormatSpec = {
   id: GeoExportFormat;
   label: string;
   extension: string;

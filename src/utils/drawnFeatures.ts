@@ -18,9 +18,9 @@ export type DrawGeometryKind = 'point' | 'line' | 'polygon';
 /** Deliberately three. A drawn column is typed enough to aggregate, no more. */
 export type DrawnFieldType = 'text' | 'number' | 'boolean';
 
-export type DrawnField = { name: string; type: DrawnFieldType };
+type DrawnField = { name: string; type: DrawnFieldType };
 
-export type DrawnFeature = {
+type DrawnFeature = {
   id: string;
   kind: DrawGeometryKind;
   /** Point: one position. Line: the vertices. Polygon: the ring, unclosed. */
@@ -42,7 +42,7 @@ export const minimumVertices = (kind: DrawGeometryKind) => (kind === 'point' ? 1
 export const canCommitDrawing = (kind: DrawGeometryKind, positions: Position[]) =>
   positions.length >= minimumVertices(kind);
 
-export const defaultValueForField = (type: DrawnFieldType): unknown => (type === 'number' ? null : type === 'boolean' ? false : '');
+const defaultValueForField = (type: DrawnFieldType): unknown => (type === 'number' ? null : type === 'boolean' ? false : '');
 
 /**
  * Coerces user input to the column's type. Returns `null` rather than `NaN`
@@ -150,7 +150,7 @@ const closeRing = (positions: Position[]): Position[] => {
   return first && last && (first[0] !== last[0] || first[1] !== last[1]) ? [...positions, first] : positions;
 };
 
-export const geometryFor = (feature: DrawnFeature): Geometry => {
+const geometryFor = (feature: DrawnFeature): Geometry => {
   if (feature.kind === 'point') return { type: 'Point', coordinates: feature.positions[0] };
   if (feature.kind === 'line') return { type: 'LineString', coordinates: feature.positions };
   return { type: 'Polygon', coordinates: [closeRing(feature.positions)] };

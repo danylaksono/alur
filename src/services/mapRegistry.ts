@@ -13,7 +13,7 @@ export const registerMap = (map: maplibregl.Map | null) => {
 
 export const getMap = () => currentMap;
 
-export type MapSnapshot = {
+type MapSnapshot = {
   /** WebP data URI of the rendered canvas; absent when capture failed. */
   image?: string;
   width: number;

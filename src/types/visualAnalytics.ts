@@ -1,6 +1,6 @@
 export const FEATURE_ID_PROPERTY = '_alur_feature_id';
 
-export type DatasetInteractionState = {
+type DatasetInteractionState = {
   hoveredFeatureId?: string;
   highlightedFeatureIds?: string[];
   selectedFeatureIds: string[];
@@ -79,7 +79,7 @@ export type CalculationSetup = {
   lastRunAt?: number;
 };
 
-export type ComparisonScope =
+type ComparisonScope =
   | { kind: 'whole-dataset' }
   | { kind: 'filters'; filters: VisualFilter[] }
   | { kind: 'cohort'; cohortId: string; definition: CohortSpec['definition'] }
@@ -95,7 +95,7 @@ export type ComparisonOperand = {
   sourceVersion?: string | number;
 };
 
-export type ComparisonAlignment = {
+type ComparisonAlignment = {
   mode: 'aggregate-only' | 'entity-keyed' | 'temporal' | 'spatial';
   keyFields?: Record<string, string>;
   timeFields?: Record<string, string>;
@@ -127,7 +127,7 @@ export type ComparisonSpec = {
   updatedAt: number;
 };
 
-export type ComparisonValue = {
+type ComparisonValue = {
   operandId: string;
   value: number | null;
   denominator: number;
@@ -142,7 +142,7 @@ export type ComparisonAlignedRecord = {
   deltas: Record<string, number | null>;
 };
 
-export type ComparisonSpatialSample = {
+type ComparisonSpatialSample = {
   operandId: string;
   measureId?: string;
   features: GeoJSON.FeatureCollection;
@@ -166,7 +166,7 @@ export type ComparisonResult = {
   generatedAt: number;
 };
 
-export type EvidenceProvenance = {
+type EvidenceProvenance = {
   capturedAt: number;
   datasetIds: string[];
   sourceVersions: Record<string, string | number | undefined>;
@@ -184,7 +184,7 @@ export type EvidenceProvenance = {
 
 export type ExplainCardKind = 'chart' | 'kpi' | 'table' | 'comparison' | 'map' | 'finding' | 'note' | 'lineage' | 'account' | 'section-intro';
 export type ExplainEvidenceRole = 'supports' | 'contradicts' | 'context';
-export type ExplainEvidenceLink = { cardId: string; role: ExplainEvidenceRole; note?: string };
+type ExplainEvidenceLink = { cardId: string; role: ExplainEvidenceRole; note?: string };
 export type ExplainCard = {
   id: string;
   sectionId: string;
@@ -241,7 +241,7 @@ export type ScoreModelSpec = {
 };
 
 /** Operation kinds ALUR itself provides, kept nameable for the built-in editors. */
-export type BuiltInOperationType =
+type BuiltInOperationType =
   | 'weighted-score'
   | 'ranked-selection'
   | 'value-change'
@@ -361,7 +361,7 @@ export type AnalyticalBookmark = {
   kpis: KpiSpec[];
 };
 
-export type CohortNumericComparison = {
+type CohortNumericComparison = {
   field: string;
   aCount: number;
   bCount: number;
@@ -373,12 +373,12 @@ export type CohortNumericComparison = {
   bins: Array<{ label: string; aCount: number; bCount: number }>;
 };
 
-export type CohortCategoryComparison = {
+type CohortCategoryComparison = {
   field: string;
   values: Array<{ label: string; aCount: number; bCount: number; aShare: number; bShare: number; shareDifference: number }>;
 };
 
-export type CohortTemporalComparison = {
+type CohortTemporalComparison = {
   field: string;
   grain: 'month';
   points: Array<{ period: string; aCount: number; bCount: number }>;
@@ -499,7 +499,7 @@ export type VisualChartResult = {
   data: VisualChartDatum[];
 };
 
-export type VisualTemporalPoint = {
+type VisualTemporalPoint = {
   bucketStart: string;
   bucketEnd: string;
   label: string;
@@ -509,7 +509,7 @@ export type VisualTemporalPoint = {
   totalCount: number;
 };
 
-export type VisualTemporalSeries = {
+type VisualTemporalSeries = {
   key: string;
   label: string;
   color: string;
@@ -528,7 +528,7 @@ export type VisualTemporalResult = {
   hasOtherSeries: boolean;
 };
 
-export type VisualScatterPoint = {
+type VisualScatterPoint = {
   x: number;
   y: number;
   /** 1 when the row passes the chart's context filters (other fields' filters). */
@@ -616,7 +616,7 @@ export type SelectionExplanation = {
   fields: SelectionDivergence[];
 };
 
-export type LayerSummaryStatistic = {
+type LayerSummaryStatistic = {
   count: number;
   min: number | null;
   max: number | null;
@@ -624,7 +624,7 @@ export type LayerSummaryStatistic = {
   sum: number | null;
 };
 
-export type LayerSummaryMetric = {
+type LayerSummaryMetric = {
   field: string;
   kind: 'numeric';
   selected: LayerSummaryStatistic;
@@ -632,7 +632,7 @@ export type LayerSummaryMetric = {
   total: LayerSummaryStatistic;
 };
 
-export type LayerSummaryCategory = {
+type LayerSummaryCategory = {
   field: string;
   values: Array<{ label: string; selectedCount: number; activeCount: number; totalCount: number }>;
 };

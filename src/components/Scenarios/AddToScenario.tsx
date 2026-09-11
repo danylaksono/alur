@@ -17,7 +17,7 @@ const NEW = '__new__';
 export const scenarioBaseName = (datasetName: string) =>
   datasetName.replace(/\.(parquet|csv|json|geojson|gpkg|arrow)$/i, '');
 
-export type AddToScenarioProps = {
+type AddToScenarioProps = {
   /** Nothing to add yet — an empty score model, an unselected cohort. */
   disabled?: boolean;
   /** The dataset a newly created scenario is a scenario *of*. */

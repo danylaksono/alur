@@ -93,7 +93,7 @@ import {
 import type { Position } from "geojson";
 import { appendOperation, removeOperation } from "../utils/operationRecords";
 
-export type NodeExecutionState = {
+type NodeExecutionState = {
   status: "idle" | "running" | "done" | "error";
   error?: string;
   featureCount?: number;
@@ -187,7 +187,7 @@ export type Toast = {
   message: string;
 };
 
-export type LoadingOperation = {
+type LoadingOperation = {
   id: string;
   title: string;
   detail: string;
@@ -198,7 +198,7 @@ export type LoadingOperation = {
   startedAt: number;
 };
 
-export type RailTab =
+type RailTab =
   | "layers"
   | "charts"
   | "cohorts"
@@ -208,7 +208,7 @@ export type RailTab =
   | "chat"
   | "nodes";
 export type DrawerTab = "workflow" | "table" | "sql";
-export type DrawerMode = "collapsed" | "open" | "maximized";
+type DrawerMode = "collapsed" | "open" | "maximized";
 
 /** Which edge of the map the workflow/table/SQL surface is docked against. */
 export type DockSide = "bottom" | "top" | "left" | "right";
@@ -222,7 +222,7 @@ export type LayoutPresetId =
 export const isHorizontalDock = (dock: DockSide) =>
   dock === "bottom" || dock === "top";
 
-export type LayoutPresetSpec = {
+type LayoutPresetSpec = {
   label: string;
   description: string;
   dock: DockSide;
@@ -294,7 +294,7 @@ const DRAWER_TAB_FOR_PANEL: Partial<Record<RailTab, DrawerTab>> = {
   nodes: "workflow",
 };
 
-export type UIState = {
+type UIState = {
   activeRailTab: RailTab;
   isPanelCollapsed: boolean;
   /** Rail shows labels when expanded, icons only when collapsed. */
@@ -354,7 +354,7 @@ export type UIState = {
   dismissedEmptyState: boolean;
 };
 
-export type SettingsState = {
+type SettingsState = {
   openRouterApiKey: string;
   openRouterModelId: string;
   /** Stamped onto exported stories so a reader knows whose account it is. */
@@ -367,7 +367,7 @@ export type SettingsState = {
   customBasemaps: BasemapDefinition[];
 };
 
-export type ChatMessage = {
+type ChatMessage = {
   role: "user" | "assistant" | "system";
   content: string;
   kind?: "tool_call" | "tool_result";
@@ -378,7 +378,7 @@ export type ChatMessage = {
   };
 };
 
-export type ProjectState = {
+type ProjectState = {
   /** Empty until the user names it; the UI falls back to "Untitled project". */
   name: string;
 };
@@ -692,7 +692,7 @@ export interface AppState {
   setActiveVariant: (variantId: string | undefined) => void;
 }
 
-export type NewMapLayer = Omit<
+type NewMapLayer = Omit<
   MapLayer,
   | "visible"
   | "opacity"
@@ -892,7 +892,7 @@ const clampPanelWidth = (width: number, context?: SizingContext) => {
 };
 
 /** UI keys that represent a deliberate layout choice and are safe to restore. */
-export type LayoutPreferences = Pick<
+type LayoutPreferences = Pick<
   UIState,
   | "activeRailTab"
   | "isPanelCollapsed"

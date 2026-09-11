@@ -5,7 +5,7 @@ import type { StyleSpecification } from 'maplibre-gl';
  * id of a stored basemap is a plain string, because a user-added source
  * contributes one this file cannot know.
  */
-export type BuiltInBasemapId = 'positron' | 'voyager' | 'dark' | 'osm';
+type BuiltInBasemapId = 'positron' | 'voyager' | 'dark' | 'osm';
 export type BasemapId = string;
 
 export type BasemapDefinition = {
@@ -48,7 +48,7 @@ export const BASEMAPS: BasemapDefinition[] = [
 export const DEFAULT_BASEMAP_ID: BuiltInBasemapId = 'positron';
 
 /** What kind of thing a pasted URL turns out to be. */
-export type TileSourceKind = 'style' | 'xyz' | 'wms' | 'pmtiles';
+type TileSourceKind = 'style' | 'xyz' | 'wms' | 'pmtiles';
 
 /**
  * Reads the kind off the URL rather than asking.

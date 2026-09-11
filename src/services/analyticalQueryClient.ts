@@ -1,4 +1,4 @@
-export type AnalyticalQueryMetrics = {
+type AnalyticalQueryMetrics = {
   requests: number;
   cacheHits: number;
   deduplicated: number;

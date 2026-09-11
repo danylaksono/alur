@@ -22,7 +22,7 @@ export type VisualisationKind =
   | "cartogram"
   | "h3grid";
 
-export type LegendItem = {
+type LegendItem = {
   label: string;
   color: string;
   min?: number;
@@ -50,7 +50,7 @@ export type LegendSpec = {
   };
 };
 
-export type SimpleVisualisation = {
+type SimpleVisualisation = {
   kind: "simple";
   color: string;
   opacity: number;

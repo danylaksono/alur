@@ -7,9 +7,9 @@
  * integer and several are already past 2^53, so reading one as a JS number
  * silently rounds it and distinct cells collide.
  */
-export type H3InputKind = "cell" | "lat" | "lng";
+type H3InputKind = "cell" | "lat" | "lng";
 
-export interface H3OperationMetadata {
+interface H3OperationMetadata {
   /** DuckDB function this maps to. */
   id: string;
   label: string;
@@ -166,7 +166,7 @@ export const h3NodeErrors = (
 // ─── polyfill mode ─────────────────────────────────────────────────────────
 
 /** How attributes are encoded onto the dissolved cells. */
-export type H3PolyfillAggregate = "count" | "sum" | "avg";
+type H3PolyfillAggregate = "count" | "sum" | "avg";
 
 export const h3PolyfillAggregates: Array<{
   value: H3PolyfillAggregate;

@@ -196,7 +196,7 @@ export const cachedSource = async (source: ProjectSourceDescriptor): Promise<Fil
   }
 };
 
-export const listCachedSources = async (): Promise<CachedSourceEntry[]> => {
+const listCachedSources = async (): Promise<CachedSourceEntry[]> => {
   const dir = await directory();
   if (!dir) return [];
   return (await readIndex(dir)).entries;

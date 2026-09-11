@@ -3,7 +3,7 @@ import { registerLayerForAnalytics } from './visualAnalyticsService';
 import { FEATURE_ID_PROPERTY } from '../types/visualAnalytics';
 import { quoteIdentifier } from '../utils/visualFilterSql';
 
-export type DotDensityConfig = {
+type DotDensityConfig = {
   field: string;
   dotValue: number;
   color: string;

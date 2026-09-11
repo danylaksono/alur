@@ -13,7 +13,7 @@ import {
 import { searchPredicateFor } from "../utils/tableSearch";
 
 export const qi = (name: string) => `"${name.replace(/"/g, '""')}"`;
-export const searchableColumnNames = (schema: any[] | undefined) =>
+const searchableColumnNames = (schema: any[] | undefined) =>
   (schema || [])
     .map((col: any) => col.name || col.column_name)
     .filter(
@@ -22,7 +22,7 @@ export const searchableColumnNames = (schema: any[] | undefined) =>
         !["geojson", "geometry", "geom"].includes(name.toLowerCase()),
     );
 
-export const columnType = (schema: any[] | undefined, column: string) => {
+const columnType = (schema: any[] | undefined, column: string) => {
   const found = (schema || []).find(
     (col: any) => (col.name || col.column_name) === column,
   );

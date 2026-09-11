@@ -18,7 +18,7 @@ import type { AnalysisVariant } from '../types/visualAnalytics';
  * a failure part-way would leave the results it did produce unattributable.
  */
 
-export type SweepOutcome = {
+type SweepOutcome = {
   variantId: string;
   variantName: string;
   status: 'ok' | 'failed';
@@ -27,7 +27,7 @@ export type SweepOutcome = {
   error?: string;
 };
 
-export type SweepReport = {
+type SweepReport = {
   outcomes: SweepOutcome[];
   ok: number;
   failed: number;

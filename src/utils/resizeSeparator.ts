@@ -10,7 +10,7 @@ import type { KeyboardEvent } from 'react';
  */
 
 /** One arrow press. Shift multiplies it, for crossing the panel quickly. */
-export const RESIZE_STEP = 16;
+const RESIZE_STEP = 16;
 const RESIZE_STEP_LARGE = 96;
 
 export const separatorKeyDown = (

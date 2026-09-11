@@ -18,7 +18,7 @@ import {
 
 const PROBE_TIMEOUT_MS = 15_000;
 
-export type RemoteProbe = {
+type RemoteProbe = {
   url: string;
   name: string;
   byteSize: number | null;
@@ -120,7 +120,7 @@ const fingerprintFor = (inspection: RemoteInspection, name: string): SourceFinge
   sourceKind: 'remote',
 });
 
-export type RemoteReadOptions = {
+type RemoteReadOptions = {
   url: string;
   nodeId?: string;
   position?: { x: number; y: number };

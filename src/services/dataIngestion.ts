@@ -118,7 +118,7 @@ const registerSpatialFile = async (file: File): Promise<string> => {
 // --- H3 cell detection ------------------------------------------------------
 
 /** Canonical H3 cell ids in their string form are 15–16 hex digits. */
-export const H3_CELL_ID_PATTERN = /^[0-9a-f]{15,16}$/i;
+const H3_CELL_ID_PATTERN = /^[0-9a-f]{15,16}$/i;
 
 /** Whether a single value is plausibly an H3 cell id. */
 export const looksLikeH3Cell = (value: unknown): boolean =>
@@ -135,7 +135,7 @@ export const h3CellColumnScore = (name: string): number =>
  * untouched and the cell column stays in the table, so downstream H3 nodes can
  * still operate on it.
  */
-export const maybeDeriveH3Geometry = async (
+const maybeDeriveH3Geometry = async (
   tableName: string,
 ): Promise<{ view: string; cellColumn: string } | null> => {
   try {

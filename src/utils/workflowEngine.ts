@@ -35,7 +35,7 @@ import { expandFragments, type WorkflowFragment } from "./workflowFragments";
 import { resolveNodeParameters } from "./workflowParameters";
 import type { ScoreModelSpec } from "../types/visualAnalytics";
 
-export type WorkflowBuildOptions = {
+type WorkflowBuildOptions = {
   limit?: number;
   /** Saved operations the workflow may place. Omit only for graphs known to have none. */
   fragments?: WorkflowFragment[];
@@ -117,7 +117,7 @@ const GEOMETRY_RETURNING_FUNCTIONS = new Set([
   "ST_Union",
 ]);
 
-export const JOIN_PREDICATES = new Set([
+const JOIN_PREDICATES = new Set([
   "ST_Intersects",
   "ST_Within",
   "ST_Contains",
@@ -231,7 +231,7 @@ function isBooleanPredicate(operation: string): boolean {
  * is for. Dropped before anything reads the graph, so annotating a workflow can
  * never change what it compiles to.
  */
-export const withoutAnnotations = (nodes: WorkflowNode[]) =>
+const withoutAnnotations = (nodes: WorkflowNode[]) =>
   nodes.filter((node) => node.data.type !== "group");
 
 export const unloadedSourceNodes = (nodes: WorkflowNode[]) =>

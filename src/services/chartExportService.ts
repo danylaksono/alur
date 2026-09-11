@@ -8,7 +8,7 @@ export type ChartExportData =
   | { kind: 'temporal'; result: VisualTemporalResult }
   | { kind: 'scatter'; result: VisualScatterResult };
 
-export type ChartExportMetadata = {
+type ChartExportMetadata = {
   title: string;
   aggregation: string;
   filters: string[];
@@ -58,7 +58,7 @@ export const downloadChartCsv = (chart: VisualChartSpec, filters: VisualFilter[]
   downloadText(buildChartCsv(chart, filters, data, date), `${chartFileBase(chart, date)}.csv`, 'text/csv;charset=utf-8');
 };
 
-export const serialiseChartSvg = (svg: SVGSVGElement, metadata: ChartExportMetadata) => {
+const serialiseChartSvg = (svg: SVGSVGElement, metadata: ChartExportMetadata) => {
   const clone = svg.cloneNode(true) as SVGSVGElement;
   clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
   const metadataNode = document.createElementNS('http://www.w3.org/2000/svg', 'metadata');

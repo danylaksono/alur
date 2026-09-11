@@ -34,7 +34,7 @@ export const scenarioOutputs = (variants: AnalysisVariant[]): Map<string, string
 export const scenarioOwning = (variants: AnalysisVariant[], layerId: string): string | undefined =>
   scenarioOutputs(variants).get(layerId);
 
-export type LayerVisibility = { id: string; visible: boolean };
+type LayerVisibility = { id: string; visible: boolean };
 
 /**
  * Layer visibility for the scenario being stood in.

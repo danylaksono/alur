@@ -1,8 +1,8 @@
 import type { TimeGrain } from '../types/visualAnalytics';
 
-export type ResolvedTimeGrain = Exclude<TimeGrain, 'auto'>;
+type ResolvedTimeGrain = Exclude<TimeGrain, 'auto'>;
 
-export const TIME_GRAINS: ResolvedTimeGrain[] = ['hour', 'day', 'week', 'month', 'quarter', 'year'];
+const TIME_GRAINS: ResolvedTimeGrain[] = ['hour', 'day', 'week', 'month', 'quarter', 'year'];
 
 const approximateMs: Record<ResolvedTimeGrain, number> = {
   hour: 60 * 60 * 1000,
@@ -58,7 +58,7 @@ const nextBucket = (date: Date, grain: ResolvedTimeGrain) => {
   return result;
 };
 
-export type TemporalBucket = { start: string; end: string; label: string };
+type TemporalBucket = { start: string; end: string; label: string };
 
 const bucketLabel = (date: Date, grain: ResolvedTimeGrain) => {
   if (grain === 'hour') return date.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', timeZone: 'UTC' });

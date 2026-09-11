@@ -24,7 +24,7 @@ const finite = (value: unknown) => {
   return Number.isFinite(numeric) ? numeric : null;
 };
 
-export type ScoredRow = {
+type ScoredRow = {
   key: string;
   rank: number;
   score: number | null;
@@ -154,7 +154,7 @@ export const queryScorePreview = async ({
   };
 };
 
-export type CriterionSensitivity = {
+type CriterionSensitivity = {
   field: string;
   /** Spearman correlation between the base and nudged rankings. 1 means nothing moved. */
   rankCorrelation: number | null;

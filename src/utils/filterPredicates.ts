@@ -14,7 +14,7 @@ import { quoteIdentifier } from './visualFilterSql';
  * have to compile into a workflow node and into a standalone funnel query.
  */
 
-export type PredicateSeverity = 'hard' | 'soft';
+type PredicateSeverity = 'hard' | 'soft';
 
 export type FilterPredicate = {
   id: string;
@@ -88,7 +88,7 @@ export const filterPredicateErrors = (predicates: FilterPredicate[] | undefined)
   return errors;
 };
 
-export type ExclusionSelects = {
+type ExclusionSelects = {
   columns: ReturnType<typeof exclusionColumns>;
   /** Computed against the source rows. */
   inner: string[];
@@ -136,7 +136,7 @@ export const buildExclusionSelects = (
   };
 };
 
-export type FunnelStepPlan = {
+type FunnelStepPlan = {
   id: string;
   label: string;
   severity: PredicateSeverity;

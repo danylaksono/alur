@@ -4,7 +4,7 @@ import type { AnalysisVariant, ComparisonSpec } from '../types/visualAnalytics';
 const OPERAND_COLOURS = ['#2563eb', '#e11d48', '#059669', '#d97706'];
 
 /** The most groups a comparison supports. */
-export const MAX_SCENARIO_OPERANDS = 4;
+const MAX_SCENARIO_OPERANDS = 4;
 
 /**
  * A variant is only comparable once its workflow has run and registered an

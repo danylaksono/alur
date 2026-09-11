@@ -25,7 +25,7 @@ export type MvtTileSource = {
     filterWhereClause?: string;
 };
 
-export type DuckDbLayerSourceMetadata = {
+type DuckDbLayerSourceMetadata = {
     kind: 'duckdb-table' | 'duckdb-query';
     tableName: string;
     originalTableName?: string;

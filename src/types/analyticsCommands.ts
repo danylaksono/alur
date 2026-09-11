@@ -44,7 +44,7 @@ export type AnalyticsCommand =
       kpiId?: string;
     };
 
-export type AnalyticsCommandErrorCode =
+type AnalyticsCommandErrorCode =
   | 'dataset_not_found'
   | 'field_not_found'
   | 'unsupported_dataset'

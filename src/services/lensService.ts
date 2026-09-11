@@ -26,7 +26,7 @@ const MAX_LENS_FIELDS = 6;
 /** Compass sectors the necklace divides into. */
 const ANGULAR_BINS = 24;
 
-export type LensPoint = { position: [number, number]; values: number[]; category?: string };
+type LensPoint = { position: [number, number]; values: number[]; category?: string };
 
 export type LensPoints = {
   points: LensPoint[];
@@ -223,7 +223,7 @@ const readable = (value: unknown) => {
  * library whose README says the API will move, and whose declaration types
  * the bins as unknown for exactly that reason.
  */
-export type LensBin = { key?: string; label?: string; value?: number; raw?: number; count?: number };
+type LensBin = { key?: string; label?: string; value?: number; raw?: number; count?: number };
 
 const asBins = (bins: unknown): LensBin[] =>
   Array.isArray(bins)

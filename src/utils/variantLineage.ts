@@ -17,7 +17,7 @@ export type VariantDifference = {
   after: unknown;
 };
 
-export type VariantTreeNode = {
+type VariantTreeNode = {
   variant: AnalysisVariant;
   depth: number;
   children: VariantTreeNode[];
@@ -160,7 +160,7 @@ export const assumptionsBehindDatasets = (variants: AnalysisVariant[], datasetId
   return assumptions;
 };
 
-export type VariantLineageRow = {
+type VariantLineageRow = {
   id: string;
   name: string;
   depth: number;

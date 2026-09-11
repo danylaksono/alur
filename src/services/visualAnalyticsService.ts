@@ -1211,7 +1211,7 @@ const featureIdsFromValue = (value: unknown) =>
 
 export const visualChartFilterKey = visualFilterKey;
 
-export type ChartFacet = { field: string; value: string };
+type ChartFacet = { field: string; value: string };
 
 const facetPredicate = (facet: ChartFacet | undefined) =>
   facet
@@ -2120,7 +2120,7 @@ const safeCohortTableName = (value: string) => {
   return value;
 };
 
-export const cohortPredicate = (
+const cohortPredicate = (
   cohort: CohortSpec,
   featureIdColumn: string,
 ) => {

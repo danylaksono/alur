@@ -2,7 +2,7 @@ import type { AnalyticalBookmark, CohortComparisonSelection, CohortSpec, KpiSpec
 import type { LayerVisualisation, LegendSpec } from '../types/visualisation';
 import { chartDatasetId } from '../utils/datasetSource';
 
-export type HistoryLayerPresentation = {
+type HistoryLayerPresentation = {
   id: string;
   visible: boolean;
   opacity: number;
@@ -14,12 +14,12 @@ export type HistoryLayerPresentation = {
   clusterMaxZoom?: number;
 };
 
-export type HistoryLayerInteraction = {
+type HistoryLayerInteraction = {
   selectedFeatureIds: string[];
   filters: VisualFilter[];
 };
 
-export type AnalysisSnapshot = {
+type AnalysisSnapshot = {
   layerPresentation: HistoryLayerPresentation[];
   layerInteractions: Record<string, HistoryLayerInteraction>;
   charts: VisualChartSpec[];
@@ -33,7 +33,7 @@ export type AnalysisSnapshot = {
   variants?: VisualAnalyticsState['variants'];
 };
 
-export type AnalysisHistoryEntry = {
+type AnalysisHistoryEntry = {
   label: string;
   coalesceKey: string;
   createdAt: number;

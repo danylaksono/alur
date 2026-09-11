@@ -11,8 +11,8 @@ import type {
 import { compileVisualFiltersWhereClause, quoteIdentifier } from '../utils/visualFilterSql';
 
 const resultCache = new Map<string, ComparisonResult>();
-export const ALIGNED_RECORD_LIMIT = 250;
-export const SPATIAL_SAMPLE_LIMIT = 1500;
+const ALIGNED_RECORD_LIMIT = 250;
+const SPATIAL_SAMPLE_LIMIT = 1500;
 const toNumber = (value: unknown) => value === null || value === undefined ? null : Number(value);
 const rows = (result: { toArray: () => unknown[] }) => result.toArray() as Array<Record<string, unknown>>;
 const relation = (dataset: DatasetDescriptor) => dataset.relationName ? quoteIdentifier(dataset.relationName) : null;
@@ -26,7 +26,7 @@ const operandTable = (operand: ComparisonOperand, dataset: DatasetDescriptor) =>
   return materialisedTable ? quoteIdentifier(materialisedTable) : relation(dataset);
 };
 
-export const comparisonCacheKey = (spec: ComparisonSpec, datasets: Record<string, DatasetDescriptor>) => JSON.stringify({
+const comparisonCacheKey = (spec: ComparisonSpec, datasets: Record<string, DatasetDescriptor>) => JSON.stringify({
   spec,
   versions: Object.fromEntries(spec.operands.map((operand) => [operand.datasetId, datasets[operand.datasetId]?.sourceUpdatedAt])),
 });
@@ -197,7 +197,7 @@ const queryDifferenceSpatialSample = async (
   return { operandId: '__difference__', measureId: measure.id, features: { type: 'FeatureCollection', features }, sampled: featureCount > SPATIAL_SAMPLE_LIMIT, featureCount };
 };
 
-export type ComparisonCompatibility = {
+type ComparisonCompatibility = {
   valid: boolean;
   warnings: string[];
   differenceMapEligible: boolean;

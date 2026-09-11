@@ -230,7 +230,7 @@ export function createProvenanceEvent(input: ProvenanceEventInput): ProvenanceEv
 export const PROVENANCE_EVENT_LIMIT = 5000;
 
 /** Matches the undo stack's window, so a gesture is one entry in both records. */
-export const PROVENANCE_COALESCE_WINDOW_MS = 700;
+const PROVENANCE_COALESCE_WINDOW_MS = 700;
 
 export function appendProvenanceEvent(events: ProvenanceEvent[], event: ProvenanceEvent): ProvenanceEvent[] {
   const latest = events[events.length - 1];

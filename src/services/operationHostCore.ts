@@ -41,7 +41,7 @@ export type OperationHostResponse =
   | { kind: 'error'; id: number; message: string };
 
 /** What a provider package must expose. Checked, because it comes from outside. */
-export type ProviderModule = {
+type ProviderModule = {
   providers?: OperationProvider[];
   provider?: OperationProvider;
   default?: OperationProvider;
@@ -55,7 +55,7 @@ export type LoadedPlugin = {
   calculations: OperationManifest[];
 };
 
-export type OperationHostCore = {
+type OperationHostCore = {
   handle(request: OperationHostRequest): Promise<OperationHostResponse>;
   /** Instances still alive. Exposed so a test can prove `dispose` actually disposes. */
   liveHandles(): string[];

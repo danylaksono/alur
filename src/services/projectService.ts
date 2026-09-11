@@ -330,7 +330,7 @@ const migrateV2ToV3 = (value: Record<string, unknown>) => {
 };
 
 /** Sequential migration entry point. Version 0 was the short-lived pre-manifest prototype. */
-export const migrateProjectManifest = (value: unknown): unknown => {
+const migrateProjectManifest = (value: unknown): unknown => {
   if (!isRecord(value) || typeof value.version !== 'number') return value;
   if (value.version === 2) return migrateV2ToV3(value);
   if (value.version === 1) return migrateV2ToV3(migrateV1ToV2(value) as Record<string, unknown>);
@@ -471,7 +471,7 @@ export const sourceMatchesFile = (source: ProjectSourceDescriptor, file: File) =
   return true;
 };
 
-export type SourceRestoreResult = {
+type SourceRestoreResult = {
   restored: ProjectSourceDescriptor[];
   /** Still need the user to pick them by hand. */
   missing: ProjectSourceDescriptor[];

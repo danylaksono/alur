@@ -22,7 +22,7 @@ export type ClaimComparison = {
   similarity: number;
 };
 
-export type StoryDiff = {
+type StoryDiff = {
   claims: ClaimComparison[];
   sharedSources: string[];
   leftOnlySources: string[];

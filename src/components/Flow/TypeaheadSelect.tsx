@@ -2,7 +2,7 @@ import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { Check, ChevronDown, Search } from 'lucide-react';
 import { cn } from '../../utils/cn';
 
-export type TypeaheadOption = {
+type TypeaheadOption = {
   value: string;
   label: string;
   description?: string;

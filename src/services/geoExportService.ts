@@ -20,7 +20,7 @@ import {
  * is where DuckDB's geometry becomes coordinates the serialisers can reshape.
  */
 
-export type BuiltExport = {
+type BuiltExport = {
   blob: Blob;
   fileName: string;
   /** Null for tabular exports, where rows are never materialised in the browser. */
@@ -29,7 +29,7 @@ export type BuiltExport = {
   warnings: string[];
 };
 
-export type BuildExportOptions = {
+type BuildExportOptions = {
   sql: string;
   format: GeoExportFormat | string;
   /** Used for the download filename and the KML document name. */
@@ -38,7 +38,7 @@ export type BuildExportOptions = {
   featureLimit?: number;
 };
 
-export class NoGeometryError extends Error {
+class NoGeometryError extends Error {
   constructor() {
     super('This result has no geometry column, so it cannot be written as a spatial file. Export it as CSV, JSON or Parquet instead.');
     this.name = 'NoGeometryError';
@@ -50,7 +50,7 @@ const exportTableName = (baseName: string) =>
 
 const textBlob = (text: string, mimeType: string) => new Blob([text], { type: `${mimeType};charset=utf-8` });
 
-export const buildExport = async ({
+const buildExport = async ({
   sql,
   format,
   baseName,

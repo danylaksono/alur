@@ -28,7 +28,7 @@ export type DatasetDescriptor = {
   originTableName?: string;
 };
 
-export type DatasetKind = 'layer' | 'table' | 'workflow-node';
+type DatasetKind = 'layer' | 'table' | 'workflow-node';
 
 export type FieldSemanticType =
   | 'numeric'
