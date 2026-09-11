@@ -25,9 +25,6 @@ const layerTableName = (layer: MapLayer): string | null => {
   return null;
 };
 
-export const isH3GridLayer = (layer: MapLayer): boolean =>
-  layer.visualisation?.kind === "h3grid";
-
 /**
  * Finds the H3 cell column in a layer's source by sampling values, preferring
  * columns whose names hint at H3. Mirrors the ingestion-time detector so a

@@ -42,8 +42,6 @@ type CacheIndex = { entries: CachedSourceEntry[] };
 
 const isAvailable = () => typeof navigator !== 'undefined' && typeof navigator.storage?.getDirectory === 'function';
 
-export const isSourceCacheAvailable = () => isAvailable();
-
 /**
  * Identifies a file by what the project manifest already records about it.
  *

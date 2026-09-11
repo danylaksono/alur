@@ -3,7 +3,6 @@ import { useStore } from "../store/useStore";
 import { nextNodePosition } from "../utils/nodePlacement";
 import type {
   IngestionFormat,
-  IngestionSource,
   IngestionSourceKind,
   ParsedJsonDataset,
   SourceFingerprint,
@@ -734,9 +733,3 @@ export const ingestClipboardText = async (
   );
 };
 
-export const ingestSource = (source: IngestionSource) => {
-  if (source.kind === "file")
-    return ingestFile(source.file, { sourceKind: "file" });
-  if (source.kind === "url") return ingestUrl(source.url);
-  return ingestClipboardText(source.text, source.name);
-};

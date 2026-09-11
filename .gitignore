@@ -69,3 +69,6 @@ desktop.ini
 # need_london.parquet and yogyakarta_buildings.parquet are committed as test
 # fixtures; this extract is 264 MB, so it stays local.
 data_sample/2.10_standardised_buildings_v4.parquet
+
+# Playwright MCP session dumps
+.playwright-mcp/

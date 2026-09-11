@@ -10,7 +10,6 @@ import {
   looksProjected,
   type GeoExportFormat,
 } from '../utils/geoExport';
-import { createCompressedZipArchive } from '../utils/zipArchive';
 
 /**
  * One place that turns "this SQL, in this format" into a downloadable file.
@@ -103,8 +102,9 @@ export const buildExport = async ({
       };
     case 'kmz': {
       const kml = featureCollectionToKml(collection, { documentName: baseName });
+      const { zipSync, strToU8 } = await import('fflate');
       // "doc.kml" is the conventional entry name every KMZ reader looks for.
-      const archive = await createCompressedZipArchive([{ name: 'doc.kml', data: new TextEncoder().encode(kml) }]);
+      const archive = zipSync({ 'doc.kml': strToU8(kml) });
       return { blob: new Blob([archive.buffer as ArrayBuffer], { type: spec.mimeType }), fileName, featureCount, warnings };
     }
     case 'gpx': {

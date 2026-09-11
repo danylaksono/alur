@@ -27,7 +27,6 @@ import type {
   CohortComparisonSelection,
   CohortSpec,
   ComparisonSpec,
-  DashboardCard,
   ExplainCard,
   ExplainDocument,
   ExplainSection,
@@ -583,13 +582,6 @@ export interface AppState {
   ) => void;
   removeBookmark: (bookmarkId: string) => void;
   restoreBookmark: (bookmarkId: string) => void;
-  setDashboardTitle: (title: string) => void;
-  addDashboardCard: (card: DashboardCard) => void;
-  updateDashboardCard: (
-    cardId: string,
-    patch: Partial<Omit<DashboardCard, "id" | "kind">>,
-  ) => void;
-  removeDashboardCard: (cardId: string) => void;
   setExplainTitle: (title: string) => void;
   updateExplainDocument: (
     patch: Partial<Pick<ExplainDocument, "audience" | "summary">>,
@@ -3294,108 +3286,6 @@ export const useStore = create<AppState>()(
             }),
           };
         }),
-
-      setDashboardTitle: (title) =>
-        set((state) => ({
-          visualAnalytics: {
-            ...state.visualAnalytics,
-            dashboard: {
-              title,
-              cards: state.visualAnalytics.dashboard?.cards || [],
-            },
-            explain: { ...state.visualAnalytics.explain, title },
-          },
-        })),
-
-      addDashboardCard: (card) =>
-        set((state) => ({
-          visualAnalytics: {
-            ...state.visualAnalytics,
-            dashboard: {
-              title: state.visualAnalytics.dashboard?.title || "Analysis board",
-              cards: [
-                ...(state.visualAnalytics.dashboard?.cards || []).filter(
-                  (item) => item.id !== card.id,
-                ),
-                card,
-              ],
-            },
-            explain: {
-              ...state.visualAnalytics.explain,
-              cards: [
-                ...state.visualAnalytics.explain.cards.filter(
-                  (item) => item.id !== card.id,
-                ),
-                {
-                  ...card,
-                  sectionId: "evidence",
-                  width: card.width === 2 ? 12 : 6,
-                  behaviour: "frozen",
-                  provenance: {
-                    capturedAt: Date.now(),
-                    datasetIds: card.datasetId ? [card.datasetId] : [],
-                    sourceVersions: {},
-                    filtersByDataset: {},
-                    caveats: [],
-                  },
-                } as ExplainCard,
-              ],
-            },
-          },
-        })),
-
-      updateDashboardCard: (cardId, patch) =>
-        set((state) => ({
-          visualAnalytics: {
-            ...state.visualAnalytics,
-            dashboard: {
-              title: state.visualAnalytics.dashboard?.title || "Analysis board",
-              cards: (state.visualAnalytics.dashboard?.cards || []).map(
-                (card) => (card.id === cardId ? { ...card, ...patch } : card),
-              ),
-            },
-            explain: {
-              ...state.visualAnalytics.explain,
-              cards: state.visualAnalytics.explain.cards.map((card) =>
-                card.id === cardId
-                  ? {
-                      ...card,
-                      referenceId: patch.referenceId ?? card.referenceId,
-                      datasetId: patch.datasetId ?? card.datasetId,
-                      title: patch.title ?? card.title,
-                      note: patch.note ?? card.note,
-                      width:
-                        patch.width === 2
-                          ? 12
-                          : patch.width === 1
-                            ? 6
-                            : card.width,
-                      height: patch.height ?? card.height,
-                    }
-                  : card,
-              ),
-            },
-          },
-        })),
-
-      removeDashboardCard: (cardId) =>
-        set((state) => ({
-          visualAnalytics: {
-            ...state.visualAnalytics,
-            dashboard: {
-              title: state.visualAnalytics.dashboard?.title || "Analysis board",
-              cards: (state.visualAnalytics.dashboard?.cards || []).filter(
-                (card) => card.id !== cardId,
-              ),
-            },
-            explain: {
-              ...state.visualAnalytics.explain,
-              cards: state.visualAnalytics.explain.cards.filter(
-                (card) => card.id !== cardId,
-              ),
-            },
-          },
-        })),
 
       setExplainTitle: (title) =>
         set((state) => ({

@@ -110,20 +110,4 @@ export const materializeWorkflowOutput = async (
     layer: await buildLayer(options, featureCount, source),
   };
 };
-
-/**
- * @deprecated Prefer `materializeWorkflowOutput`, which does not discard
- * results that have no geometry. Retained for callers that genuinely require a
- * layer and can treat its absence as an error.
- */
-export const materializeWorkflowMapLayer = async (
-  options: MaterializeOptions,
-) => {
-  const result = await materializeWorkflowOutput(options);
-  if (result.kind === "table") {
-    throw new Error(
-      "The query result does not contain a renderable geometry column.",
-    );
-  }
-  return result.layer;
-};
+

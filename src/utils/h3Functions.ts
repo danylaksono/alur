@@ -186,23 +186,6 @@ export const h3PolyfillAggregates: Array<{
   },
 ];
 
-export interface H3PolyfillConfig {
-  /** Mode discriminator — must be "polyfill". */
-  mode: "polyfill";
-  /** Upstream GEOMETRY column to cover. */
-  geometryField: string;
-  /** H3 resolution, 0–15. */
-  resolution?: number;
-  /** How attributes are encoded onto each cell. */
-  aggregate?: H3PolyfillAggregate;
-  /** Numeric column for sum/avg. */
-  valueField?: string;
-  /** Output column holding the aggregated value. */
-  resultField?: string;
-  /** Optional buffer distance (geometry units) so lines become fillable areas. */
-  buffer?: number;
-}
-
 /** Human-readable problems with a polyfill node's current config. */
 export const h3PolyfillErrors = (config: Record<string, unknown>): string[] => {
   const errors: string[] = [];

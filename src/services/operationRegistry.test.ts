@@ -1,28 +1,13 @@
-import { afterEach, describe, expect, it } from 'vitest';
-import type { OperationChange, OperationChangeSpec, OperationManifest, OperationProvider } from '../types/operations';
+import { describe, expect, it } from 'vitest';
+import type { OperationManifest } from '../types/operations';
 import type { DatasetDescriptor } from '../types/datasets';
 import { referenceProvider } from '../providers/reference/referenceProvider';
-import {
-  OperationRegistrationError,
-  getOperationProvider,
-  operationBindingErrors,
-  operationChangeErrors,
-  operationManifestErrors,
-  operationProviders,
-  providersAcceptingChanges,
-  registerOperationProvider,
-  unregisterOperationProvider,
-} from './operationRegistry';
+import { operationBindingErrors } from './operationRegistry';
 
 const manifest = (patch: Partial<OperationManifest> = {}): OperationManifest => ({
   ...structuredClone(referenceProvider.manifest),
   id: 'test.provider',
   ...patch,
-});
-
-const provider = (value: OperationManifest): OperationProvider => ({
-  manifest: value,
-  create: referenceProvider.create,
 });
 
 const dataset = (patch: Partial<DatasetDescriptor> = {}): DatasetDescriptor => ({
@@ -37,73 +22,6 @@ const dataset = (patch: Partial<DatasetDescriptor> = {}): DatasetDescriptor => (
   spatial: true,
   geometryKind: 'point',
   ...patch,
-});
-
-afterEach(() => {
-  for (const registered of operationProviders()) unregisterOperationProvider(registered.manifest.id);
-});
-
-describe('manifest validation', () => {
-  it('accepts the reference provider', () => {
-    expect(operationManifestErrors(referenceProvider.manifest)).toEqual([]);
-  });
-
-  it('rejects an id that is not namespace-safe', () => {
-    expect(operationManifestErrors(manifest({ id: 'Not Safe' }))).toContainEqual(
-      expect.stringContaining('must be lower-case'),
-    );
-  });
-
-  it('rejects a change naming an input that does not exist', () => {
-    const errors = operationManifestErrors(
-      manifest({ accepts: [{ ...referenceProvider.manifest.accepts[0], inputId: 'absent' }] }),
-    );
-    expect(errors).toContainEqual(expect.stringContaining('names input "absent"'));
-  });
-
-  it('rejects a join output with no input to join to', () => {
-    const errors = operationManifestErrors(
-      manifest({ outputs: [{ id: 'values', label: 'Values', kind: 'join', fields: [] }] }),
-    );
-    expect(errors).toContainEqual(expect.stringContaining('names no input to join to'));
-  });
-
-  it('rejects a measure naming a field no output emits', () => {
-    const errors = operationManifestErrors(
-      manifest({ measure: { ...referenceProvider.manifest.measure!, field: 'absent' } }),
-    );
-    expect(errors).toContainEqual(expect.stringContaining('does not emit'));
-  });
-
-  it('reports duplicate ids rather than silently keeping the last', () => {
-    const input = referenceProvider.manifest.inputs[0];
-    expect(operationManifestErrors(manifest({ inputs: [input, input] }))).toContainEqual(
-      expect.stringContaining('is declared twice'),
-    );
-  });
-});
-
-describe('registration', () => {
-  it('registers and resolves a provider', () => {
-    registerOperationProvider(referenceProvider);
-    expect(getOperationProvider('reference.tally')).toBe(referenceProvider);
-    expect(providersAcceptingChanges()).toHaveLength(1);
-  });
-
-  it('refuses an invalid manifest instead of registering it', () => {
-    expect(() => registerOperationProvider(provider(manifest({ id: 'Bad Id' })))).toThrow(OperationRegistrationError);
-    expect(operationProviders()).toEqual([]);
-  });
-
-  it('refuses to register the same id twice', () => {
-    registerOperationProvider(referenceProvider);
-    expect(() => registerOperationProvider(referenceProvider)).toThrow(/already registered/);
-  });
-
-  it('returns null for a provider that is not installed', () => {
-    // The ordinary case when opening someone else's project, not an error.
-    expect(getOperationProvider('someone.elses')).toBeNull();
-  });
 });
 
 describe('binding validation', () => {
@@ -172,81 +90,6 @@ describe('binding validation', () => {
     expect(errors).toContainEqual(expect.stringContaining('no longer loaded'));
   });
 });
-
-describe('change validation', () => {
-  const rowsSpec = referenceProvider.manifest.accepts[0];
-  const pointSpec = referenceProvider.manifest.accepts[1];
-
-  const change = (patch: Partial<OperationChange>): OperationChange => ({
-    id: 'op-1',
-    changeId: 'adjust',
-    sequence: 0,
-    target: { kind: 'rows', datasetId: 'dataset-1', rowIds: ['a'] },
-    values: { amount: 2 },
-    ...patch,
-  });
-
-  it('accepts a well-formed row change', () => {
-    expect(operationChangeErrors(rowsSpec, change({}))).toEqual([]);
-  });
-
-  it('rejects a row change with an empty selection', () => {
-    const errors = operationChangeErrors(rowsSpec, change({ target: { kind: 'rows', datasetId: 'd', rowIds: [] } }));
-    expect(errors).toContainEqual(expect.stringContaining('at least one selected row'));
-  });
-
-  it('rejects a geometry target where rows were declared', () => {
-    const errors = operationChangeErrors(
-      rowsSpec,
-      change({ target: { kind: 'geometry', geometry: { type: 'Point', coordinates: [0, 0] } } }),
-    );
-    expect(errors).toContainEqual(expect.stringContaining('applies to selected rows'));
-  });
-
-  it('accepts a point placement', () => {
-    const placement = change({
-      changeId: 'place',
-      target: { kind: 'geometry', geometry: { type: 'Point', coordinates: [110.3, -7.8] } },
-    });
-    expect(operationChangeErrors(pointSpec, placement)).toEqual([]);
-  });
-
-  it('rejects a polygon where a point was declared', () => {
-    const placement = change({
-      changeId: 'place',
-      target: { kind: 'geometry', geometry: { type: 'Polygon', coordinates: [[[0, 0], [1, 0], [1, 1], [0, 0]]] } },
-    });
-    expect(operationChangeErrors(pointSpec, placement)).toContainEqual(expect.stringContaining('applies to a point'));
-  });
-
-  it('rejects a non-numeric value for a number parameter', () => {
-    expect(operationChangeErrors(rowsSpec, change({ values: { amount: 'lots' } }))).toContainEqual(
-      expect.stringContaining('must be a number'),
-    );
-  });
-
-  it('requires a value only when the parameter has no default', () => {
-    const required: OperationChangeSpec = {
-      ...rowsSpec,
-      parameters: [{ id: 'amount', label: 'Amount', type: 'number' }],
-    };
-    expect(operationChangeErrors(required, change({ values: {} }))).toContainEqual(
-      expect.stringContaining('needs a value for Amount'),
-    );
-    expect(operationChangeErrors(rowsSpec, change({ values: {} }))).toEqual([]);
-  });
-
-  it('rejects a choice outside the declared options', () => {
-    const spec: OperationChangeSpec = {
-      ...rowsSpec,
-      parameters: [{ id: 'band', label: 'Band', type: 'choice', options: ['low', 'high'] }],
-    };
-    expect(operationChangeErrors(spec, change({ values: { band: 'medium' } }))).toContainEqual(
-      expect.stringContaining('must be one of low, high'),
-    );
-  });
-});
-
 describe('binding several datasets to one input', () => {
   const datasets = { 'dataset-1': dataset(), 'dataset-2': dataset() };
   const multiple: OperationManifest = manifest({

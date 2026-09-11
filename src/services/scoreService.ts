@@ -89,8 +89,6 @@ const chooseLabelField = async (dataset: DatasetDescriptor, exclude: Set<string>
   return chosen;
 };
 
-export const clearScoreLabelCache = () => labelCache.clear();
-
 export const queryScorePreview = async ({
   dataset,
   spec,

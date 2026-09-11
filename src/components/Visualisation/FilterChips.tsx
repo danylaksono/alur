@@ -4,7 +4,6 @@ import type { VisualFilter } from '../../types/visualAnalytics';
 import { visualFilterKey, visualFilterLabel } from '../../utils/visualFilters';
 import { FilterEditorDialog } from './FilterEditorDialog';
 
-export const filterLabel = visualFilterLabel;
 export const filterKey = visualFilterKey;
 
 export const FilterChips = ({

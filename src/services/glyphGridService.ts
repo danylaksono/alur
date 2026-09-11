@@ -225,11 +225,6 @@ const makeColorScale = (palette: string[], opacity: number) => {
   };
 };
 
-const MULTIVARIATE_GLYPHS = new Set(['pie', 'donut', 'bars', 'radial']);
-
-export const isMultivariateGlyph = (vis: GlyphGridVisualisation) =>
-  MULTIVARIATE_GLYPHS.has(vis.glyph) && vis.fields.length > 0;
-
 export const buildGlyphGridLayerOptions = ({
   id,
   vis,

@@ -29,8 +29,6 @@ export type VisualAnalyticsState = {
   activeVariantId?: string;
   calculations?: CalculationSetup[];
   comparison?: CohortComparisonSelection;
-  /** @deprecated v1 compatibility only. New projects use `explain`. */
-  dashboard?: DashboardLayout;
 };
 
 /**
@@ -330,22 +328,6 @@ export type AnalysisVariant = {
   operations: VariantOperation[];
   createdAt: number;
   provenance: { workflowNodeIds: string[]; sourceVersion?: string | number };
-};
-
-export type DashboardCard = {
-  id: string;
-  kind: 'chart' | 'kpi' | 'table' | 'note';
-  referenceId?: string;
-  datasetId?: string;
-  title?: string;
-  note?: string;
-  width: 1 | 2;
-  height: 'compact' | 'standard' | 'tall';
-};
-
-export type DashboardLayout = {
-  title: string;
-  cards: DashboardCard[];
 };
 
 export type CohortSpec = {

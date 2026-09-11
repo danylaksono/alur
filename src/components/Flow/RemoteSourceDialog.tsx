@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { AlertTriangle, Cloud, Crop, Loader2, X } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { getMap } from '../../services/mapRegistry';
+import { formatBytes } from '../../utils/download';
 import { inspectRemoteSource, probeRemoteSource, readRemoteSource, type RemoteInspection } from '../../services/remoteSource';
 import {
   guardFailure,
@@ -13,13 +14,6 @@ import {
 import { cn } from '../../utils/cn';
 
 const inputClass = 'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200';
-
-const formatBytes = (bytes?: number | null) => {
-  if (!bytes) return 'unknown size';
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${Math.round(bytes / 1024 / 1024)} MB`;
-  return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`;
-};
 
 const boundsFromMap = (): RemoteBbox | null => {
   const map = getMap();
@@ -176,7 +170,7 @@ export const RemoteSourceDialog = ({ nodeId, onClose }: { nodeId?: string; onClo
                   >
                     <span className="flex items-baseline justify-between gap-2">
                       <span className="truncate text-xs font-semibold text-foreground">{entry.name}</span>
-                      <span className="shrink-0 text-[11px] text-slate-500">{formatBytes(entry.byteSize)}</span>
+                      <span className="shrink-0 text-[11px] text-slate-500">{entry.byteSize ? formatBytes(entry.byteSize) : 'unknown size'}</span>
                     </span>
                     <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">{entry.description}</span>
                     <span className="mt-0.5 block truncate text-[11px] text-slate-500">{entry.publisher}</span>
@@ -197,7 +191,7 @@ export const RemoteSourceDialog = ({ nodeId, onClose }: { nodeId?: string; onClo
               <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-600">
                 <p className="font-semibold text-slate-800">{inspection.name}</p>
                 <p className="mt-0.5">
-                  {formatBytes(inspection.byteSize)}
+                  {inspection.byteSize ? formatBytes(inspection.byteSize) : 'unknown size'}
                   {inspection.rowCount !== null && ` · ${inspection.rowCount.toLocaleString()} rows`}
                   {` · ${inspection.fields.length} columns`}
                 </p>

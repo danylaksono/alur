@@ -963,5 +963,4 @@ export const spatialFunctionsByCategory = spatialFunctions.reduce((acc, fn) => {
   acc[fn.category].push(fn);
   return acc;
 }, {} as Record<SpatialFunctionCategory, SpatialFunctionMetadata[]>);
-
-export const spatialFunctionCategories: SpatialFunctionCategory[] = ["Scalar", "Aggregate", "Macro", "Table"];
+

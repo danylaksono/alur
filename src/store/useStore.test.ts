@@ -384,16 +384,11 @@ describe('layer state', () => {
     expect(useStore.getState().visualAnalytics.explain.cards.find((card) => card.id === 'finding')?.sectionId).toBe('interpretation');
   });
 
-  it('saves and resizes dashboard cards independently of presentation mode', () => {
+  it('tracks workspace mode and presentation mode independently', () => {
     const store = useStore.getState();
     store.setWorkspaceMode('board');
-    store.addDashboardCard({ id: 'note-1', kind: 'note', title: 'Finding', note: 'North is growing.', width: 1, height: 'compact' });
-    store.updateDashboardCard('note-1', { width: 2, height: 'tall' });
     store.setPresentationMode(true);
-    expect(useStore.getState().visualAnalytics.dashboard?.cards[0]).toMatchObject({ id: 'note-1', width: 2, height: 'tall' });
     expect(useStore.getState().ui).toMatchObject({ workspaceMode: 'board', isPresentationMode: true });
-    store.removeDashboardCard('note-1');
-    expect(useStore.getState().visualAnalytics.dashboard?.cards).toEqual([]);
   });
 });
 

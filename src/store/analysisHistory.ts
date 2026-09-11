@@ -27,7 +27,6 @@ export type AnalysisSnapshot = {
   cohorts: CohortSpec[];
   bookmarks: AnalyticalBookmark[];
   comparison?: CohortComparisonSelection;
-  dashboard?: VisualAnalyticsState['dashboard'];
   comparisons?: VisualAnalyticsState['comparisons'];
   activeComparisonId?: string;
   explain?: VisualAnalyticsState['explain'];
@@ -61,7 +60,7 @@ export type HistoryAction = {
 const HISTORY_LIMIT = 50;
 const COALESCE_WINDOW_MS = 700;
 
-const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+const clone = <T>(value: T): T => structuredClone(value);
 
 export const emptyAnalysisHistory = (): AnalysisHistoryState => ({ past: [], future: [] });
 
@@ -88,7 +87,6 @@ export const captureAnalysisSnapshot = (source: SnapshotSource): AnalysisSnapsho
   cohorts: clone(source.visualAnalytics.cohorts),
   bookmarks: clone(source.visualAnalytics.bookmarks),
   comparison: source.visualAnalytics.comparison ? clone(source.visualAnalytics.comparison) : undefined,
-  dashboard: source.visualAnalytics.dashboard ? clone(source.visualAnalytics.dashboard) : undefined,
   comparisons: clone(source.visualAnalytics.comparisons || []),
   activeComparisonId: source.visualAnalytics.activeComparisonId,
   explain: source.visualAnalytics.explain ? clone(source.visualAnalytics.explain) : undefined,
@@ -218,7 +216,6 @@ export const restoreAnalysisSnapshot = <T extends SnapshotLayer, A extends Visua
       comparison: snapshot.comparison && availableDatasetIds.has(snapshot.comparison.datasetId)
         ? clone(snapshot.comparison)
         : undefined,
-      dashboard: snapshot.dashboard ? clone(snapshot.dashboard) : visualAnalytics.dashboard,
       comparisons: clone(snapshot.comparisons || []).filter((comparison) => comparison.operands.every((operand) => availableDatasetIds.has(operand.datasetId))),
       activeComparisonId: snapshot.activeComparisonId,
       explain: snapshot.explain ? clone(snapshot.explain) : visualAnalytics.explain,

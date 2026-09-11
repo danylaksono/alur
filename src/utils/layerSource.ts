@@ -3,9 +3,6 @@ import type { GeometryKind } from '../types/visualisation';
 import type { MvtTileSource } from '../services/duckdb';
 import type { LayerBounds, LayerField } from '../types/layers';
 
-export const isDuckDbBackedLayer = (layer: MapLayer | null | undefined) =>
-  layer?.source.kind === 'duckdb-table' || layer?.source.kind === 'duckdb-query';
-
 export const mvtSourceForLayer = (layer: MapLayer): MvtTileSource | undefined =>
   layer.source.kind === 'duckdb-table' || layer.source.kind === 'duckdb-query'
     ? layer.source.tileSource

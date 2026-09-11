@@ -62,8 +62,6 @@ export type FragmentArguments = Record<string, string | number>;
 
 const PLACEHOLDER = /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g;
 
-export const FRAGMENT_PARAMETER_PATTERN = PLACEHOLDER;
-
 /** Identifier that needs no quoting and cannot carry SQL of its own. */
 const SAFE_IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
