@@ -110,4 +110,3 @@ export const materializeWorkflowOutput = async (
     layer: await buildLayer(options, featureCount, source),
   };
 };
-

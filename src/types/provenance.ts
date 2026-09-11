@@ -111,4 +111,3 @@ export const DEFAULT_PROVENANCE_AGENT: ProvenanceAgent = {
   id: 'local-user',
   label: 'You',
 };
-
