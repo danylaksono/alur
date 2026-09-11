@@ -33,6 +33,19 @@ describe('analysis history', () => {
     expect(snapshot.layerInteractions.areas).not.toHaveProperty('hoveredFeatureId');
   });
 
+  it('undoes a style applied after the snapshot was taken', () => {
+    // The capture picks nine presentation fields by name, so a field that was
+    // unset at capture time is part of the snapshot as "unset" — undo has to
+    // put it back that way, not leave whatever the layer has picked up since.
+    const plain = [{ id: 'areas', name: 'Areas', visible: true, opacity: 0.8, styleVersion: 1 }];
+    const snapshot = captureAnalysisSnapshot({ mapLayers: plain as never, visualAnalytics: analytics() });
+
+    const styled = [{ ...plain[0], styleVersion: 2, visualisation: { kind: 'choropleth' } }];
+    const restored = restoreAnalysisSnapshot(styled as never, analytics(), snapshot);
+
+    expect(restored.mapLayers[0].visualisation).toBeUndefined();
+  });
+
   it('coalesces rapid updates with the same key', () => {
     const first = recordAnalysisHistory(emptyAnalysisHistory(), captureAnalysisSnapshot({ mapLayers, visualAnalytics: analytics() }), {
       label: 'Change opacity',
