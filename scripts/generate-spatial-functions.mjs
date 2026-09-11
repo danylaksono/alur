@@ -1,0 +1,151 @@
+/**
+ * Regenerates `src/utils/spatialFunctions.ts` from DuckDB's own catalogue.
+ *
+ * The name, summary and category of every spatial function are DuckDB's to
+ * state, not ours to retype — `duckdb_functions()` already carries them, and a
+ * hand-maintained copy only drifts as the extension moves. Run this after a
+ * DuckDB or spatial-extension bump:
+ *
+ *     npm run gen:spatial-functions
+ *
+ * Deliberately not part of `npm run build`: it needs the network to install the
+ * spatial extension, and a build that can fail because a CDN is slow is a worse
+ * trade than a generated file kept in git.
+ *
+ * `requiredInputCount` is ours — it says how many upstream nodes an operation
+ * needs on the canvas, which DuckDB has no opinion about. Existing values are
+ * carried across by name; anything new arrives as 1 and wants a human look.
+ */
+import { createRequire } from 'node:module';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const require = createRequire(import.meta.url);
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const TARGET = path.join(root, 'src/utils/spatialFunctions.ts');
+
+/** Categories ALUR shows in the node palette, in the order it shows them. */
+const CATEGORIES = { scalar: 'Scalar', aggregate: 'Aggregate', macro: 'Macro', table: 'Table' };
+
+/** Reads the requiredInputCount already agreed for each function, so a regen keeps it. */
+const existingInputCounts = () => {
+  const counts = new Map();
+  if (!fs.existsSync(TARGET)) return counts;
+  const source = fs.readFileSync(TARGET, 'utf8');
+  const entry = /"name":\s*"([^"]+)"[\s\S]*?"requiredInputCount":\s*(\d+)/g;
+  let match;
+  while ((match = entry.exec(source))) counts.set(match[1].toLowerCase(), Number(match[2]));
+  return counts;
+};
+
+const connect = async () => {
+  const duckdb = require('@duckdb/duckdb-wasm/dist/duckdb-node-blocking.cjs');
+  const dist = path.dirname(require.resolve('@duckdb/duckdb-wasm/dist/duckdb-node-blocking.cjs'));
+  // Local wasm, so the generator does not also depend on a CDN for the engine
+  // itself — only the spatial extension needs the network.
+  const bundles = {
+    mvp: {
+      mainModule: path.join(dist, 'duckdb-mvp.wasm'),
+      mainWorker: path.join(dist, 'duckdb-node-mvp.worker.cjs'),
+    },
+    eh: {
+      mainModule: path.join(dist, 'duckdb-eh.wasm'),
+      mainWorker: path.join(dist, 'duckdb-node-eh.worker.cjs'),
+    },
+  };
+  const db = await duckdb.createDuckDB(bundles, new duckdb.ConsoleLogger(duckdb.LogLevel?.WARNING ?? 2), duckdb.NODE_RUNTIME);
+  await db.instantiate(() => {});
+  return db.connect();
+};
+
+/**
+ * Descriptions DuckDB does not publish. Kept deliberately short: these are the
+ * predicates the palette leans on hardest, and an empty helper line under
+ * `ST_Intersects` is worse than a sentence we wrote ourselves.
+ */
+const OVERRIDES = {
+  st_contains: 'Returns true if the first geometry contains the second geometry',
+  st_intersects: 'Returns true if the geometries intersect',
+  st_within: 'Returns true if the first geometry is within the second',
+};
+
+/**
+ * DuckDB ships full markdown docs — matrices, fenced examples, several
+ * paragraphs. The palette renders this as one line of helper text under a
+ * dropdown, so only the opening paragraph survives, unwrapped, and a long one
+ * is cut at its first sentence.
+ */
+const oneLineSummary = (description, name) => {
+  const override = OVERRIDES[name.toLowerCase()];
+  if (override) return override;
+  const first = String(description ?? '').trim().split(/\n\s*\n/)[0] ?? '';
+  const flat = first.replace(/`/g, '').replace(/\s+/g, ' ').trim();
+  if (!flat) return `${name} (no description published).`;
+  if (flat.length <= 160) return flat;
+  const sentence = flat.match(/^.*?[.!?](?=\s|$)/);
+  return sentence ? sentence[0] : `${flat.slice(0, 157).trimEnd()}…`;
+};
+
+const main = async () => {
+  const conn = await connect();
+  conn.query('INSTALL spatial; LOAD spatial;');
+
+  // Functions the spatial extension owns, not DuckDB's own built-ins.
+  const rows = conn
+    .query(`
+      SELECT DISTINCT ON (function_name)
+        function_name, description, function_type, parameters
+      FROM duckdb_functions()
+      WHERE lower(function_type) IN ('scalar', 'aggregate', 'macro', 'table')
+        AND (function_name ILIKE 'ST\\_%' ESCAPE '\\' OR function_name ILIKE '%proj%')
+      ORDER BY function_name, length(list_value(parameters)) DESC;
+    `)
+    .toArray()
+    .map((row) => row.toJSON());
+
+  const carried = existingInputCounts();
+  const entries = rows.map((row) => {
+    const name = String(row.function_name);
+    return {
+      name,
+      summary: oneLineSummary(row.description, name),
+      category: CATEGORIES[String(row.function_type).toLowerCase()] ?? 'Scalar',
+      requiredInputCount: carried.get(name.toLowerCase()) ?? 1,
+    };
+  });
+
+  const unknown = entries.filter((entry) => !carried.has(entry.name.toLowerCase()));
+  const file = `// GENERATED by scripts/generate-spatial-functions.mjs — do not edit by hand.
+// Run \`npm run gen:spatial-functions\` after a DuckDB or spatial-extension bump.
+// \`requiredInputCount\` is ALUR's own and is carried across regenerations by name.
+
+export type SpatialFunctionCategory = "Scalar" | "Aggregate" | "Macro" | "Table";
+
+export interface SpatialFunctionMetadata {
+  name: string;
+  category: SpatialFunctionCategory;
+  summary: string;
+  requiredInputCount: number;
+}
+
+export const spatialFunctions: SpatialFunctionMetadata[] = ${JSON.stringify(entries, null, 2)};
+
+export const spatialFunctionsByCategory = spatialFunctions.reduce((acc, fn) => {
+  (acc[fn.category] ||= []).push(fn);
+  return acc;
+}, {} as Record<SpatialFunctionCategory, SpatialFunctionMetadata[]>);
+`;
+
+  fs.writeFileSync(TARGET, file);
+  console.log(`wrote ${entries.length} functions to ${path.relative(root, TARGET)}`);
+  if (unknown.length) {
+    console.log(`\n${unknown.length} new function(s) defaulted to requiredInputCount 1 — check these:`);
+    for (const entry of unknown) console.log(`  ${entry.name}`);
+  }
+};
+
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

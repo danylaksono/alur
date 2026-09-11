@@ -25,7 +25,8 @@
     "test:watch": "vitest",
     "preview": "vite preview",
     "test:e2e": "playwright test",
-    "test:a11y": "playwright test --grep @a11y"
+    "test:a11y": "playwright test --grep @a11y",
+    "gen:spatial-functions": "node scripts/generate-spatial-functions.mjs"
   },
   "dependencies": {
     "@deck.gl/core": "^9.3.10",
