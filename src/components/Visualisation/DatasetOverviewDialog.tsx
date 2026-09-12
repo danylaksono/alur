@@ -48,7 +48,11 @@ export const DatasetOverviewDialog = () => {
   }, [layerId, newFilter, setOpen]);
 
   if (!layerId || !layer || !metadata) return null;
-  const fields = (profile?.fields || metadata.fields).filter((field) => `${field.name} ${field.type} ${field.semanticType}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
+  // Always the full schema. Profiling covers only the columns the tile table
+  // carries, so keying the list off the profile would make the rest of the
+  // columns vanish once it landed; `detailed` below already renders the
+  // unprofiled ones as pending.
+  const fields = metadata.fields.filter((field) => `${field.name} ${field.type} ${field.semanticType}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
   const runCommand = (command: Parameters<typeof execute>[0]) => { void execute(command); };
   const inspectField = (field?: string, missing = false) => {
     if (field && missing) {

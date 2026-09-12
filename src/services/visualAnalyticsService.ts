@@ -211,6 +211,41 @@ export const analyticsFieldsForLayer = (
   );
 };
 
+/**
+ * The columns a query against this layer's tile table may name, or null where
+ * nothing narrows it.
+ *
+ * `layer.source.fields` is the origin table's schema, but analytics read the
+ * MVT tile table, which carries only what MVT can encode —
+ * `propertyColumnsForMvt` drops any column whose DuckDB type has no MVT
+ * equivalent, a STRUCT or a LIST for instance. The origin schema therefore
+ * names columns the queried table does not have, and referencing one is a
+ * binder error rather than an empty result.
+ *
+ * Null rather than the full set for layers with no tile table: their columns
+ * would have to come from `analyticsFieldsForLayer`, which reads the first
+ * feature's properties, and a feature that happens to omit a key would then
+ * suppress a column that is really there. Restricting nothing is the safer
+ * answer where nothing needs restricting.
+ *
+ * Computed fields are added back because `buildComputedRelation` projects them
+ * onto the relation before the query sees it.
+ */
+export const tileTableColumns = (
+  layer: Pick<AnalyticsLayer, "source">,
+  computedFields: ComputedField[] = [],
+) => {
+  const available =
+    layer.source?.kind === "duckdb-table" || layer.source?.kind === "duckdb-query"
+      ? layer.source.tileSource?.propertyColumns
+      : undefined;
+  if (!available?.length) return null;
+  return new Set([
+    ...available,
+    ...computedFields.map((field) => field.name),
+  ]);
+};
+
 const layerSignature = (layer: {
   id: string;
   geojson: GeoJSON.FeatureCollection;
@@ -370,6 +405,20 @@ export const queryLayerColumnProfile = async ({
   // three queries per column and leave the rows the analyst actually asked for
   // queued behind all of them. Running these in the background lane puts the
   // rows on screen first and lets the bars fill in after.
+  // The table auto-profiles every visible column, and the visible columns come
+  // from the origin schema, so a column the tile table never carried is asked
+  // for by ordinary use rather than by a bad request. Returning the empty
+  // profile rather than throwing is also what stops the caller asking again.
+  const availableColumns = tileTableColumns(layer, computedFields);
+  if (availableColumns && !availableColumns.has(column)) {
+    return {
+      column,
+      kind: "categorical" as const,
+      total: 0,
+      nullCount: 0,
+      bins: [],
+    };
+  }
   const tableName = await analyticsTableForLayer(layer);
   const relation = buildComputedRelation(`"${tableName}"`, computedFields);
   const whereClause = compileVisualFiltersWhereClause(filters);
@@ -904,11 +953,17 @@ export const queryLayerDatasetProfile = async (
         datasetId: layer.id,
       },
       async () => {
-        const metadata = metadataForLayer(layer);
+        // Same reconciliation: profile what the tile table holds, not what the
+        // origin schema advertises.
+        const availableColumns = tileTableColumns(layer);
+        const metadataFields = metadataForLayer(layer).fields;
+        const profileFields = availableColumns
+          ? metadataFields.filter((field) => availableColumns.has(field.name))
+          : metadataFields;
         const tableName = await analyticsTableForLayer(layer);
         const table = `"${tableName.replace(/"/g, '""')}"`;
         const expressions = ["COUNT(*) AS profile_row_count"];
-        metadata.fields.forEach((field, index) => {
+        profileFields.forEach((field, index) => {
           const column = quoteIdentifier(field.name);
           expressions.push(
             `COUNT(*) FILTER (WHERE ${column} IS NULL) AS p${index}_nulls`,
@@ -937,7 +992,7 @@ export const queryLayerDatasetProfile = async (
         const rowCount = Number(
           row.profile_row_count ?? layer.featureCount ?? 0,
         );
-        const fields: DatasetFieldProfile[] = metadata.fields.map(
+        const fields: DatasetFieldProfile[] = profileFields.map(
           (field, index) => {
             const nullCount = Number(row[`p${index}_nulls`] ?? 0);
             const profile: DatasetFieldProfile = {

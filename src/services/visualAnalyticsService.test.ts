@@ -8,6 +8,7 @@ import {
   clearLayerAnalyticsCache,
   queryLayerChart,
   queryLayerKpi,
+  queryLayerColumnProfile,
   queryLayerDatasetProfile,
   queryLayerSummary,
   queryLayerRows,
@@ -622,6 +623,65 @@ describe('visual analytics cache helpers', () => {
     expect(result.categorical[0].values[0]).toMatchObject({ label: 'North', aShare: 0.5, bShare: 0.2, shareDifference: 0.3 });
     expect(result.temporal?.points[0]).toMatchObject({ aCount: 8, bCount: 12 });
     expect(String(query.mock.calls[0][0])).toContain('overlap_rows');
+  });
+
+  it('does not profile a column the rendered MVT table dropped', async () => {
+    const background = vi.spyOn(duckdbService, 'backgroundQuery');
+    const source = {
+      kind: 'duckdb-table' as const, tableName: 'buildings', geometryColumn: 'geometry', crs: 'EPSG:4326',
+      geometryKind: 'polygon' as const, featureIdColumn: '__alur_mvt_id',
+      // `buildingid` is a STRUCT on the origin table, so prepareMvtTileSource drops it.
+      fields: [{ name: 'toid', type: 'VARCHAR' }, { name: 'buildingid', type: 'STRUCT(v VARCHAR)' }],
+      tileSource: { tableName: '__alur_mvt_buildings', layerName: 'features', geometryKind: 'polygon' as const, propertyColumns: ['toid'] },
+      renderVersion: 1,
+    };
+
+    const profile = await queryLayerColumnProfile({ layer: { id: 'buildings', source }, filters: [], column: 'buildingid' });
+
+    // Empty rather than thrown: the table auto-profiles every visible column,
+    // and a rejected promise here surfaced as a toast on ordinary use.
+    expect(profile).toEqual({ column: 'buildingid', kind: 'categorical', total: 0, nullCount: 0, bins: [] });
+    expect(background).not.toHaveBeenCalled();
+  });
+
+  it('still profiles a computed column the tile table cannot carry', async () => {
+    const background = vi.spyOn(duckdbService, 'backgroundQuery')
+      .mockResolvedValue({ toArray: () => [{ total: 2, null_count: 0, label: 'x', count: 2 }] } as any);
+    const source = {
+      kind: 'duckdb-table' as const, tableName: 'buildings', geometryColumn: 'geometry', crs: 'EPSG:4326',
+      geometryKind: 'polygon' as const, featureIdColumn: '__alur_mvt_id',
+      fields: [{ name: 'toid', type: 'VARCHAR' }],
+      tileSource: { tableName: '__alur_mvt_buildings', layerName: 'features', geometryKind: 'polygon' as const, propertyColumns: ['toid'] },
+      renderVersion: 1,
+    };
+
+    await queryLayerColumnProfile({
+      layer: { id: 'buildings', source }, filters: [], column: 'band',
+      computedFields: [{ id: 'c1', name: 'band', expression: `'x'` } as any],
+    });
+
+    expect(background).toHaveBeenCalled();
+  });
+
+  it('profiles only the fields the rendered MVT table carries', async () => {
+    const query = vi.spyOn(duckdbService, 'query').mockResolvedValueOnce({
+      toArray: () => [{ profile_row_count: 10, p0_nulls: 0, p0_distinct: 4 }],
+    } as any);
+    const mapLayer = {
+      id: 'addresses', name: 'Addresses', visible: true, opacity: 1, createdAt: 1, featureCount: 10, styleVersion: 1,
+      source: {
+        kind: 'duckdb-table' as const, tableName: 'addresses', geometryColumn: 'geometry', crs: 'EPSG:4326',
+        geometryKind: 'point' as const, featureIdColumn: '__alur_mvt_id',
+        fields: [{ name: 'addressstatus', type: 'VARCHAR' }, { name: 'alternatelanguage', type: 'STRUCT(v VARCHAR)' }],
+        tileSource: { tableName: '__alur_mvt_addresses', layerName: 'features', geometryKind: 'point' as const, propertyColumns: ['addressstatus'] },
+        renderVersion: 1,
+      },
+    };
+
+    const profile = await queryLayerDatasetProfile(mapLayer as any);
+
+    expect(String(query.mock.calls[0][0])).not.toContain('alternatelanguage');
+    expect(profile.fields.map((field) => field.name)).toEqual(['addressstatus']);
   });
 
   it('links non-spatial table chart filters and stable row identities', async () => {
