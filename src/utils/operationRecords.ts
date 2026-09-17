@@ -30,7 +30,7 @@ import type { VariantOperation } from '../types/visualAnalytics';
  * recorded sequence and sorts by it, so running it after a deliberate move would
  * sort the record straight back to where it came from.
  */
-export const resequence = (operations: VariantOperation[]): VariantOperation[] =>
+const resequence = (operations: VariantOperation[]): VariantOperation[] =>
   operations.map((operation, index) => (operation.sequence === index ? operation : { ...operation, sequence: index }));
 
 export const withSequence = (operations: VariantOperation[]): VariantOperation[] =>
@@ -107,7 +107,7 @@ export const toOperationChanges = (operations: VariantOperation[], providerId: s
  * question the map needs on every edit: which units carry an assertion, and
  * where the analyst put something that was not there before.
  */
-export type OperationFootprint = {
+type OperationFootprint = {
   /** Dataset id to the row ids some record targets. */
   rowsByDataset: Record<string, string[]>;
   /** Geometry a record placed, in sequence order. */
@@ -135,9 +135,9 @@ export const operationFootprint = (operations: VariantOperation[]): OperationFoo
   };
 };
 
-export const OPERATION_EXPORT_VERSION = 1 as const;
+const OPERATION_EXPORT_VERSION = 1 as const;
 
-export type OperationExport = {
+type OperationExport = {
   kind: 'alur-operations';
   version: typeof OPERATION_EXPORT_VERSION;
   exportedAt: string;
@@ -157,7 +157,7 @@ export const exportOperations = (operations: VariantOperation[]): OperationExpor
   };
 };
 
-export type OperationImport = { operations: VariantOperation[]; warnings: string[] };
+type OperationImport = { operations: VariantOperation[]; warnings: string[] };
 
 /**
  * Read an exported list back.

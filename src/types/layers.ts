@@ -8,7 +8,7 @@ export type LayerField = {
   type: string;
 };
 
-export type DuckDbLayerSource = {
+type DuckDbLayerSource = {
   kind: 'duckdb-table' | 'duckdb-query';
   tableName: string;
   originalTableName?: string;
@@ -25,7 +25,7 @@ export type DuckDbLayerSource = {
   renderVersion: number;
 };
 
-export type LegacyGeoJsonLayerSource = {
+type LegacyGeoJsonLayerSource = {
   kind: 'legacy-geojson';
   geometryKind: GeometryKind;
   bounds?: LayerBounds;

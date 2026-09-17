@@ -12,11 +12,6 @@ export type IngestionFormat = 'parquet' | 'csv' | 'json' | 'geojson' | 'spatial'
  */
 export type IngestionSourceKind = 'file' | 'url' | 'clipboard' | 'remote';
 
-export type IngestionSource =
-  | { kind: 'file'; file: File }
-  | { kind: 'url'; url: string }
-  | { kind: 'clipboard'; text: string; name?: string };
-
 export type SourceFingerprint = {
   name: string;
   size: number;

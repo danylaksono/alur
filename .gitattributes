@@ -1,0 +1,25 @@
+# Store every text file with LF, and check it out as LF on every platform.
+#
+# Without this the worktree drifts to CRLF on Windows while the repository keeps
+# LF, and a one-line edit shows up as a whole file rewritten — which is exactly
+# what happened during the dead-code cleanup, twice. `eol=lf` is deliberate
+# rather than plain `text=auto`: it overrides a local core.autocrlf=true, so the
+# checkout matches the repository instead of each machine's git config.
+* text=auto eol=lf
+
+# Payloads git must never look inside or rewrite.
+*.parquet binary
+*.tgz     binary
+*.wasm    binary
+*.png     binary
+*.jpg     binary
+*.jpeg    binary
+*.gif     binary
+*.ico     binary
+*.webp    binary
+*.woff    binary
+*.woff2   binary
+*.ttf     binary
+*.otf     binary
+*.pdf     binary
+*.zip     binary

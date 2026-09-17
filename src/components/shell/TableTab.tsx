@@ -19,9 +19,7 @@ export const TableTab = ({ table }: { table: ReturnType<typeof useAttributeTable
   const nodeSchemas = useStore((s) => s.nodeSchemas);
   const fragments = useStore((s) => s.fragments);
   const addToast = useStore((s) => s.addToast);
-  const setDatasetOverviewLayerId = useStore((s) => s.setDatasetOverviewLayerId);
-  const addChart = useStore((s) => s.addChart);
-  const addKpi = useStore((s) => s.addKpi);
+  const setDatasetOverviewId = useStore((s) => s.setDatasetOverviewId);
   const [isCalculatorOpen, setCalculatorOpen] = useState(false);
   const executeAnalyticsCommand = useAnalyticsCommands();
   const datasetMetadata = useMemo(() => {
@@ -30,28 +28,10 @@ export const TableTab = ({ table }: { table: ReturnType<typeof useAttributeTable
     return undefined;
   }, [table.selectedLayer, table.selectedNode, nodeSchemas]);
 
+  const exploreDatasetId = table.selectedLayer?.id || table.selectedDataset?.id;
   const runQuickCommand = async (command: Parameters<typeof executeAnalyticsCommand>[0]) => {
     const result = await executeAnalyticsCommand(command);
     if (!result.ok) addToast({ type: 'warning', message: result.message });
-  };
-  const createDatasetChart = (field: string) => {
-    const dataset = table.selectedDataset;
-    if (!dataset) return;
-    const sourceField = dataset.fields.find((item) => item.name === field);
-    const numeric = Boolean(sourceField && /int|float|double|decimal|numeric|real/i.test(sourceField.type));
-    addChart({
-      id: `chart-${Date.now()}`,
-      title: `${field} ${numeric ? 'distribution' : 'breakdown'}`,
-      layerId: dataset.source.kind === 'layer' ? dataset.source.layerId : '',
-      tableName: dataset.source.kind === 'table' ? dataset.source.tableName : dataset.relationName,
-      source: dataset.source,
-      type: numeric ? 'histogram' : 'bar',
-      dimensionField: field,
-      aggregation: 'count',
-      paletteId: numeric ? 'teal' : 'categorical',
-      maxCategories: numeric ? 12 : 8,
-    });
-    addToast({ type: 'success', message: `Created a linked chart for ${field}` });
   };
   const availableColumns = useMemo(() => {
     const computed = new Set(table.computedFields.map((field) => field.name));
@@ -121,8 +101,8 @@ export const TableTab = ({ table }: { table: ReturnType<typeof useAttributeTable
           {table.selectedDataset && !table.selectedLayer && <span className="ml-2 rounded bg-slate-200 px-1.5 py-0.5 text-[11px] font-medium text-slate-500" title={`Stable row identity: ${table.selectedDataset.rowIdColumn} (${table.selectedDataset.rowIdQuality})`}>ID {table.selectedDataset.rowIdQuality === 'validated-unique' ? 'validated' : 'materialised'}</span>}
         </span>
         <div className="flex items-center gap-2">
-          {table.selectedLayer && (
-            <button type="button" onClick={() => setDatasetOverviewLayerId(table.selectedLayer!.id)} className="pressable flex items-center gap-1.5 rounded border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-600 transition-colors hover:bg-sky-50 hover:text-sky-700" title="Open dataset overview">
+          {exploreDatasetId && (
+            <button type="button" onClick={() => setDatasetOverviewId(exploreDatasetId)} className="pressable flex items-center gap-1.5 rounded border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-600 transition-colors hover:bg-sky-50 hover:text-sky-700" title="Open dataset overview">
               <ScanSearch className="h-3 w-3" /> Overview
             </button>
           )}
@@ -206,9 +186,9 @@ export const TableTab = ({ table }: { table: ReturnType<typeof useAttributeTable
             onClearFilters={table.selectedLayer || table.selectedNode ? table.onClearFilters : undefined}
             onApplyProfileFilter={table.selectedLayer || table.selectedNode ? table.onApplyProfileFilter : undefined}
             datasetMetadata={datasetMetadata}
-            onQuickChart={table.selectedLayer ? (field) => { void runQuickCommand({ type: 'create-chart', datasetId: table.selectedLayer!.id, field }); } : table.selectedDataset ? createDatasetChart : undefined}
+            onQuickChart={exploreDatasetId ? (field) => { void runQuickCommand({ type: 'create-chart', datasetId: exploreDatasetId, field }); } : undefined}
             onQuickStyle={table.selectedLayer ? (field) => { void runQuickCommand({ type: 'open-layer-style', datasetId: table.selectedLayer!.id, field }); } : undefined}
-            onPinMetric={table.selectedLayer ? (field) => { void runQuickCommand({ type: 'pin-kpi', datasetId: table.selectedLayer!.id, field }); } : table.selectedDataset ? (field) => addKpi({ id: `kpi-${Date.now()}`, datasetId: table.selectedDataset!.id, source: table.selectedDataset!.source, title: `${field} mean`, field, aggregation: 'avg', comparison: 'total', format: 'compact' }) : undefined}
+            onPinMetric={exploreDatasetId ? (field) => { void runQuickCommand({ type: 'pin-kpi', datasetId: exploreDatasetId, field }); } : undefined}
             onAddFilter={table.selectedLayer || table.selectedNode ? table.onAddFilter : undefined}
             searchField={table.searchField}
             searchableFields={table.searchableFields}

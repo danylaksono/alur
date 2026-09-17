@@ -34,7 +34,7 @@ export const LayerManager = ({ onEditStyle }: { onEditStyle?: (layerId: string) 
   const removeMapLayer = useStore((s) => s.removeMapLayer);
   const clearFeatureSelection = useStore((s) => s.clearFeatureSelection);
   const clearLayerFilters = useStore((s) => s.clearLayerFilters);
-  const setDatasetOverviewLayerId = useStore((s) => s.setDatasetOverviewLayerId);
+  const setDatasetOverviewId = useStore((s) => s.setDatasetOverviewId);
   const styledLayerCount = mapLayers.filter((layer) => layer.visualisation || layer.legend || layer.color).length;
 
   const sourceName = (layer: MapLayer) => {
@@ -172,7 +172,7 @@ export const LayerManager = ({ onEditStyle }: { onEditStyle?: (layerId: string) 
                     )}
                     <button
                       type="button"
-                      onClick={() => setDatasetOverviewLayerId(layer.id)}
+                      onClick={() => setDatasetOverviewId(layer.id)}
                       className="pressable rounded p-1 text-slate-500 transition-colors hover:bg-sky-50 hover:text-sky-700"
                       title="Open dataset overview"
                       aria-label={`Overview of ${layer.name}`}

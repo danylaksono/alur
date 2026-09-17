@@ -12,7 +12,7 @@ import type { WorkflowNode } from '../store/useStore';
  * Deliberately not an expression language. A reference names a parameter and
  * nothing more; anything cleverer belongs in a node the analyst can see.
  */
-export type ParameterReference = {
+type ParameterReference = {
   $param: string;
   /**
    * Used when the parameter is not supplied. Without one, adding a reference
@@ -22,7 +22,7 @@ export type ParameterReference = {
   default?: unknown;
 };
 
-export const isParameterReference = (value: unknown): value is ParameterReference =>
+const isParameterReference = (value: unknown): value is ParameterReference =>
   Boolean(value) && typeof value === 'object' && !Array.isArray(value) && typeof (value as ParameterReference).$param === 'string';
 
 export class MissingParameterError extends Error {}

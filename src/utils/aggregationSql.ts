@@ -10,7 +10,7 @@ import { quoteIdentifier } from './visualFilterSql';
 
 // ─── summary aggregation ──────────────────────────────────────────────
 
-export type SummaryFunction = 'count' | 'count_distinct' | 'sum' | 'avg' | 'min' | 'max' | 'median';
+type SummaryFunction = 'count' | 'count_distinct' | 'sum' | 'avg' | 'min' | 'max' | 'median';
 
 export type SummaryMeasure = {
   id: string;
@@ -84,7 +84,7 @@ export type AllocationConfig = {
   mode?: AllocationMode;
 };
 
-export type AllocationColumns = {
+type AllocationColumns = {
   cumulative: string;
   status: string;
   allocated: string;

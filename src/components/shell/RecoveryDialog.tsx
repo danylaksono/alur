@@ -1,4 +1,4 @@
-import { useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { History, Link2, X } from 'lucide-react';
 import { useProjectRecovery } from '../../hooks/useProjectRecovery';
 import {
@@ -18,10 +18,10 @@ export const RecoveryDialog = () => {
   const [isRestoring, setRestoring] = useState(false);
   const targetRef = useRef<ProjectSourceDescriptor | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-
-  if (!candidate) return null;
+  const resumed = useRef(false);
 
   const restore = async () => {
+    if (!candidate) return;
     const declared = applyProjectManifest(candidate.manifest);
     setRestoring(true);
     // A crash recovery is the case where re-picking files is most annoying, so
@@ -40,6 +40,15 @@ export const RecoveryDialog = () => {
     }
   };
 
+  // A snapshot this same tab wrote is work in progress coming back from a
+  // discard, not a stranger's leftovers, so asking about it only adds a click
+  // to something the user never chose to leave.
+  useEffect(() => {
+    if (!candidate?.resume || resumed.current) return;
+    resumed.current = true;
+    void restore();
+  }, [candidate]);
+
   const choose = (source: ProjectSourceDescriptor) => {
     targetRef.current = source;
     inputRef.current?.click();
@@ -49,7 +58,7 @@ export const RecoveryDialog = () => {
     const file = event.target.files?.[0];
     event.target.value = '';
     const source = targetRef.current;
-    if (!file || !source || !sources) return;
+    if (!file || !source || !sources || !candidate) return;
     if (!sourceMatchesFile(source, file)) {
       addToast({ type: 'error', message: `Choose the original ${source.name} file.` });
       return;
@@ -64,6 +73,11 @@ export const RecoveryDialog = () => {
       addToast({ type: 'success', message: 'Recovered and relinked your workspace.' });
     }
   };
+
+  if (!candidate) return null;
+  // Nothing to show while resuming: the workflow is already back on screen and
+  // the sources fill in behind it. Only a file we cannot find needs the user.
+  if (candidate.resume && sources === null) return null;
 
   return (
     <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-slate-950/35 p-4">

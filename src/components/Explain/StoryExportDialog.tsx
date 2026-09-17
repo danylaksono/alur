@@ -3,9 +3,7 @@ import { AlertTriangle, Database, Download, Image, Link2, MapPin, Share2, X } fr
 import { useStore } from '../../store/useStore';
 import { createStory, downloadStory, storyDisclosure, storyLinkFor, withoutRecordLevelEvidence } from '../../services/storyService';
 import { cn } from '../../utils/cn';
-
-const formatBytes = (bytes: number) =>
-  bytes >= 1_000_000 ? `${(bytes / 1_000_000).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1000))} KB`;
+import { formatBytes } from '../../utils/download';
 
 /**
  * Exporting a story publishes captured values — rows, sampled geometry, map

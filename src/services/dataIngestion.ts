@@ -3,7 +3,6 @@ import { useStore } from "../store/useStore";
 import { nextNodePosition } from "../utils/nodePlacement";
 import type {
   IngestionFormat,
-  IngestionSource,
   IngestionSourceKind,
   ParsedJsonDataset,
   SourceFingerprint,
@@ -119,7 +118,7 @@ const registerSpatialFile = async (file: File): Promise<string> => {
 // --- H3 cell detection ------------------------------------------------------
 
 /** Canonical H3 cell ids in their string form are 15–16 hex digits. */
-export const H3_CELL_ID_PATTERN = /^[0-9a-f]{15,16}$/i;
+const H3_CELL_ID_PATTERN = /^[0-9a-f]{15,16}$/i;
 
 /** Whether a single value is plausibly an H3 cell id. */
 export const looksLikeH3Cell = (value: unknown): boolean =>
@@ -136,7 +135,7 @@ export const h3CellColumnScore = (name: string): number =>
  * untouched and the cell column stays in the table, so downstream H3 nodes can
  * still operate on it.
  */
-export const maybeDeriveH3Geometry = async (
+const maybeDeriveH3Geometry = async (
   tableName: string,
 ): Promise<{ view: string; cellColumn: string } | null> => {
   try {
@@ -396,9 +395,15 @@ export const finaliseIngestedTable = async ({
     useStore.getState().setSelectedNodeId(nodeId);
     useStore.getState().finishLoadingOperation(operationId);
     addToast({
-      type: "warning",
-      message: `Registered ${totalRows.toLocaleString()} rows as ${tableName}, but found no renderable geometry or latitude/longitude fields.`,
+      type: "info",
+      message: `Loaded ${totalRows.toLocaleString()} rows from ${displayName} as a table. It has no geometry or latitude/longitude to map, so explore it with charts, the table and the dataset overview.`,
     });
+    // Nothing to map, so lead with the charts. Only when the map is still
+    // empty: a table loaded beside existing layers should not hide them.
+    if (!useStore.getState().mapLayers.length) {
+      useStore.getState().navigate("charts");
+      useStore.getState().setChartCanvas(true);
+    }
     return { tableName, layerId: null };
   }
 
@@ -734,9 +739,3 @@ export const ingestClipboardText = async (
   );
 };
 
-export const ingestSource = (source: IngestionSource) => {
-  if (source.kind === "file")
-    return ingestFile(source.file, { sourceKind: "file" });
-  if (source.kind === "url") return ingestUrl(source.url);
-  return ingestClipboardText(source.text, source.name);
-};

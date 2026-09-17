@@ -8,7 +8,9 @@ import {
   clearLayerAnalyticsCache,
   queryLayerChart,
   queryLayerKpi,
+  queryLayerColumnProfile,
   queryLayerDatasetProfile,
+  queryTableDatasetProfile,
   queryLayerSummary,
   queryLayerRows,
   queryLayerScatter,
@@ -622,6 +624,90 @@ describe('visual analytics cache helpers', () => {
     expect(result.categorical[0].values[0]).toMatchObject({ label: 'North', aShare: 0.5, bShare: 0.2, shareDifference: 0.3 });
     expect(result.temporal?.points[0]).toMatchObject({ aCount: 8, bCount: 12 });
     expect(String(query.mock.calls[0][0])).toContain('overlap_rows');
+  });
+
+  it('does not profile a column the rendered MVT table dropped', async () => {
+    const background = vi.spyOn(duckdbService, 'backgroundQuery');
+    const source = {
+      kind: 'duckdb-table' as const, tableName: 'buildings', geometryColumn: 'geometry', crs: 'EPSG:4326',
+      geometryKind: 'polygon' as const, featureIdColumn: '__alur_mvt_id',
+      // `buildingid` is a STRUCT on the origin table, so prepareMvtTileSource drops it.
+      fields: [{ name: 'toid', type: 'VARCHAR' }, { name: 'buildingid', type: 'STRUCT(v VARCHAR)' }],
+      tileSource: { tableName: '__alur_mvt_buildings', layerName: 'features', geometryKind: 'polygon' as const, propertyColumns: ['toid'] },
+      renderVersion: 1,
+    };
+
+    const profile = await queryLayerColumnProfile({ layer: { id: 'buildings', source }, filters: [], column: 'buildingid' });
+
+    // Empty rather than thrown: the table auto-profiles every visible column,
+    // and a rejected promise here surfaced as a toast on ordinary use.
+    expect(profile).toEqual({ column: 'buildingid', kind: 'categorical', total: 0, nullCount: 0, bins: [] });
+    expect(background).not.toHaveBeenCalled();
+  });
+
+  it('still profiles a computed column the tile table cannot carry', async () => {
+    const background = vi.spyOn(duckdbService, 'backgroundQuery')
+      .mockResolvedValue({ toArray: () => [{ total: 2, null_count: 0, label: 'x', count: 2 }] } as any);
+    const source = {
+      kind: 'duckdb-table' as const, tableName: 'buildings', geometryColumn: 'geometry', crs: 'EPSG:4326',
+      geometryKind: 'polygon' as const, featureIdColumn: '__alur_mvt_id',
+      fields: [{ name: 'toid', type: 'VARCHAR' }],
+      tileSource: { tableName: '__alur_mvt_buildings', layerName: 'features', geometryKind: 'polygon' as const, propertyColumns: ['toid'] },
+      renderVersion: 1,
+    };
+
+    await queryLayerColumnProfile({
+      layer: { id: 'buildings', source }, filters: [], column: 'band',
+      computedFields: [{ id: 'c1', name: 'band', expression: `'x'` } as any],
+    });
+
+    expect(background).toHaveBeenCalled();
+  });
+
+  it('profiles only the fields the rendered MVT table carries', async () => {
+    const query = vi.spyOn(duckdbService, 'query').mockResolvedValueOnce({
+      toArray: () => [{ profile_row_count: 10, p0_nulls: 0, p0_distinct: 4 }],
+    } as any);
+    const mapLayer = {
+      id: 'addresses', name: 'Addresses', visible: true, opacity: 1, createdAt: 1, featureCount: 10, styleVersion: 1,
+      source: {
+        kind: 'duckdb-table' as const, tableName: 'addresses', geometryColumn: 'geometry', crs: 'EPSG:4326',
+        geometryKind: 'point' as const, featureIdColumn: '__alur_mvt_id',
+        fields: [{ name: 'addressstatus', type: 'VARCHAR' }, { name: 'alternatelanguage', type: 'STRUCT(v VARCHAR)' }],
+        tileSource: { tableName: '__alur_mvt_addresses', layerName: 'features', geometryKind: 'point' as const, propertyColumns: ['addressstatus'] },
+        renderVersion: 1,
+      },
+    };
+
+    const profile = await queryLayerDatasetProfile(mapLayer as any);
+
+    expect(String(query.mock.calls[0][0])).not.toContain('alternatelanguage');
+    expect(profile.fields.map((field) => field.name)).toEqual(['addressstatus']);
+  });
+
+  it('profiles a registered table without geometry', async () => {
+    const query = vi.spyOn(duckdbService, 'query').mockResolvedValueOnce({
+      toArray: () => [{
+        profile_row_count: 4, p0_nulls: 2, p0_distinct: 2, p1_nulls: 0, p1_distinct: 3, p1_min: 1, p1_max: 5,
+        // DuckDB's shapes: a list as a typed-array vector, a timestamp as epoch ms.
+        p0_quantiles: { toArray: () => new Float64Array([1, 2, 3, 4, 5]) },
+        p2_nulls: 0, p2_distinct: 4, p2_start: Date.UTC(2025, 0, 1), p2_end: Date.UTC(2025, 11, 31),
+      }],
+    } as any);
+    const profile = await queryTableDatasetProfile({
+      id: 'table:sales', name: 'Sales', sourceVersion: 1, spatial: false, rowCount: 4, rowIdColumn: '__alur_row_id', rowIdQuality: 'materialised', sourceUpdatedAt: 7,
+      source: { kind: 'table', datasetId: 'table:sales', tableName: '__alur_dataset_sales', rowIdColumn: '__alur_row_id' },
+      relationName: '__alur_dataset_sales',
+      fields: [{ name: '__alur_row_id', type: 'BIGINT' }, { name: 'region', type: 'VARCHAR' }, { name: 'amount', type: 'DOUBLE' }, { name: 'sold_on', type: 'DATE' }],
+    });
+    expect(String(query.mock.calls[0][0])).toContain('"__alur_dataset_sales"');
+    expect(String(query.mock.calls[0][0])).not.toContain('__alur_row_id');
+    expect(profile.geometry).toBeUndefined();
+    expect(profile.fields.map((field) => field.name)).toEqual(['amount', 'region', 'sold_on']);
+    const quantiles = profile.fields[0].quantiles!;
+    expect(Array.isArray(quantiles) && quantiles.map((value) => `q${value}`)).toEqual(['q1', 'q2', 'q3', 'q4', 'q5']);
+    expect(profile.fields[2]).toMatchObject({ temporalStart: '2025-01-01T00:00:00.000Z', temporalEnd: '2025-12-31T00:00:00.000Z' });
+    expect(profile.issues.map((issue) => issue.id)).toContain('missing-amount');
   });
 
   it('links non-spatial table chart filters and stable row identities', async () => {

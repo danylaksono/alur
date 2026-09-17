@@ -100,6 +100,24 @@ describe('analytical commands', () => {
     ]);
   });
 
+  it('charts and pins metrics for a table without a map layer', async () => {
+    const table: DatasetMetadata = {
+      ...dataset,
+      id: 'workflow:load',
+      name: 'Survey',
+      kind: 'workflow-node',
+      source: { kind: 'workflow-node', datasetId: 'workflow:load', nodeId: 'load', rowIdColumn: '__alur_row_id' },
+    };
+    const actions = { ...context(), datasets: [table] };
+    const chart = await executeAnalyticsCommand({ type: 'create-chart', datasetId: table.id, field: 'category', chartId: 'c' }, actions);
+    expect(chart).toMatchObject({ ok: true, chart: { layerId: '', source: table.source } });
+    const kpi = await executeAnalyticsCommand({ type: 'pin-kpi', datasetId: table.id, field: 'score', kpiId: 'k' }, actions);
+    expect(kpi.ok).toBe(true);
+    expect(actions.addKpi).toHaveBeenCalledWith(expect.objectContaining({ datasetId: table.id, source: table.source }));
+    const style = await executeAnalyticsCommand({ type: 'open-layer-style', datasetId: table.id }, actions);
+    expect(style).toMatchObject({ ok: false, code: 'not_a_layer' });
+  });
+
   it('focuses a non-empty selection through the command context', async () => {
     const actions = context();
     const result = await executeAnalyticsCommand({ type: 'focus-selection', datasetId: 'places' }, actions);

@@ -27,7 +27,6 @@ import type {
   CohortComparisonSelection,
   CohortSpec,
   ComparisonSpec,
-  DashboardCard,
   ExplainCard,
   ExplainDocument,
   ExplainSection,
@@ -94,7 +93,7 @@ import {
 import type { Position } from "geojson";
 import { appendOperation, removeOperation } from "../utils/operationRecords";
 
-export type NodeExecutionState = {
+type NodeExecutionState = {
   status: "idle" | "running" | "done" | "error";
   error?: string;
   featureCount?: number;
@@ -188,7 +187,7 @@ export type Toast = {
   message: string;
 };
 
-export type LoadingOperation = {
+type LoadingOperation = {
   id: string;
   title: string;
   detail: string;
@@ -199,7 +198,7 @@ export type LoadingOperation = {
   startedAt: number;
 };
 
-export type RailTab =
+type RailTab =
   | "layers"
   | "charts"
   | "cohorts"
@@ -209,7 +208,7 @@ export type RailTab =
   | "chat"
   | "nodes";
 export type DrawerTab = "workflow" | "table" | "sql";
-export type DrawerMode = "collapsed" | "open" | "maximized";
+type DrawerMode = "collapsed" | "open" | "maximized";
 
 /** Which edge of the map the workflow/table/SQL surface is docked against. */
 export type DockSide = "bottom" | "top" | "left" | "right";
@@ -223,7 +222,7 @@ export type LayoutPresetId =
 export const isHorizontalDock = (dock: DockSide) =>
   dock === "bottom" || dock === "top";
 
-export type LayoutPresetSpec = {
+type LayoutPresetSpec = {
   label: string;
   description: string;
   dock: DockSide;
@@ -295,7 +294,7 @@ const DRAWER_TAB_FOR_PANEL: Partial<Record<RailTab, DrawerTab>> = {
   nodes: "workflow",
 };
 
-export type UIState = {
+type UIState = {
   activeRailTab: RailTab;
   isPanelCollapsed: boolean;
   /** Rail shows labels when expanded, icons only when collapsed. */
@@ -313,7 +312,9 @@ export type UIState = {
   isCommandPaletteOpen: boolean;
   /** The node whose note is open for editing, if any. */
   noteEditorNodeId: string | null;
-  datasetOverviewLayerId: string | null;
+  datasetOverviewId: string | null;
+  /** Charts fill the main canvas in a grid instead of stacking in the left panel. */
+  chartCanvas: boolean;
   layerStyleRequest?: { layerId: string; field?: string; requestedAt: number };
   /**
    * The geometry node currently being drawn into, and the shape in progress.
@@ -355,7 +356,7 @@ export type UIState = {
   dismissedEmptyState: boolean;
 };
 
-export type SettingsState = {
+type SettingsState = {
   openRouterApiKey: string;
   openRouterModelId: string;
   /** Stamped onto exported stories so a reader knows whose account it is. */
@@ -368,7 +369,7 @@ export type SettingsState = {
   customBasemaps: BasemapDefinition[];
 };
 
-export type ChatMessage = {
+type ChatMessage = {
   role: "user" | "assistant" | "system";
   content: string;
   kind?: "tool_call" | "tool_result";
@@ -379,7 +380,7 @@ export type ChatMessage = {
   };
 };
 
-export type ProjectState = {
+type ProjectState = {
   /** Empty until the user names it; the UI falls back to "Untitled project". */
   name: string;
 };
@@ -466,7 +467,8 @@ export interface AppState {
   setAboutOpen: (open: boolean) => void;
   setCommandPaletteOpen: (open: boolean) => void;
   dismissEmptyState: () => void;
-  setDatasetOverviewLayerId: (layerId: string | null) => void;
+  setDatasetOverviewId: (datasetId: string | null) => void;
+  setChartCanvas: (open: boolean) => void;
   setRecoverySave: (status: UIState["recoverySave"]) => void;
   setMapCamera: (camera: UIState["mapCamera"]) => void;
   setWorkspaceMode: (mode: UIState["workspaceMode"]) => void;
@@ -553,6 +555,8 @@ export interface AppState {
     patch: Partial<Omit<VisualChartSpec, "id">>,
   ) => void;
   removeChart: (chartId: string) => void;
+  duplicateChart: (chartId: string, newId?: string) => void;
+  reorderChart: (chartId: string, targetIndex: number) => void;
   addKpi: (kpi: KpiSpec) => void;
   updateKpi: (
     kpiId: string,
@@ -583,13 +587,6 @@ export interface AppState {
   ) => void;
   removeBookmark: (bookmarkId: string) => void;
   restoreBookmark: (bookmarkId: string) => void;
-  setDashboardTitle: (title: string) => void;
-  addDashboardCard: (card: DashboardCard) => void;
-  updateDashboardCard: (
-    cardId: string,
-    patch: Partial<Omit<DashboardCard, "id" | "kind">>,
-  ) => void;
-  removeDashboardCard: (cardId: string) => void;
   setExplainTitle: (title: string) => void;
   updateExplainDocument: (
     patch: Partial<Pick<ExplainDocument, "audience" | "summary">>,
@@ -700,7 +697,7 @@ export interface AppState {
   setActiveVariant: (variantId: string | undefined) => void;
 }
 
-export type NewMapLayer = Omit<
+type NewMapLayer = Omit<
   MapLayer,
   | "visible"
   | "opacity"
@@ -803,7 +800,8 @@ const initialUIState: UIState = {
   isAboutOpen: false,
   isCommandPaletteOpen: false,
   noteEditorNodeId: null,
-  datasetOverviewLayerId: null,
+  datasetOverviewId: null,
+  chartCanvas: false,
   layerStyleRequest: undefined,
   recoverySave: { status: "idle" },
   mapCamera: { longitude: 0, latitude: 20, zoom: 1.5, bearing: 0, pitch: 0 },
@@ -900,7 +898,7 @@ const clampPanelWidth = (width: number, context?: SizingContext) => {
 };
 
 /** UI keys that represent a deliberate layout choice and are safe to restore. */
-export type LayoutPreferences = Pick<
+type LayoutPreferences = Pick<
   UIState,
   | "activeRailTab"
   | "isPanelCollapsed"
@@ -1399,10 +1397,12 @@ export const useStore = create<AppState>()(
         set((state) => ({
           ui: { ...state.ui, dismissedEmptyState: true },
         })),
-      setDatasetOverviewLayerId: (layerId) =>
+      setChartCanvas: (open) =>
+        set((state) => ({ ui: { ...state.ui, chartCanvas: open } })),
+      setDatasetOverviewId: (datasetId) =>
         set((state) => ({
-          selectedLayerId: layerId || state.selectedLayerId,
-          ui: { ...state.ui, datasetOverviewLayerId: layerId },
+          selectedLayerId: datasetId && state.mapLayers.some((layer) => layer.id === datasetId) ? datasetId : state.selectedLayerId,
+          ui: { ...state.ui, datasetOverviewId: datasetId },
         })),
       setRecoverySave: (recoverySave) =>
         set((state) => ({
@@ -1618,7 +1618,8 @@ export const useStore = create<AppState>()(
           loadingOperations: {},
           ui: {
             ...get().ui,
-            datasetOverviewLayerId: null,
+            datasetOverviewId: null,
+            chartCanvas: false,
             isCommandPaletteOpen: false,
             workspaceMode: "explore",
             isPresentationMode: false,
@@ -2896,6 +2897,34 @@ export const useStore = create<AppState>()(
           };
         }),
 
+      duplicateChart: (chartId, newId = `chart-${Date.now()}`) =>
+        set((state) => {
+          const index = state.visualAnalytics.charts.findIndex((chart) => chart.id === chartId);
+          if (index < 0) return state;
+          const original = state.visualAnalytics.charts[index];
+          const charts = [...state.visualAnalytics.charts];
+          // Next to the original, where a variation is compared against it.
+          charts.splice(index + 1, 0, { ...structuredClone(original), id: newId, title: `${original.title} (copy)` });
+          return {
+            visualAnalytics: { ...state.visualAnalytics, charts },
+            analysisHistory: recordCurrentAnalysis(state, { label: "Duplicate chart" }),
+          };
+        }),
+
+      reorderChart: (chartId, targetIndex) =>
+        set((state) => {
+          const sourceIndex = state.visualAnalytics.charts.findIndex((chart) => chart.id === chartId);
+          if (sourceIndex < 0) return state;
+          const charts = [...state.visualAnalytics.charts];
+          const [chart] = charts.splice(sourceIndex, 1);
+          charts.splice(Math.max(0, Math.min(targetIndex, charts.length)), 0, chart);
+          if (sameJson(charts, state.visualAnalytics.charts)) return state;
+          return {
+            visualAnalytics: { ...state.visualAnalytics, charts },
+            analysisHistory: recordCurrentAnalysis(state, { label: "Reorder charts" }),
+          };
+        }),
+
       addKpi: (kpi) =>
         set((state) => {
           if (
@@ -3294,108 +3323,6 @@ export const useStore = create<AppState>()(
             }),
           };
         }),
-
-      setDashboardTitle: (title) =>
-        set((state) => ({
-          visualAnalytics: {
-            ...state.visualAnalytics,
-            dashboard: {
-              title,
-              cards: state.visualAnalytics.dashboard?.cards || [],
-            },
-            explain: { ...state.visualAnalytics.explain, title },
-          },
-        })),
-
-      addDashboardCard: (card) =>
-        set((state) => ({
-          visualAnalytics: {
-            ...state.visualAnalytics,
-            dashboard: {
-              title: state.visualAnalytics.dashboard?.title || "Analysis board",
-              cards: [
-                ...(state.visualAnalytics.dashboard?.cards || []).filter(
-                  (item) => item.id !== card.id,
-                ),
-                card,
-              ],
-            },
-            explain: {
-              ...state.visualAnalytics.explain,
-              cards: [
-                ...state.visualAnalytics.explain.cards.filter(
-                  (item) => item.id !== card.id,
-                ),
-                {
-                  ...card,
-                  sectionId: "evidence",
-                  width: card.width === 2 ? 12 : 6,
-                  behaviour: "frozen",
-                  provenance: {
-                    capturedAt: Date.now(),
-                    datasetIds: card.datasetId ? [card.datasetId] : [],
-                    sourceVersions: {},
-                    filtersByDataset: {},
-                    caveats: [],
-                  },
-                } as ExplainCard,
-              ],
-            },
-          },
-        })),
-
-      updateDashboardCard: (cardId, patch) =>
-        set((state) => ({
-          visualAnalytics: {
-            ...state.visualAnalytics,
-            dashboard: {
-              title: state.visualAnalytics.dashboard?.title || "Analysis board",
-              cards: (state.visualAnalytics.dashboard?.cards || []).map(
-                (card) => (card.id === cardId ? { ...card, ...patch } : card),
-              ),
-            },
-            explain: {
-              ...state.visualAnalytics.explain,
-              cards: state.visualAnalytics.explain.cards.map((card) =>
-                card.id === cardId
-                  ? {
-                      ...card,
-                      referenceId: patch.referenceId ?? card.referenceId,
-                      datasetId: patch.datasetId ?? card.datasetId,
-                      title: patch.title ?? card.title,
-                      note: patch.note ?? card.note,
-                      width:
-                        patch.width === 2
-                          ? 12
-                          : patch.width === 1
-                            ? 6
-                            : card.width,
-                      height: patch.height ?? card.height,
-                    }
-                  : card,
-              ),
-            },
-          },
-        })),
-
-      removeDashboardCard: (cardId) =>
-        set((state) => ({
-          visualAnalytics: {
-            ...state.visualAnalytics,
-            dashboard: {
-              title: state.visualAnalytics.dashboard?.title || "Analysis board",
-              cards: (state.visualAnalytics.dashboard?.cards || []).filter(
-                (card) => card.id !== cardId,
-              ),
-            },
-            explain: {
-              ...state.visualAnalytics.explain,
-              cards: state.visualAnalytics.explain.cards.filter(
-                (card) => card.id !== cardId,
-              ),
-            },
-          },
-        })),
 
       setExplainTitle: (title) =>
         set((state) => ({

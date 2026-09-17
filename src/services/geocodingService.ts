@@ -1,6 +1,6 @@
 const DEFAULT_NOMINATIM_ENDPOINT = 'https://nominatim.openstreetmap.org/search';
 
-export type GeocodingBounds = [[number, number], [number, number]];
+type GeocodingBounds = [[number, number], [number, number]];
 
 export interface GeocodingResult {
   id: string;

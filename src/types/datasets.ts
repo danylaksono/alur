@@ -28,7 +28,7 @@ export type DatasetDescriptor = {
   originTableName?: string;
 };
 
-export type DatasetKind = 'layer' | 'table' | 'workflow-node';
+type DatasetKind = 'layer' | 'table' | 'workflow-node';
 
 export type FieldSemanticType =
   | 'numeric'
@@ -55,6 +55,8 @@ export type DatasetMetadata = {
   crs?: string;
   featureIdColumn?: string;
   sourceUpdatedAt?: number;
+  /** Where charts and metrics built from this dataset read; absent means the layer of the same id. */
+  source?: DatasetSource;
 };
 
 export type DatasetFieldProfile = DatasetField & {

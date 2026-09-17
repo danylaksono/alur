@@ -1,11 +1,12 @@
 import { useRef, type ChangeEvent } from 'react';
-import { BarChart3, Database, Gauge, GitCompareArrows, NotebookPen, X } from 'lucide-react';
+import { Database, Gauge, GitCompareArrows, NotebookPen, X } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { parseStory } from '../../services/storyService';
 import type { AlurStory } from '../../types/story';
 import type { ComparisonResult, ExplainCard } from '../../types/visualAnalytics';
 import { ComparisonMapEvidence, ComparisonRecordsEvidence } from '../Compare/ComparisonEvidenceViews';
 import { MapEvidence } from './MapEvidence';
+import { ChartEvidence } from './ChartEvidence';
 import { VariantLineageCard } from './VariantLineageCard';
 import { SessionAccount } from './SessionAccount';
 import { isVariantLineageSnapshot } from '../../utils/variantLineage';
@@ -133,13 +134,7 @@ const StoryCardContent = ({ card }: { card: ExplainCard }) => {
     );
   }
 
-  return (
-    <div>
-      <BarChart3 className="h-5 w-5 text-blue-600" />
-      <h3 className="mt-3 text-sm font-bold text-slate-800">{card.title || 'Chart'}</h3>
-      {card.frozenValues === undefined && <p className="mt-2 text-xs text-slate-500">No values were captured for this chart.</p>}
-    </div>
-  );
+  return <ChartEvidence card={card} />;
 };
 
 const EmptyCapture = ({ title }: { title: string }) => (

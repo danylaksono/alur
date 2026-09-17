@@ -7,9 +7,9 @@
  * integer and several are already past 2^53, so reading one as a JS number
  * silently rounds it and distinct cells collide.
  */
-export type H3InputKind = "cell" | "lat" | "lng";
+type H3InputKind = "cell" | "lat" | "lng";
 
-export interface H3OperationMetadata {
+interface H3OperationMetadata {
   /** DuckDB function this maps to. */
   id: string;
   label: string;
@@ -166,7 +166,7 @@ export const h3NodeErrors = (
 // ─── polyfill mode ─────────────────────────────────────────────────────────
 
 /** How attributes are encoded onto the dissolved cells. */
-export type H3PolyfillAggregate = "count" | "sum" | "avg";
+type H3PolyfillAggregate = "count" | "sum" | "avg";
 
 export const h3PolyfillAggregates: Array<{
   value: H3PolyfillAggregate;
@@ -185,23 +185,6 @@ export const h3PolyfillAggregates: Array<{
     hint: "Mean of a numeric field per cell",
   },
 ];
-
-export interface H3PolyfillConfig {
-  /** Mode discriminator — must be "polyfill". */
-  mode: "polyfill";
-  /** Upstream GEOMETRY column to cover. */
-  geometryField: string;
-  /** H3 resolution, 0–15. */
-  resolution?: number;
-  /** How attributes are encoded onto each cell. */
-  aggregate?: H3PolyfillAggregate;
-  /** Numeric column for sum/avg. */
-  valueField?: string;
-  /** Output column holding the aggregated value. */
-  resultField?: string;
-  /** Optional buffer distance (geometry units) so lines become fillable areas. */
-  buffer?: number;
-}
 
 /** Human-readable problems with a polyfill node's current config. */
 export const h3PolyfillErrors = (config: Record<string, unknown>): string[] => {

@@ -108,7 +108,6 @@ const persistedAnalytics = (analytics: VisualAnalyticsState): VisualAnalyticsSta
   cohorts: sanitiseValue(analytics.cohorts) as VisualAnalyticsState['cohorts'],
   bookmarks: sanitiseValue(analytics.bookmarks) as VisualAnalyticsState['bookmarks'],
   comparison: sanitiseValue(analytics.comparison) as VisualAnalyticsState['comparison'],
-  dashboard: sanitiseValue(analytics.dashboard) as VisualAnalyticsState['dashboard'],
   comparisons: sanitiseValue(analytics.comparisons || []) as NonNullable<VisualAnalyticsState['comparisons']>,
   activeComparisonId: analytics.activeComparisonId,
   explain: sanitiseValue(analytics.explain || defaultExplain()) as ExplainDocument,
@@ -142,7 +141,6 @@ const normaliseAnalytics = (analytics: ProjectManifestV1['visualAnalytics'] | Re
     cohorts: value.cohorts || [],
     bookmarks: value.bookmarks || [],
     comparison: value.comparison,
-    dashboard: value.dashboard,
     comparisons: value.comparisons || [],
     activeComparisonId: value.activeComparisonId,
     explain: value.explain || defaultExplain(),
@@ -332,7 +330,7 @@ const migrateV2ToV3 = (value: Record<string, unknown>) => {
 };
 
 /** Sequential migration entry point. Version 0 was the short-lived pre-manifest prototype. */
-export const migrateProjectManifest = (value: unknown): unknown => {
+const migrateProjectManifest = (value: unknown): unknown => {
   if (!isRecord(value) || typeof value.version !== 'number') return value;
   if (value.version === 2) return migrateV2ToV3(value);
   if (value.version === 1) return migrateV2ToV3(migrateV1ToV2(value) as Record<string, unknown>);
@@ -427,7 +425,8 @@ export const applyProjectManifest = (manifest: ProjectManifest | ProjectManifest
       workspaceMode: valid.workspace.workspaceMode || 'explore',
       isPresentationMode: false,
       mapCamera: valid.workspace.mapCamera || state.ui.mapCamera,
-      datasetOverviewLayerId: null,
+      datasetOverviewId: null,
+      chartCanvas: false,
       layerStyleRequest: undefined,
     },
   }));
@@ -473,7 +472,7 @@ export const sourceMatchesFile = (source: ProjectSourceDescriptor, file: File) =
   return true;
 };
 
-export type SourceRestoreResult = {
+type SourceRestoreResult = {
   restored: ProjectSourceDescriptor[];
   /** Still need the user to pick them by hand. */
   missing: ProjectSourceDescriptor[];

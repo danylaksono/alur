@@ -73,7 +73,7 @@ export type ProjectManifestV1 = {
   savedTableViews: Record<string, unknown[]>;
 };
 
-export type ProjectManifestV2 = Omit<ProjectManifestV1, 'version' | 'workspace'> & {
+type ProjectManifestV2 = Omit<ProjectManifestV1, 'version' | 'workspace'> & {
   version: 2;
   /** Optional so v2 files written before naming existed still validate. */
   name?: string;
@@ -102,7 +102,7 @@ export type ProjectManifestV2 = Omit<ProjectManifestV1, 'version' | 'workspace'>
  * `visualAnalytics.sessions` and `activeSessionId` carry through the shared
  * `VisualAnalyticsState`.
  */
-export type ProjectManifestV3 = Omit<ProjectManifestV2, 'version'> & {
+type ProjectManifestV3 = Omit<ProjectManifestV2, 'version'> & {
   version: typeof PROJECT_MANIFEST_VERSION;
 };
 

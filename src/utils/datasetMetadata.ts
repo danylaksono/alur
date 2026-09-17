@@ -1,5 +1,5 @@
 import type { MapLayer, WorkflowNode } from '../store/useStore';
-import type { DatasetField, DatasetMetadata, FieldSemanticType } from '../types/datasets';
+import type { DatasetDescriptor, DatasetField, DatasetMetadata, FieldSemanticType } from '../types/datasets';
 import type { LayerField } from '../types/layers';
 
 const SYSTEM_FIELDS = new Set([
@@ -51,6 +51,17 @@ export const metadataForLayer = (layer: MapLayer): DatasetMetadata => ({
     ? layer.source.featureIdColumn
     : '_alur_feature_id',
   sourceUpdatedAt: layer.createdAt,
+});
+
+/** A registered table or workflow result, described the same way a layer is. */
+export const metadataForDataset = (dataset: DatasetDescriptor): DatasetMetadata => ({
+  id: dataset.id,
+  name: dataset.name,
+  kind: dataset.source.kind,
+  fields: datasetFields(dataset.fields),
+  rowCount: dataset.rowCount,
+  sourceUpdatedAt: dataset.sourceUpdatedAt,
+  source: dataset.source,
 });
 
 type SchemaField = { name?: unknown; type?: unknown };

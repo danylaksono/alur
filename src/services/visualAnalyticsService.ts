@@ -1,4 +1,5 @@
 import { duckdbService } from "./duckdb";
+import type { ChartExportData } from "./chartExportService";
 import {
   FEATURE_ID_PROPERTY,
   type KpiResult,
@@ -38,12 +39,15 @@ import {
   temporalBucketKey,
 } from "../utils/temporalChart";
 import type {
+  DatasetDescriptor,
+  DatasetField,
   DatasetFieldProfile,
   DatasetGeometryProfile,
   DatasetProfile,
   DatasetProfileIssue,
 } from "../types/datasets";
-import { metadataForLayer } from "../utils/datasetMetadata";
+import { datasetFields, metadataForLayer } from "../utils/datasetMetadata";
+import { relationForDataset } from "./datasetService";
 import { boundsForLayer } from "../utils/layerSource";
 import { coordinateExtent } from "../utils/extent";
 import {
@@ -211,6 +215,41 @@ export const analyticsFieldsForLayer = (
   );
 };
 
+/**
+ * The columns a query against this layer's tile table may name, or null where
+ * nothing narrows it.
+ *
+ * `layer.source.fields` is the origin table's schema, but analytics read the
+ * MVT tile table, which carries only what MVT can encode —
+ * `propertyColumnsForMvt` drops any column whose DuckDB type has no MVT
+ * equivalent, a STRUCT or a LIST for instance. The origin schema therefore
+ * names columns the queried table does not have, and referencing one is a
+ * binder error rather than an empty result.
+ *
+ * Null rather than the full set for layers with no tile table: their columns
+ * would have to come from `analyticsFieldsForLayer`, which reads the first
+ * feature's properties, and a feature that happens to omit a key would then
+ * suppress a column that is really there. Restricting nothing is the safer
+ * answer where nothing needs restricting.
+ *
+ * Computed fields are added back because `buildComputedRelation` projects them
+ * onto the relation before the query sees it.
+ */
+export const tileTableColumns = (
+  layer: Pick<AnalyticsLayer, "source">,
+  computedFields: ComputedField[] = [],
+) => {
+  const available =
+    layer.source?.kind === "duckdb-table" || layer.source?.kind === "duckdb-query"
+      ? layer.source.tileSource?.propertyColumns
+      : undefined;
+  if (!available?.length) return null;
+  return new Set([
+    ...available,
+    ...computedFields.map((field) => field.name),
+  ]);
+};
+
 const layerSignature = (layer: {
   id: string;
   geojson: GeoJSON.FeatureCollection;
@@ -370,6 +409,20 @@ export const queryLayerColumnProfile = async ({
   // three queries per column and leave the rows the analyst actually asked for
   // queued behind all of them. Running these in the background lane puts the
   // rows on screen first and lets the bars fill in after.
+  // The table auto-profiles every visible column, and the visible columns come
+  // from the origin schema, so a column the tile table never carried is asked
+  // for by ordinary use rather than by a bad request. Returning the empty
+  // profile rather than throwing is also what stops the caller asking again.
+  const availableColumns = tileTableColumns(layer, computedFields);
+  if (availableColumns && !availableColumns.has(column)) {
+    return {
+      column,
+      kind: "categorical" as const,
+      total: 0,
+      nullCount: 0,
+      bins: [],
+    };
+  }
   const tableName = await analyticsTableForLayer(layer);
   const relation = buildComputedRelation(`"${tableName}"`, computedFields);
   const whereClause = compileVisualFiltersWhereClause(filters);
@@ -883,7 +936,115 @@ const numberList = (value: unknown) => {
         typeof (value as { toArray?: unknown }).toArray === "function"
       ? (value as { toArray: () => unknown[] }).toArray()
       : [];
-  return source.map(Number).filter(Number.isFinite);
+  // Array.from, not .map: a DuckDB list arrives as a typed array, whose .map
+  // returns another typed array and turns anything a caller maps it to into NaN.
+  return Array.from(source, Number).filter(Number.isFinite);
+};
+
+/**
+ * Null counts, distinct counts, ranges and quality signals for the given
+ * fields of one relation. Shared by layers and plain tables; only a layer adds
+ * geometry checks on top.
+ */
+const profileRelationFields = async (
+  tableName: string,
+  profileFields: DatasetField[],
+  rowCountHint?: number,
+) => {
+    const table = `"${tableName.replace(/"/g, '""')}"`;
+    const expressions = ["COUNT(*) AS profile_row_count"];
+    profileFields.forEach((field, index) => {
+      const column = quoteIdentifier(field.name);
+      expressions.push(
+        `COUNT(*) FILTER (WHERE ${column} IS NULL) AS p${index}_nulls`,
+      );
+      expressions.push(
+        `${(rowCountHint ?? Infinity) <= 100_000 ? "COUNT(DISTINCT " : "APPROX_COUNT_DISTINCT("}${column}) AS p${index}_distinct`,
+      );
+      if (field.semanticType === "numeric") {
+        const numeric = `TRY_CAST(${column} AS DOUBLE)`;
+        expressions.push(`MIN(${numeric}) AS p${index}_min`);
+        expressions.push(`MAX(${numeric}) AS p${index}_max`);
+        expressions.push(`AVG(${numeric}) AS p${index}_mean`);
+        expressions.push(
+          `APPROX_QUANTILE(${numeric}, [0.0, 0.25, 0.5, 0.75, 1.0]) AS p${index}_quantiles`,
+        );
+      } else if (field.semanticType === "temporal") {
+        const temporal = `TRY_CAST(${column} AS TIMESTAMP)`;
+        expressions.push(`MIN(${temporal}) AS p${index}_start`);
+        expressions.push(`MAX(${temporal}) AS p${index}_end`);
+      }
+    });
+    const result = await duckdbService.query(
+      `SELECT ${expressions.join(", ")} FROM ${table};`,
+    );
+    const row = normalizeRows(result.toArray())[0] || {};
+    const rowCount = Number(
+      row.profile_row_count ?? rowCountHint ?? 0,
+    );
+    const fields: DatasetFieldProfile[] = profileFields.map(
+      (field, index) => {
+        const nullCount = Number(row[`p${index}_nulls`] ?? 0);
+        const profile: DatasetFieldProfile = {
+          ...field,
+          nullCount,
+          nullPercent: rowCount > 0 ? nullCount / rowCount : 0,
+          distinctCount: Number(row[`p${index}_distinct`] ?? 0),
+        };
+        if (field.semanticType === "numeric") {
+          const finite = (value: unknown) =>
+            value === null ||
+            value === undefined ||
+            !Number.isFinite(Number(value))
+              ? undefined
+              : Number(value);
+          profile.min = finite(row[`p${index}_min`]);
+          profile.max = finite(row[`p${index}_max`]);
+          profile.mean = finite(row[`p${index}_mean`]);
+          profile.quantiles = numberList(row[`p${index}_quantiles`]);
+        } else if (field.semanticType === "temporal") {
+          profile.temporalStart =
+            dateIso(row[`p${index}_start`]) || undefined;
+          profile.temporalEnd = dateIso(row[`p${index}_end`]) || undefined;
+        }
+        return profile;
+      },
+    );
+
+    const issues: DatasetProfileIssue[] = [];
+    fields.forEach((field) => {
+      if (field.nullPercent >= 0.25)
+        issues.push({
+          id: `missing-${field.name}`,
+          severity: field.nullPercent >= 0.5 ? "warning" : "info",
+          field: field.name,
+          message: `${field.name} is missing for ${(field.nullPercent * 100).toLocaleString(undefined, { maximumFractionDigits: 1 })}% of rows. Confirm whether this is expected.`,
+          action: "filter-missing",
+        });
+      const nonNull = Math.max(0, rowCount - field.nullCount);
+      if (
+        field.semanticType === "identifier" &&
+        nonNull > 0 &&
+        field.distinctCount < nonNull
+      )
+        issues.push({
+          id: `duplicate-${field.name}`,
+          severity: "warning",
+          field: field.name,
+          message: `${field.name} has ${(nonNull - field.distinctCount).toLocaleString()} repeated non-null values and may not be a unique identifier.`,
+          action: "inspect-identifiers",
+        });
+      if (field.semanticType === "categorical" && field.distinctCount > 50)
+        issues.push({
+          id: `cardinality-${field.name}`,
+          severity: "info",
+          field: field.name,
+          message: `${field.name} has ${field.distinctCount.toLocaleString()} distinct values; use search or top-N grouping for readable categories.`,
+          action: "inspect-field",
+        });
+    });
+
+  return { rowCount, fields, issues };
 };
 
 export const queryLayerDatasetProfile = async (
@@ -904,101 +1065,16 @@ export const queryLayerDatasetProfile = async (
         datasetId: layer.id,
       },
       async () => {
-        const metadata = metadataForLayer(layer);
+        // Same reconciliation: profile what the tile table holds, not what the
+        // origin schema advertises.
+        const availableColumns = tileTableColumns(layer);
+        const metadataFields = metadataForLayer(layer).fields;
+        const profileFields = availableColumns
+          ? metadataFields.filter((field) => availableColumns.has(field.name))
+          : metadataFields;
         const tableName = await analyticsTableForLayer(layer);
         const table = `"${tableName.replace(/"/g, '""')}"`;
-        const expressions = ["COUNT(*) AS profile_row_count"];
-        metadata.fields.forEach((field, index) => {
-          const column = quoteIdentifier(field.name);
-          expressions.push(
-            `COUNT(*) FILTER (WHERE ${column} IS NULL) AS p${index}_nulls`,
-          );
-          expressions.push(
-            `${layer.featureCount <= 100_000 ? "COUNT(DISTINCT " : "APPROX_COUNT_DISTINCT("}${column}) AS p${index}_distinct`,
-          );
-          if (field.semanticType === "numeric") {
-            const numeric = `TRY_CAST(${column} AS DOUBLE)`;
-            expressions.push(`MIN(${numeric}) AS p${index}_min`);
-            expressions.push(`MAX(${numeric}) AS p${index}_max`);
-            expressions.push(`AVG(${numeric}) AS p${index}_mean`);
-            expressions.push(
-              `APPROX_QUANTILE(${numeric}, [0.0, 0.25, 0.5, 0.75, 1.0]) AS p${index}_quantiles`,
-            );
-          } else if (field.semanticType === "temporal") {
-            const temporal = `TRY_CAST(${column} AS TIMESTAMP)`;
-            expressions.push(`MIN(${temporal}) AS p${index}_start`);
-            expressions.push(`MAX(${temporal}) AS p${index}_end`);
-          }
-        });
-        const result = await duckdbService.query(
-          `SELECT ${expressions.join(", ")} FROM ${table};`,
-        );
-        const row = normalizeRows(result.toArray())[0] || {};
-        const rowCount = Number(
-          row.profile_row_count ?? layer.featureCount ?? 0,
-        );
-        const fields: DatasetFieldProfile[] = metadata.fields.map(
-          (field, index) => {
-            const nullCount = Number(row[`p${index}_nulls`] ?? 0);
-            const profile: DatasetFieldProfile = {
-              ...field,
-              nullCount,
-              nullPercent: rowCount > 0 ? nullCount / rowCount : 0,
-              distinctCount: Number(row[`p${index}_distinct`] ?? 0),
-            };
-            if (field.semanticType === "numeric") {
-              const finite = (value: unknown) =>
-                value === null ||
-                value === undefined ||
-                !Number.isFinite(Number(value))
-                  ? undefined
-                  : Number(value);
-              profile.min = finite(row[`p${index}_min`]);
-              profile.max = finite(row[`p${index}_max`]);
-              profile.mean = finite(row[`p${index}_mean`]);
-              profile.quantiles = numberList(row[`p${index}_quantiles`]);
-            } else if (field.semanticType === "temporal") {
-              profile.temporalStart =
-                dateIso(row[`p${index}_start`]) || undefined;
-              profile.temporalEnd = dateIso(row[`p${index}_end`]) || undefined;
-            }
-            return profile;
-          },
-        );
-
-        const issues: DatasetProfileIssue[] = [];
-        fields.forEach((field) => {
-          if (field.nullPercent >= 0.25)
-            issues.push({
-              id: `missing-${field.name}`,
-              severity: field.nullPercent >= 0.5 ? "warning" : "info",
-              field: field.name,
-              message: `${field.name} is missing for ${(field.nullPercent * 100).toLocaleString(undefined, { maximumFractionDigits: 1 })}% of rows. Confirm whether this is expected.`,
-              action: "filter-missing",
-            });
-          const nonNull = Math.max(0, rowCount - field.nullCount);
-          if (
-            field.semanticType === "identifier" &&
-            nonNull > 0 &&
-            field.distinctCount < nonNull
-          )
-            issues.push({
-              id: `duplicate-${field.name}`,
-              severity: "warning",
-              field: field.name,
-              message: `${field.name} has ${(nonNull - field.distinctCount).toLocaleString()} repeated non-null values and may not be a unique identifier.`,
-              action: "inspect-identifiers",
-            });
-          if (field.semanticType === "categorical" && field.distinctCount > 50)
-            issues.push({
-              id: `cardinality-${field.name}`,
-              severity: "info",
-              field: field.name,
-              message: `${field.name} has ${field.distinctCount.toLocaleString()} distinct values; use search or top-N grouping for readable categories.`,
-              action: "inspect-field",
-            });
-        });
-
+        const { rowCount, fields, issues } = await profileRelationFields(tableName, profileFields, layer.featureCount);
         const sample = layer.geojson?.features.slice(0, 200) || [];
         let sampledFeatures = sample.length;
         let sampledValid = sample.filter((feature) =>
@@ -1064,6 +1140,30 @@ export const queryLayerDatasetProfile = async (
           },
           issues,
         };
+      },
+    )
+    .catch((error) => {
+      datasetProfileCache.delete(key);
+      throw error;
+    });
+  datasetProfileCache.set(key, promise);
+  return promise;
+};
+
+/** The same profile for a registered table or workflow result, without geometry. */
+export const queryTableDatasetProfile = (dataset: DatasetDescriptor): Promise<DatasetProfile> => {
+  const tableName = relationForDataset(dataset);
+  if (!tableName) return Promise.reject(new Error(`${dataset.name} has no queryable relation.`));
+  const key = `${dataset.id}:${tableName}:${dataset.sourceUpdatedAt}`;
+  const cached = datasetProfileCache.get(key);
+  if (cached) return cached;
+  if (datasetProfileCache.size >= 24) datasetProfileCache.clear();
+  const promise = analyticalQueryClient
+    .run(
+      { key: analyticalQueryKey("dataset-profile", { datasetId: dataset.id, sourceVersion: key }), datasetId: dataset.id },
+      async () => {
+        const { rowCount, fields, issues } = await profileRelationFields(tableName, datasetFields(dataset.fields), dataset.rowCount);
+        return { datasetId: dataset.id, rowCount, fieldCount: fields.length, generatedAt: Date.now(), fields, issues };
       },
     )
     .catch((error) => {
@@ -1211,7 +1311,7 @@ const featureIdsFromValue = (value: unknown) =>
 
 export const visualChartFilterKey = visualFilterKey;
 
-export type ChartFacet = { field: string; value: string };
+type ChartFacet = { field: string; value: string };
 
 const facetPredicate = (facet: ChartFacet | undefined) =>
   facet
@@ -1292,7 +1392,13 @@ export const queryTableChart = async ({
 const sqlString = (value: string) => `'${value.replace(/'/g, "''")}'`;
 
 const dateIso = (value: unknown) => {
-  const date = value instanceof Date ? value : new Date(String(value));
+  // DuckDB hands timestamps back as epoch milliseconds, which String() would
+  // turn into a date string nothing can parse.
+  const date = value instanceof Date
+    ? value
+    : typeof value === "number" || typeof value === "bigint"
+      ? new Date(Number(value))
+      : new Date(String(value));
   return Number.isFinite(date.getTime()) ? date.toISOString() : null;
 };
 
@@ -2120,7 +2226,7 @@ const safeCohortTableName = (value: string) => {
   return value;
 };
 
-export const cohortPredicate = (
+const cohortPredicate = (
   cohort: CohortSpec,
   featureIdColumn: string,
 ) => {
@@ -2610,3 +2716,56 @@ export const describeChartTable = async (
 
 export const __visualAnalyticsCacheSizeForTests = () =>
   registeredLayerTables.size;
+
+/**
+ * Everything one chart plots, whatever kind of chart it is. A chart reads a
+ * map layer or, when `tableName` is given, a registered table.
+ */
+export const queryChartData = async ({
+  chart,
+  layer,
+  tableName,
+  rowIdColumn,
+  filters,
+}: {
+  chart: VisualChartSpec;
+  layer?: AnalyticsLayer;
+  tableName?: string;
+  rowIdColumn?: string;
+  filters: VisualFilter[];
+}): Promise<ChartExportData> => {
+  if (!tableName && !layer) throw new Error(`${chart.title} has no data source.`);
+  if (chart.type === "scatter") {
+    return {
+      kind: "scatter",
+      result: tableName
+        ? await queryTableScatter({ tableName, filters, chart })
+        : await queryLayerScatter({ layer: layer!, filters, chart }),
+    };
+  }
+  if (chart.type === "line" || chart.type === "area") {
+    return {
+      kind: "temporal",
+      result: tableName
+        ? await queryTableTemporalChart({ tableName, filters, chart })
+        : await queryLayerTemporalChart({ layer: layer!, filters, chart }),
+    };
+  }
+  const aggregate = (facet?: ChartFacet) =>
+    tableName
+      ? queryTableChart({ tableName, rowIdColumn, filters, chart, facet })
+      : queryLayerChart({ layer: layer!, filters, chart, facet });
+  if (!chart.facetField) return { kind: "aggregate", result: await aggregate() };
+  const values = await queryChartFacetValues({
+    layer: tableName ? undefined : layer,
+    tableName,
+    facetField: chart.facetField,
+  });
+  const results = await Promise.all(
+    values.map((value) => aggregate({ field: chart.facetField!, value })),
+  );
+  return {
+    kind: "facets",
+    results: values.map((value, index) => ({ value, result: results[index] })),
+  };
+};

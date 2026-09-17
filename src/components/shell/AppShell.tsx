@@ -7,6 +7,7 @@ import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import { ingestFile, isIngestableFile } from '../../services/dataIngestion';
 import { MapView } from '../Map/MapView';
 import { MapEmptyState } from './MapEmptyState';
+import { ChartPanel } from '../Charts/ChartPanel';
 import { ToastContainer } from '../Toast';
 import { ErrorBoundary } from '../ErrorBoundary';
 import { Header } from './Header';
@@ -51,6 +52,8 @@ export const AppShell = () => {
   const isCompare = workspaceMode === 'compare';
   const isExplore = !isExplain && !isCompare;
   const isPresenting = useStore((s) => s.ui.isPresentationMode);
+  // Only while Charts is the panel destination: choosing Layers means the map.
+  const chartCanvas = useStore((s) => s.ui.chartCanvas && s.ui.activeRailTab === 'charts');
   const [isDragOver, setIsDragOver] = useState(false);
 
   useWorkflowSync();
@@ -126,8 +129,17 @@ export const AppShell = () => {
                     <MapView />
                   </ErrorBoundary>
                   <MapEmptyState />
+                  {/* Over the map rather than instead of it, so leaving the
+                      canvas returns to a map that never had to re-initialise. */}
+                  {chartCanvas && (
+                    <div className="absolute inset-0 z-30">
+                      <ErrorBoundary name="Chart Canvas">
+                        <ChartPanel layout="canvas" />
+                      </ErrorBoundary>
+                    </div>
+                  )}
                   {isDragOver && (
-                    <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center border-2 border-dashed border-primary bg-primary/5">
+                    <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center border-2 border-dashed border-primary bg-primary/5">
                       <span className="rounded-lg bg-white px-4 py-2 text-xs font-semibold text-primary shadow">
                         Drop Parquet, CSV, JSON, GeoJSON or a spatial file to add it to the map
                       </span>

@@ -133,7 +133,7 @@ const selectList = (fields: RemoteField[], columns?: string[]) => {
   return chosen.map(qi).join(', ');
 };
 
-export type RemoteScanOptions = {
+type RemoteScanOptions = {
   path: string;
   fields: RemoteField[];
   bbox?: RemoteBbox | null;
@@ -181,7 +181,7 @@ export const guardFailure = ({
   return null;
 };
 
-export type RemoteCatalogEntry = {
+type RemoteCatalogEntry = {
   id: string;
   name: string;
   publisher: string;

@@ -111,9 +111,3 @@ export const DEFAULT_PROVENANCE_AGENT: ProvenanceAgent = {
   id: 'local-user',
   label: 'You',
 };
-
-export const ASSISTANT_PROVENANCE_AGENT: ProvenanceAgent = {
-  type: 'assistant',
-  id: 'copilot',
-  label: 'Copilot',
-};

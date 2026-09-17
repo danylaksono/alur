@@ -42,8 +42,6 @@ type CacheIndex = { entries: CachedSourceEntry[] };
 
 const isAvailable = () => typeof navigator !== 'undefined' && typeof navigator.storage?.getDirectory === 'function';
 
-export const isSourceCacheAvailable = () => isAvailable();
-
 /**
  * Identifies a file by what the project manifest already records about it.
  *
@@ -198,7 +196,7 @@ export const cachedSource = async (source: ProjectSourceDescriptor): Promise<Fil
   }
 };
 
-export const listCachedSources = async (): Promise<CachedSourceEntry[]> => {
+const listCachedSources = async (): Promise<CachedSourceEntry[]> => {
   const dir = await directory();
   if (!dir) return [];
   return (await readIndex(dir)).entries;

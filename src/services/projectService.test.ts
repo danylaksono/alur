@@ -139,14 +139,13 @@ describe('projectService', () => {
     expect(restored.visualAnalytics.charts[0].source).toEqual({ kind: 'table', datasetId: 'table:sales', tableName: 'sales', rowIdColumn: 'sale_id' });
   });
 
-  it('persists the dashboard layout but never an active presentation session', () => {
+  it('persists the workspace mode but never an active presentation session', () => {
     const store = useStore.getState();
     store.setWorkspaceMode('board');
-    store.addDashboardCard({ id: 'note-1', kind: 'note', title: 'Decision', note: 'Retain this view.', width: 2, height: 'compact' });
     store.setPresentationMode(true);
     const restored = parseProjectManifest(serialiseProjectManifest(createProjectManifest()));
     expect(restored.workspace.workspaceMode).toBe('board');
-    expect(restored.visualAnalytics.dashboard?.cards[0]).toMatchObject({ id: 'note-1', note: 'Retain this view.' });
+    expect(restored.workspace).not.toHaveProperty('isPresentationMode');
   });
 
   it('round-trips the dedicated cohorts rail placement', () => {

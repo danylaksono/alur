@@ -1,4 +1,3 @@
-import axios from 'axios';
 import { llmToolDefinitions } from './toolDefinitions';
 import { useStore } from '../store/useStore';
 
@@ -17,10 +16,10 @@ export const testOpenRouterConnection = async (apiKey: string): Promise<boolean>
   if (!apiKey) return false;
   try {
     // GET /key returns the key's metadata; an invalid key returns 401.
-    const response = await axios.get(OPENROUTER_KEY_URL, {
+    const response = await fetch(OPENROUTER_KEY_URL, {
       headers: { Authorization: `Bearer ${apiKey}` },
     });
-    return response.status === 200;
+    return response.ok;
   } catch {
     return false;
   }
@@ -65,9 +64,13 @@ Your goal is to help users inspect, explore, transform, visualise, and gain insi
 Use structured tool calls. Only return a tool call when a UI action is required.
 `;
 
-  const response = await axios.post(
-    OPENROUTER_API_URL,
-    {
+  const response = await fetch(OPENROUTER_API_URL, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${openRouterApiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
       model: openRouterModelId || 'openai/gpt-4o-mini',
       messages: [
         { role: 'system', content: systemPrompt },
@@ -78,14 +81,15 @@ Use structured tool calls. Only return a tool call when a UI action is required.
         function: fn,
       })),
       tool_choice: 'auto',
-    },
-    {
-      headers: {
-        'Authorization': `Bearer ${openRouterApiKey}`,
-        'Content-Type': 'application/json',
-      },
-    }
-  );
+    }),
+  });
 
-  return response.data.choices[0].message;
+  // fetch only rejects on network failure, so a 4xx/5xx has to be raised here
+  // to keep the throw-on-error contract the chat panel already relies on.
+  if (!response.ok) {
+    throw new Error(`OpenRouter returned ${response.status} ${response.statusText}`.trim());
+  }
+
+  const body = await response.json();
+  return body.choices[0].message;
 };

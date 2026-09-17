@@ -24,7 +24,7 @@ import {
 } from "./palettes";
 import { numericExtent } from "./extent";
 
-export type NumericProfile = {
+type NumericProfile = {
   kind: "numeric";
   total: number;
   nullCount: number;
@@ -34,7 +34,7 @@ export type NumericProfile = {
   bins: Array<{ label: string; count: number; min: number; max: number }>;
 };
 
-export type CategoricalProfile = {
+type CategoricalProfile = {
   kind: "categorical";
   total: number;
   nullCount: number;

@@ -39,9 +39,9 @@ import { safeFilename } from '../utils/download';
  * of segments and a cap that quietly halved it would produce a plausible,
  * wrong answer — and truncation is always reported rather than absorbed.
  */
-export const DEFAULT_FEATURE_CAP = 1_000_000;
+const DEFAULT_FEATURE_CAP = 1_000_000;
 
-export type OperationRunOptions = {
+type OperationRunOptions = {
   featureCap?: number;
   /** Names the datasets produced; defaults to the provider's label. */
   runLabel?: string;
@@ -109,7 +109,7 @@ const canonicalFields = (spec: OperationInputSpec, binding: OperationInputBindin
  * The cap is shared across an input's sources rather than applied per source, so
  * binding a second dataset cannot quietly double how much is read.
  */
-export const collectInput = async (
+const collectInput = async (
   manifest: OperationManifest,
   binding: OperationInputBinding,
   datasets: Record<string, DatasetDescriptor>,
@@ -234,7 +234,7 @@ export const joinColumnFor = (
  * says it; where a spec omits it, the input's first required identifier is the
  * only sensible reading.
  */
-export const targetColumnFor = (
+const targetColumnFor = (
   manifest: OperationManifest,
   changeId: string,
 ): string | null => {
@@ -296,7 +296,7 @@ const ingestCollection = async (collection: GeoJSON.FeatureCollection, name: str
  * Kept separate from running so a caller can inspect a result before committing
  * it, and so the merging can be tested without DuckDB.
  */
-export const materialiseOutputs = async (
+const materialiseOutputs = async (
   manifest: OperationManifest,
   result: OperationRunResult,
   bindings: OperationInputBinding[],
@@ -416,7 +416,7 @@ export const resolveRowTargets = (
   return { changes: resolved, warnings };
 };
 
-export type OperationRunRequest = {
+type OperationRunRequest = {
   /**
    * Where to load the calculation from, or empty for one compiled into the app.
    *

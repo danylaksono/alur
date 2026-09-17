@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { GitBranch, GitCompareArrows, Play, Plus } from 'lucide-react';
+import { GitBranch, GitCompareArrows, Play } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { buildVariantTree, flattenVariantTree, formatVariantValue, type VariantDifference } from '../../utils/variantLineage';
 import { comparableVariants, comparisonFromVariants } from '../../utils/scenarioComparison';
@@ -231,18 +231,3 @@ export const ScenarioPanel = () => {
   );
 };
 
-/**
- * The empty-state affordance, shown when a bench has nothing to add to yet.
- *
- * Kept here rather than in the benches so the copy stays in one place as the
- * "add to scenario" footer lands on Score, Cohorts and Calculations.
- */
-export const StartScenarioButton = ({ onClick }: { onClick: () => void }) => (
-  <button
-    type="button"
-    onClick={onClick}
-    className="pressable flex w-full items-center justify-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-bold text-slate-600 transition-colors duration-hover hover:bg-slate-50"
-  >
-    <Plus className="h-2.5 w-2.5" /> New scenario
-  </button>
-);

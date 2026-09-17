@@ -7,7 +7,7 @@ const normaliseFeatureId = (value: unknown) => {
   return String(value);
 };
 
-export const featureIdForProperties = (
+const featureIdForProperties = (
   properties: GeoJSON.GeoJsonProperties | null | undefined,
   fallback: string,
 ) => {

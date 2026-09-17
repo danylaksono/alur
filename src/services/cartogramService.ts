@@ -21,9 +21,9 @@ import type { MapLayer } from '../store/useStore';
  * long before it stops being computable, and the MIP is superlinear.
  * ponytail: fixed cap, make it an option if someone has a real 5k-area case.
  */
-export const CARTOGRAM_MAX_FEATURES = 2000;
+const CARTOGRAM_MAX_FEATURES = 2000;
 
-export type CartogramPair = {
+type CartogramPair = {
   regularGeoJSON: GeoJSON.FeatureCollection;
   cartogramGeoJSON: GeoJSON.FeatureCollection;
   /** The property both collections are keyed on, for the morph's own join. */

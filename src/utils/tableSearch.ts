@@ -1,6 +1,6 @@
 import { quoteIdentifier } from './visualFilterSql';
 
-export type TableSearch = {
+type TableSearch = {
   /** The text to match. */
   term: string;
   /** The single column to match against, or null to match every column. */

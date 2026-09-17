@@ -16,7 +16,7 @@ type BinaryNode = {
   right: ExpressionNode;
 };
 type CallNode = { type: 'call'; name: CalculatorFunctionName; args: ExpressionNode[] };
-export type ExpressionNode = LiteralNode | FieldNode | UnaryNode | BinaryNode | CallNode;
+type ExpressionNode = LiteralNode | FieldNode | UnaryNode | BinaryNode | CallNode;
 
 type Token = {
   type: 'number' | 'string' | 'identifier' | 'op' | 'eof';
@@ -47,7 +47,7 @@ export const FIELD_CALCULATOR_FUNCTIONS = Object.entries(FUNCTION_SPECS).map(([n
   signature: spec.signature,
 }));
 
-export const IDENTIFIER_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const IDENTIFIER_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const KEYWORDS = new Set(['and', 'or', 'not', 'true', 'false', 'null']);
 const RESERVED_NAMES = new Set([...KEYWORDS, ...Object.keys(FUNCTION_SPECS)]);
 const TWO_CHARACTER_OPERATORS = new Set(['==', '!=', '<=', '>=', '&&', '||']);
@@ -343,7 +343,7 @@ const callFunction = (name: CalculatorFunctionName, args: unknown[]) => {
   return second === null ? null : numericResult(first ** second);
 };
 
-export const evaluateExpression = (node: ExpressionNode | null, row: Record<string, unknown>): unknown => {
+const evaluateExpression = (node: ExpressionNode | null, row: Record<string, unknown>): unknown => {
   if (!node) return null;
   if (node.type === 'literal') return node.value;
   if (node.type === 'field') {

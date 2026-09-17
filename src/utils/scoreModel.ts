@@ -25,7 +25,7 @@ import { quoteIdentifier } from './visualFilterSql';
  * computed over — a table name for a live preview, a CTE alias inside a
  * compiled workflow.
  */
-export type ScoreCompileOptions = { relation?: string };
+type ScoreCompileOptions = { relation?: string };
 
 export class ScoreCompileError extends Error {}
 

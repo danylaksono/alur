@@ -48,7 +48,7 @@ export type ChartCube = {
  * Bins a histogram draws for a chart. The cube must use exactly this, or a
  * sliced column would land on the wrong bar.
  */
-export const histogramBinCount = (chart: { maxCategories?: number }) =>
+const histogramBinCount = (chart: { maxCategories?: number }) =>
   Math.max(4, Math.min(24, chart.maxCategories || 12));
 
 const quote = (value: string) => `"${value.replace(/"/g, '""')}"`;

@@ -44,10 +44,10 @@ export type AnalyticsCommand =
       kpiId?: string;
     };
 
-export type AnalyticsCommandErrorCode =
+type AnalyticsCommandErrorCode =
   | 'dataset_not_found'
   | 'field_not_found'
-  | 'unsupported_dataset'
+  | 'not_a_layer'
   | 'empty_selection'
   | 'command_failed';
 

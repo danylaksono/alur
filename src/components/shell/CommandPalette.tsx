@@ -72,7 +72,7 @@ export const CommandPalette = () => {
         run: () => state.applyLayoutPreset(preset),
       })),
       { id: 'focus-layer', label: 'Zoom to active layer', keywords: 'map home extent fit', icon: MapPinned, disabled: !selectedLayerId, run: () => { if (selectedLayerId) state.focusLayer(selectedLayerId); } },
-      { id: 'dataset-overview', label: 'Open dataset overview', keywords: 'profile quality fields missing distinct', icon: ScanSearch, disabled: !selectedLayerId, run: () => { if (selectedLayerId) state.setDatasetOverviewLayerId(selectedLayerId); } },
+      { id: 'dataset-overview', label: 'Open dataset overview', keywords: 'profile quality fields missing distinct', icon: ScanSearch, disabled: !selectedLayerId, run: () => { if (selectedLayerId) state.setDatasetOverviewId(selectedLayerId); } },
       { id: 'focus-selection', label: 'Zoom to selection', keywords: 'map selected extent fit', icon: MapPinned, disabled: !selectedLayerState?.selectedFeatureIds.length, run: async () => { if (selectedLayerId) await executeAnalyticsCommand({ type: 'focus-selection', datasetId: selectedLayerId }); } },
       { id: 'clear-filters', label: 'Clear active filters', keywords: 'reset subset', icon: Database, disabled: !selectedLayerState?.filters.length, run: () => { if (selectedLayerId) state.clearLayerFilters(selectedLayerId); } },
       { id: 'clear-selection', label: 'Clear feature selection', keywords: 'reset selected', icon: X, disabled: !selectedLayerState?.selectedFeatureIds.length, run: () => { if (selectedLayerId) state.clearFeatureSelection(selectedLayerId); } },

@@ -2,7 +2,7 @@ import type { LegendSpec } from '../types/visualisation';
 import type { VisualFilter } from '../types/visualAnalytics';
 import { visualFilterKey } from './visualFilters';
 
-export type LegendItemLike = { label: string; value?: string; min?: number; max?: number };
+type LegendItemLike = { label: string; value?: string; min?: number; max?: number };
 
 export { visualFilterKey } from './visualFilters';
 

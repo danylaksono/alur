@@ -13,9 +13,7 @@ import {
 import { searchPredicateFor } from "../utils/tableSearch";
 
 export const qi = (name: string) => `"${name.replace(/"/g, '""')}"`;
-export const escapeSql = (value: string) => value.replace(/'/g, "''");
-
-export const searchableColumnNames = (schema: any[] | undefined) =>
+const searchableColumnNames = (schema: any[] | undefined) =>
   (schema || [])
     .map((col: any) => col.name || col.column_name)
     .filter(
@@ -24,7 +22,7 @@ export const searchableColumnNames = (schema: any[] | undefined) =>
         !["geojson", "geometry", "geom"].includes(name.toLowerCase()),
     );
 
-export const columnType = (schema: any[] | undefined, column: string) => {
+const columnType = (schema: any[] | undefined, column: string) => {
   const found = (schema || []).find(
     (col: any) => (col.name || col.column_name) === column,
   );
@@ -67,16 +65,6 @@ const combinedWhereClause = (
     searchPredicateFor(search, columns, searchField),
   ].filter(Boolean);
   return predicates.length ? ` WHERE (${predicates.join(") AND (")})` : "";
-};
-
-export const buildNodeSelectSql = (
-  nodes: WorkflowNode[],
-  edges: Edge[],
-  nodeId: string,
-  fragments: WorkflowFragment[] = [],
-) => {
-  const { withClause } = buildWorkflowSQL(nodes, edges, { fragments });
-  return `${withClause} SELECT * FROM ${cteAlias(nodeId)}`;
 };
 
 export const buildNodeTableExportSql = ({

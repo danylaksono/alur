@@ -40,7 +40,6 @@ export const buildDefaultChartForField = (
   fieldName: string,
   chartId = `chart-${Date.now()}`,
 ): VisualChartSpec | null => {
-  if (metadata.kind !== 'layer') return null;
   const field = fieldByName(metadata, fieldName);
   if (!field) return null;
 
@@ -52,7 +51,8 @@ export const buildDefaultChartForField = (
   return {
     id: chartId,
     title: chartTitle(field.name, type),
-    layerId: metadata.id,
+    layerId: metadata.kind === 'layer' ? metadata.id : '',
+    source: metadata.source || { kind: 'layer', layerId: metadata.id },
     type,
     dimensionField: field.name,
     aggregation: 'count',
@@ -77,14 +77,6 @@ export const executeAnalyticsCommand = async (
   const dataset = context.datasets.find((candidate) => candidate.id === command.datasetId);
   if (!dataset) {
     return { ok: false, code: 'dataset_not_found', message: `Dataset ${command.datasetId} is not available.` };
-  }
-
-  if (dataset.kind !== 'layer') {
-    return {
-      ok: false,
-      code: 'unsupported_dataset',
-      message: 'Linked commands for non-spatial tables arrive with the dataset-source milestone.',
-    };
   }
 
   try {
@@ -117,6 +109,10 @@ export const executeAnalyticsCommand = async (
       return { ok: true, message: `Cleared filters for ${dataset.name}.` };
     }
 
+    if (dataset.kind !== 'layer' && (command.type === 'apply-layer-style' || command.type === 'open-layer-style' || command.type === 'focus-selection')) {
+      return { ok: false, code: 'not_a_layer', message: `${dataset.name} is not on the map, so it has no style or extent.` };
+    }
+
     if (command.type === 'apply-layer-style') {
       context.updateLayerVisualisation(dataset.id, command.visualisation, command.legend);
       context.selectDataset(dataset.id);
@@ -145,6 +141,7 @@ export const executeAnalyticsCommand = async (
         datasetId: dataset.id,
         title: command.title || (field ? `${field.name} ${aggregation}` : `${dataset.name} rows`),
         field: field?.name,
+        source: dataset.source || { kind: 'layer', layerId: dataset.id },
         aggregation,
         comparison: command.comparison || 'total',
         format: command.format || 'compact',

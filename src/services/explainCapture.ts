@@ -1,6 +1,8 @@
 import { useStore, type MapLayer } from '../store/useStore';
 import type { MapEvidenceCapture } from '../types/story';
-import type { ExplainCard } from '../types/visualAnalytics';
+import type { ExplainCard, KpiResult, KpiSpec, VisualChartSpec, VisualFilter } from '../types/visualAnalytics';
+import { compactChartEvidence, type ChartEvidenceCapture, type ChartExportData } from './chartExportService';
+import { chartDatasetId } from '../utils/datasetSource';
 import { captureMapSnapshot } from './mapRegistry';
 import {
   lensAssumptions,
@@ -109,4 +111,73 @@ export const pinLensEvidence = (
   });
   state.addToast({ type: 'success', message: 'Pinned this lens reading to your explanation.' });
   return true;
+};
+
+/** Provenance for evidence read from one dataset under its current filters. */
+const datasetProvenance = (datasetId: string, filters: VisualFilter[], caveats: string[] = []) => ({
+  capturedAt: Date.now(),
+  datasetIds: [datasetId],
+  sourceVersions: { [datasetId]: useStore.getState().datasetRegistry[datasetId]?.sourceUpdatedAt },
+  filtersByDataset: filters.length ? { [datasetId]: filters } : {},
+  caveats,
+});
+
+/**
+ * Pins a chart's plotted values to the explanation.
+ *
+ * The spec is copied, not referenced: editing or deleting the chart afterwards
+ * must not change what the report says it showed.
+ */
+export const pinChartEvidence = (chart: VisualChartSpec, filters: VisualFilter[], data: ChartExportData) => {
+  const state = useStore.getState();
+  const datasetId = chartDatasetId(chart);
+  const compact = compactChartEvidence(data);
+  const capture: ChartEvidenceCapture = { chart: structuredClone(chart), data: structuredClone(compact), filters: structuredClone(filters) };
+  state.addExplainCard({
+    id: `explain-chart-${Date.now()}`,
+    sectionId: 'evidence',
+    kind: 'chart',
+    referenceId: chart.id,
+    title: chart.title,
+    width: chart.facetField ? 12 : 6,
+    height: 'standard',
+    behaviour: 'frozen',
+    frozenValues: capture,
+    provenance: datasetProvenance(datasetId, filters, compact !== data ? [`Scatter thinned to an even sample of its points for the report.`] : []),
+  });
+  state.addToast({ type: 'success', message: `Pinned ${chart.title} to your report.` });
+};
+
+const COMPARISON_LABELS: Record<KpiSpec['comparison'], string> = {
+  none: '', total: 'the unfiltered total', 'previous-period': 'the previous period', cohort: 'the cohort',
+};
+
+/** The context a bare number loses: its denominator and what its change is measured against. */
+export const kpiEvidenceCaption = (spec: KpiSpec, result: KpiResult) => [
+  `${result.activeRows.toLocaleString()} of ${result.totalRows.toLocaleString()} rows`,
+  result.delta !== null && spec.comparison !== 'none'
+    ? `${result.delta > 0 ? '+' : ''}${(result.delta * 100).toLocaleString(undefined, { maximumFractionDigits: 1 })}% vs ${COMPARISON_LABELS[spec.comparison]}`
+    : null,
+].filter(Boolean).join(' · ');
+
+export const pinKpiEvidence = (spec: KpiSpec, filters: VisualFilter[], result: KpiResult) => {
+  const state = useStore.getState();
+  if (result.value === null) {
+    state.addToast({ type: 'warning', message: `${spec.title} has no value to pin.` });
+    return;
+  }
+  state.addExplainCard({
+    id: `explain-kpi-${Date.now()}`,
+    sectionId: 'evidence',
+    kind: 'kpi',
+    referenceId: spec.id,
+    title: spec.title,
+    caption: kpiEvidenceCaption(spec, result),
+    width: 3,
+    height: 'compact',
+    behaviour: 'frozen',
+    frozenValues: result.value,
+    provenance: datasetProvenance(spec.datasetId, filters),
+  });
+  state.addToast({ type: 'success', message: `Pinned ${spec.title} to your report.` });
 };

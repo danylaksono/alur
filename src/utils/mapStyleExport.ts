@@ -1,6 +1,6 @@
 import type { MapLayer } from '../store/useStore';
 
-export type ExportedMapStyle = {
+type ExportedMapStyle = {
   version: 1;
   exportedAt: string;
   layers: Array<{

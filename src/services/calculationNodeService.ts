@@ -229,7 +229,7 @@ export const withRowIdFallback = (
   return filled;
 };
 
-export type CalculationNodeRun = {
+type CalculationNodeRun = {
   tableName: string;
   datasetId: string;
   rowCount: number;

@@ -2,14 +2,14 @@ import type { MapLayer } from '../store/useStore';
 import type { GeometryKind, LayerVisualisation, LabelVisualisation } from '../types/visualisation';
 import { geometryKindForSource } from './layerSource';
 
-export type CompiledMapLayerStyle = {
+type CompiledMapLayerStyle = {
   type: 'circle' | 'line' | 'fill' | 'heatmap' | 'fill-extrusion';
   paint: Record<string, unknown>;
   layout?: Record<string, unknown>;
   label?: CompiledLabelLayer;
 };
 
-export type CompiledLabelLayer = {
+type CompiledLabelLayer = {
   type: 'symbol';
   layout: Record<string, unknown>;
   paint: Record<string, unknown>;
@@ -21,7 +21,7 @@ export const geometryKindForLayer = (layer: MapLayer): GeometryKind => {
   return geometryKindForSource(layer);
 };
 
-export const fallbackLayerColor = (index: number) => FALLBACK_COLORS[index % FALLBACK_COLORS.length];
+const fallbackLayerColor = (index: number) => FALLBACK_COLORS[index % FALLBACK_COLORS.length];
 
 const colorPaintKey = (geometryKind: GeometryKind) => {
   if (geometryKind === 'point') return 'circle-color';
@@ -116,7 +116,7 @@ export const compileCategoricalColorExpression = (visualisation: Extract<LayerVi
   ];
 };
 
-export const compileLabelLayer = (visualisation: LabelVisualisation, geometryKind: GeometryKind): CompiledLabelLayer => {
+const compileLabelLayer = (visualisation: LabelVisualisation, geometryKind: GeometryKind): CompiledLabelLayer => {
   const offset: [number, number] = geometryKind === 'point' ? [0, -1.2] : [0, 0];
 
   return {

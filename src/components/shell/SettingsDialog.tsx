@@ -2,14 +2,8 @@ import { useEffect, useState } from 'react';
 import { CheckCircle2, Eye, EyeOff, Loader2, X, XCircle } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { clearSourceCache, sourceCacheUsage } from '../../services/sourceCache';
+import { formatBytes } from '../../utils/download';
 import { testOpenRouterConnection } from '../../utils/openrouter';
-
-const formatBytes = (bytes: number) => {
-  if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(1)} GB`;
-  if (bytes >= 1e6) return `${Math.round(bytes / 1e6)} MB`;
-  if (bytes >= 1e3) return `${Math.round(bytes / 1e3)} KB`;
-  return `${bytes} B`;
-};
 
 export const SettingsDialog = () => {
   const isOpen = useStore((s) => s.ui.isSettingsOpen);

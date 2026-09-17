@@ -5,7 +5,7 @@ import { quoteIdentifier } from '../utils/visualFilterSql';
 import type { MapLayer } from '../store/useStore';
 import type { HexbinAggregate } from '../types/visualisation';
 
-export type HexbinConfig = {
+type HexbinConfig = {
   /** Hexagon radius (center→vertex) in meters. */
   cellSize: number;
   aggregate: HexbinAggregate;
@@ -115,7 +115,7 @@ export const resolutionForCellSize = (cellSize: number, edges: number[]): number
 export type HexbinMethod = 'h3' | 'mercator';
 
 /** How the last generated hexbin grid was actually built. */
-export type HexbinResult = {
+type HexbinResult = {
   featureCollection: GeoJSON.FeatureCollection;
   method: HexbinMethod;
   /** Only set for the H3 path. */

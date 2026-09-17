@@ -10,7 +10,6 @@ import {
   looksProjected,
   type GeoExportFormat,
 } from '../utils/geoExport';
-import { createCompressedZipArchive } from '../utils/zipArchive';
 
 /**
  * One place that turns "this SQL, in this format" into a downloadable file.
@@ -21,7 +20,7 @@ import { createCompressedZipArchive } from '../utils/zipArchive';
  * is where DuckDB's geometry becomes coordinates the serialisers can reshape.
  */
 
-export type BuiltExport = {
+type BuiltExport = {
   blob: Blob;
   fileName: string;
   /** Null for tabular exports, where rows are never materialised in the browser. */
@@ -30,7 +29,7 @@ export type BuiltExport = {
   warnings: string[];
 };
 
-export type BuildExportOptions = {
+type BuildExportOptions = {
   sql: string;
   format: GeoExportFormat | string;
   /** Used for the download filename and the KML document name. */
@@ -39,7 +38,7 @@ export type BuildExportOptions = {
   featureLimit?: number;
 };
 
-export class NoGeometryError extends Error {
+class NoGeometryError extends Error {
   constructor() {
     super('This result has no geometry column, so it cannot be written as a spatial file. Export it as CSV, JSON or Parquet instead.');
     this.name = 'NoGeometryError';
@@ -51,7 +50,7 @@ const exportTableName = (baseName: string) =>
 
 const textBlob = (text: string, mimeType: string) => new Blob([text], { type: `${mimeType};charset=utf-8` });
 
-export const buildExport = async ({
+const buildExport = async ({
   sql,
   format,
   baseName,
@@ -103,8 +102,9 @@ export const buildExport = async ({
       };
     case 'kmz': {
       const kml = featureCollectionToKml(collection, { documentName: baseName });
+      const { zipSync, strToU8 } = await import('fflate');
       // "doc.kml" is the conventional entry name every KMZ reader looks for.
-      const archive = await createCompressedZipArchive([{ name: 'doc.kml', data: new TextEncoder().encode(kml) }]);
+      const archive = zipSync({ 'doc.kml': strToU8(kml) });
       return { blob: new Blob([archive.buffer as ArrayBuffer], { type: spec.mimeType }), fileName, featureCount, warnings };
     }
     case 'gpx': {
