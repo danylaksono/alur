@@ -1,26 +1,21 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { BarChart3, Donut, FileImage, FileSpreadsheet, ImageDown, Loader2, Plus, RotateCw, Trash2, X } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowDown, ArrowUp, BarChart3, Copy, Donut, FileImage, FileSpreadsheet, ImageDown, LayoutGrid, Loader2, PanelLeft, Pin, Plus, RotateCw, SlidersHorizontal, Trash2, X } from 'lucide-react';
 import { useStore, type MapLayer } from '../../store/useStore';
 import {
   describeChartTable,
   listChartTables,
-  queryChartFacetValues,
-  queryLayerChart,
-  queryLayerScatter,
-  queryLayerTemporalChart,
-  queryTableChart,
-  queryTableScatter,
-  queryTableTemporalChart,
+  queryChartData,
   visualChartFilterKey,
 } from '../../services/visualAnalyticsService';
 import { CATEGORICAL_PALETTE, SEQUENTIAL_PALETTES } from '../../utils/palettes';
 import { cn } from '../../utils/cn';
-import { buildDefaultChartForDataset } from '../../utils/analyticsCommands';
-import { metadataForLayer } from '../../utils/datasetMetadata';
-import { chartDatasetId, chartDatasetSource } from '../../utils/datasetSource';
+import { metadataForDataset, metadataForLayer, preferredExplorationField } from '../../utils/datasetMetadata';
+import { useAnalyticsCommands } from '../../hooks/useAnalyticsCommands';
+import { chartDatasetId, chartDatasetSource, chartQueryTarget } from '../../utils/datasetSource';
 import { buildChartCubes, sliceCube, type ChartCube } from '../../services/chartCubeService';
 import { analyticsTableForLayer } from '../../services/visualAnalyticsService';
 import { ensureStableTableDataset } from '../../services/datasetService';
+import { pinChartEvidence } from '../../services/explainCapture';
 import type { DatasetDescriptor } from '../../types/datasets';
 import {
   downloadChartCsv,
@@ -31,7 +26,6 @@ import {
 import type {
   VisualChartAggregation,
   VisualChartDatum,
-  VisualChartResult,
   VisualChartSpec,
   VisualChartType,
   VisualFilter,
@@ -508,7 +502,7 @@ const Histogram = ({
           <button
             type="button"
             onClick={onClearRange}
-            className="pressable flex items-center gap-1 rounded px-1.5 py-0.5 font-semibold uppercase tracking-wide text-slate-500 hover:bg-slate-100 hover:text-slate-600"
+            className="chart-hint pressable flex items-center gap-1 rounded px-1.5 py-0.5 font-semibold uppercase tracking-wide text-slate-500 hover:bg-slate-100 hover:text-slate-600"
           >
             <X className="h-3 w-3" />
             Clear range
@@ -579,7 +573,7 @@ const Histogram = ({
       </svg>
       <div className="mt-1 flex items-center justify-between text-[11px] tabular-nums text-slate-500">
         <span>{formatNumber(domainMin)}</span>
-        <span className="text-slate-500">drag to brush</span>
+        <span className="chart-hint text-slate-500">drag to brush</span>
         <span>{formatNumber(domainMax)}</span>
       </div>
     </div>
@@ -710,7 +704,7 @@ const ScatterChart = ({
           <button
             type="button"
             onClick={onClear}
-            className="pressable flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 font-semibold uppercase tracking-wide text-slate-500 hover:bg-slate-100 hover:text-slate-600"
+            className="chart-hint pressable flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 font-semibold uppercase tracking-wide text-slate-500 hover:bg-slate-100 hover:text-slate-600"
           >
             <X className="h-3 w-3" />
             Clear selection
@@ -746,7 +740,7 @@ const ScatterChart = ({
       </div>
       <div className="mt-1 flex items-center justify-between pl-6 text-[11px] tabular-nums text-slate-500">
         <span>{formatNumber(result.xMin)}</span>
-        <span className="text-slate-500">drag to select</span>
+        <span className="chart-hint text-slate-500">drag to select</span>
         <span>{formatNumber(result.xMax)}</span>
       </div>
     </div>
@@ -986,7 +980,7 @@ const TemporalChart = ({
       </svg>
       <div className="flex min-h-5 items-center justify-between gap-2 text-[11px] text-slate-500" aria-live="polite">
         <span className="truncate">{active ? `${active.series} · ${active.point.label}: ${formatNumber(active.point.value ?? 0)} (${active.point.count.toLocaleString()} rows)` : 'Drag across periods to filter · focus a point for details'}</span>
-        {brush && <button type="button" onClick={onClear} className="pressable shrink-0 rounded px-1.5 py-0.5 font-semibold text-sky-700 hover:bg-sky-50">Reset time</button>}
+        {brush && <button type="button" onClick={onClear} className="chart-hint pressable shrink-0 rounded px-1.5 py-0.5 font-semibold text-sky-700 hover:bg-sky-50">Reset time</button>}
       </div>
       <details className="rounded-md border border-slate-100 bg-slate-50/70 text-[11px] text-slate-500">
         <summary className="cursor-pointer px-2 py-1.5 font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400">Accessible data table</summary>
@@ -1003,39 +997,7 @@ const TemporalChart = ({
   );
 };
 
-const ChartCard = ({
-  chart,
-  layer,
-  layers,
-  tables,
-  tableDatasets,
-  filters,
-  selectedFeatureIds,
-  onUpdate,
-  onRemove,
-  onToggleFilter,
-  onBrushRange,
-  onClearRange,
-  onBrush2D,
-  onClear2D,
-  onBrushTemporal,
-  onClearTemporal,
-  onHoverDatum,
-  onLeaveDatum,
-  previewCounts,
-  onLiveBrushStart,
-  onLiveBrush,
-  onLiveBrushEnd,
-}: {
-  chart: VisualChartSpec;
-  layer: MapLayer | undefined;
-  layers: MapLayer[];
-  tables: string[];
-  tableDatasets: DatasetDescriptor[];
-  filters: VisualFilter[];
-  selectedFeatureIds: string[];
-  onUpdate: (patch: Partial<Omit<VisualChartSpec, 'id'>>) => void;
-  onRemove: () => void;
+export type ChartInteraction = {
   onToggleFilter: (datum: VisualChartDatum) => void;
   onBrushRange: (min: number, max: number) => void;
   onClearRange: () => void;
@@ -1044,62 +1006,47 @@ const ChartCard = ({
   onBrushTemporal: (start: string, end: string) => void;
   onClearTemporal: () => void;
   onHoverDatum: (datum: VisualChartDatum) => void;
+  onLeaveDatum: () => void;
   /** Estimated bar counts while another chart is being brushed, one per bin. */
   previewCounts?: number[] | null;
   onLiveBrushStart?: () => void;
   onLiveBrush?: (min: number, max: number) => void;
   onLiveBrushEnd?: () => void;
-  onLeaveDatum: () => void;
+};
+
+const noop = () => {};
+const READ_ONLY: ChartInteraction = {
+  onToggleFilter: noop, onBrushRange: noop, onClearRange: noop, onBrush2D: noop, onClear2D: noop,
+  onBrushTemporal: noop, onClearTemporal: noop, onHoverDatum: noop, onLeaveDatum: noop,
+};
+
+/**
+ * The marks for one chart's plotted values. Without `interaction` it renders
+ * read-only — how a pinned chart appears in the report and in a shared story,
+ * drawn by the same code as the live chart so the two cannot drift apart.
+ */
+export const ChartMarks = ({
+  chart,
+  data,
+  filters = [],
+  selectedFeatureIds = [],
+  interaction,
+}: {
+  chart: VisualChartSpec;
+  data: ChartExportData | null;
+  filters?: VisualFilter[];
+  selectedFeatureIds?: string[];
+  interaction?: ChartInteraction;
 }) => {
-  const cardRef = useRef<HTMLElement | null>(null);
-  const addToast = useStore((state) => state.addToast);
-  const [result, setResult] = useState<VisualChartResult | null>(null);
-  const [scatter, setScatter] = useState<VisualScatterResult | null>(null);
-  const [temporal, setTemporal] = useState<VisualTemporalResult | null>(null);
-  const [facetResults, setFacetResults] = useState<Array<{ value: string; result: VisualChartResult }> | null>(null);
-  const [tableFields, setTableFields] = useState<ChartField[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const datasetSource = chartDatasetSource(chart);
-  const datasetId = chartDatasetId(chart);
-  const datasetDescriptor = useStore((state) => state.datasetRegistry[datasetId]);
-  const registerDataset = useStore((state) => state.registerDataset);
-  const tableName = datasetSource.kind === 'table'
-    ? datasetSource.tableName
-    : datasetSource.kind === 'workflow-node'
-      ? datasetDescriptor?.relationName
-      : undefined;
-  const rowIdColumn = datasetSource.kind === 'layer' ? undefined : datasetDescriptor?.rowIdColumn;
-  const isTableChart = datasetSource.kind !== 'layer';
-  const availableFields = isTableChart ? tableFields : fieldsForLayer(layer);
-  const typedNumericFields = availableFields.filter((field) => isNumericType(field.type));
-  const numericFields = typedNumericFields.length ? typedNumericFields : availableFields;
-  const temporalFields = availableFields.filter((field) => isTemporalType(field.type));
+  const {
+    onToggleFilter, onBrushRange, onClearRange, onBrush2D, onClear2D, onBrushTemporal, onClearTemporal,
+    onHoverDatum, onLeaveDatum, previewCounts, onLiveBrushStart, onLiveBrush, onLiveBrushEnd,
+  } = interaction ?? READ_ONLY;
+  const result = data?.kind === 'aggregate' ? data.result : null;
+  const scatter = data?.kind === 'scatter' ? data.result : null;
+  const temporal = data?.kind === 'temporal' ? data.result : null;
+  const facetResults = data?.kind === 'facets' ? data.results : null;
   const filtersKey = JSON.stringify(filters);
-
-  useEffect(() => {
-    if (!tableName) {
-      setTableFields([]);
-      return;
-    }
-    let cancelled = false;
-    describeChartTable(tableName)
-      .then((fields) => { if (!cancelled) setTableFields(filterChartFields(fields)); })
-      .catch(() => { if (!cancelled) setTableFields([]); });
-    return () => { cancelled = true; };
-  }, [tableName]);
-
-  // A freshly table-bound chart has no fields yet — pick sensible defaults
-  // once the table schema arrives (or when the schema no longer has the field).
-  useEffect(() => {
-    if (!isTableChart || !tableFields.length) return;
-    if (chart.dimensionField && tableFields.some((field) => field.name === chart.dimensionField)) return;
-    const numerics = tableFields.filter((field) => isNumericType(field.type));
-    onUpdate({
-      dimensionField: tableFields[0].name,
-      measureField: (numerics[0] || tableFields[0]).name,
-    });
-  }, [isTableChart, tableFields, chart.dimensionField]);
   const activeKeys = useMemo(
     () => {
       const selected = new Set(selectedFeatureIds);
@@ -1144,13 +1091,275 @@ const ChartCard = ({
     ? paletteColors[0]
     : paletteColors[Math.min(paletteColors.length - 1, Math.floor(paletteColors.length * 0.75))];
 
-  const exportData = useMemo<ChartExportData | null>(() => {
-    if (temporal) return { kind: 'temporal', result: temporal };
-    if (scatter) return { kind: 'scatter', result: scatter };
-    if (facetResults) return { kind: 'facets', results: facetResults };
-    if (result) return { kind: 'aggregate', result };
-    return null;
-  }, [facetResults, result, scatter, temporal]);
+  const marks = isTemporalChart(chart.type) ? (
+    !temporal || !temporal.series.some((series) => series.points.some((point) => point.value !== null)) ? (
+      <div className="flex h-36 items-center justify-center px-4 text-center text-[11px] text-slate-500">
+        No valid temporal values for this field and aggregation.
+      </div>
+    ) : (
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
+          <span>{chart.aggregation} · {temporal.grain} grain</span>
+          <span>{temporal.filteredRows.toLocaleString()} active / {temporal.totalRows.toLocaleString()} total</span>
+        </div>
+        <TemporalChart
+          result={temporal}
+          type={chart.type}
+          showPoints={chart.showPoints ?? true}
+          connectMissing={Boolean(chart.connectMissing)}
+          brush={temporalBrush}
+          onBrush={onBrushTemporal}
+          onClear={onClearTemporal}
+        />
+      </div>
+    )
+  ) : chart.type === 'scatter' ? (
+    !scatter || !scatter.points.length ? (
+      <div className="flex h-36 items-center justify-center px-4 text-center text-[11px] text-slate-500">
+        No numeric value pairs for these fields.
+      </div>
+    ) : (
+      <div className="space-y-3">
+        <div className="flex items-center justify-between text-[11px] text-slate-500">
+          <span>{scatter.filteredRows.toLocaleString()} active rows</span>
+          <span>
+            {scatter.sampled && <span className="text-slate-500">sampled · </span>}
+            {scatter.totalRows.toLocaleString()} total
+          </span>
+        </div>
+        <ScatterChart
+          result={scatter}
+          color={pointColor}
+          brush={brush2D}
+          onBrush={onBrush2D}
+          onClear={onClear2D}
+        />
+      </div>
+    )
+  ) : chart.facetField ? (
+    !facetResults || !facetResults.length ? (
+      <div className="flex h-36 items-center justify-center px-4 text-center text-[11px] text-slate-500">
+        No facet values for this field.
+      </div>
+    ) : (
+      <div className="grid grid-cols-2 gap-2">
+        {(() => {
+          const sharedMax = Math.max(
+            ...facetResults.flatMap((item) => item.result.data.map((datum) => datum.totalValue)),
+            1,
+          );
+          return facetResults.map(({ value, result: facetResult }) => {
+            const facetActiveKeys = new Set(
+              facetResult.data.filter((datum) => isDatumActive(datum, filters) || datum.featureIds.some((id) => selectedFeatureIds.includes(id))).map((datum) => datum.key),
+            );
+            return (
+              <div key={value} className="rounded-md border border-slate-100 bg-white p-1.5">
+                <div className="mb-1 flex items-center justify-between gap-1">
+                  <span className="truncate text-[11px] font-semibold text-slate-600" title={value}>{value}</span>
+                  <span className="shrink-0 text-[11px] tabular-nums text-slate-500">
+                    {facetResult.totalRows.toLocaleString()}
+                  </span>
+                </div>
+                {!facetResult.data.length ? (
+                  <div className="py-4 text-center text-[11px] text-slate-500">no values</div>
+                ) : chart.type === 'histogram' ? (
+                  <Histogram
+                    data={facetResult.data}
+                    brush={brush}
+                    maxScale={sharedMax}
+                    onHover={onHoverDatum}
+                    onLeave={onLeaveDatum}
+                    onBrushRange={onBrushRange}
+                    onClearRange={onClearRange}
+                  />
+                ) : (
+                  <Bars
+                    data={facetResult.data}
+                    activeKeys={facetActiveKeys}
+                    maxScale={sharedMax}
+                    onHover={onHoverDatum}
+                    onLeave={onLeaveDatum}
+                    onClick={onToggleFilter}
+                  />
+                )}
+              </div>
+            );
+          });
+        })()}
+      </div>
+    )
+  ) : !result || !result.data.length ? (
+    <div className="flex h-36 items-center justify-center px-4 text-center text-[11px] text-slate-500">
+      No chartable values for this field.
+    </div>
+  ) : (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between text-[11px] text-slate-500">
+        <span>{result.filteredRows.toLocaleString()} active rows</span>
+        <span>{result.totalRows.toLocaleString()} total</span>
+      </div>
+      {chart.type === 'histogram' ? (
+        <Histogram
+          data={previewData ?? result.data}
+          brush={brush}
+          onHover={onHoverDatum}
+          onLeave={onLeaveDatum}
+          onBrushRange={onBrushRange}
+          onClearRange={onClearRange}
+          onLiveBrushStart={onLiveBrushStart}
+          onLiveBrush={onLiveBrush}
+          onLiveBrushEnd={onLiveBrushEnd}
+        />
+      ) : chart.type === 'violin' ? (
+        <Violins
+          data={result.data}
+          activeKeys={activeKeys}
+          onHover={onHoverDatum}
+          onLeave={onLeaveDatum}
+          onClick={onToggleFilter}
+        />
+      ) : chart.type === 'box' ? (
+        <BoxPlot
+          data={result.data}
+          activeKeys={activeKeys}
+          onHover={onHoverDatum}
+          onLeave={onLeaveDatum}
+          onClick={onToggleFilter}
+        />
+      ) : chart.type === 'donut' || chart.type === 'rose' ? (
+        <RadialChart
+          data={result.data}
+          type={chart.type}
+          activeKeys={activeKeys}
+          onHover={onHoverDatum}
+          onLeave={onLeaveDatum}
+          onClick={onToggleFilter}
+        />
+      ) : (
+        <Bars
+          data={result.data}
+          activeKeys={activeKeys}
+          onHover={onHoverDatum}
+          onLeave={onLeaveDatum}
+          onClick={onToggleFilter}
+        />
+      )}
+    </div>
+  );
+
+  if (interaction) return marks;
+  // `inert` keeps the frozen copy out of the tab order as well as the pointer's way.
+  return <div {...({ inert: '' } as object)} className="pointer-events-none [&_.chart-hint]:hidden">{marks}</div>;
+};
+
+const ChartCard = ({
+  chart,
+  layer,
+  layers,
+  tables,
+  tableDatasets,
+  filters,
+  selectedFeatureIds,
+  onUpdate,
+  onRemove,
+  onDuplicate,
+  onMove,
+  position,
+  compact = false,
+  onToggleFilter,
+  onBrushRange,
+  onClearRange,
+  onBrush2D,
+  onClear2D,
+  onBrushTemporal,
+  onClearTemporal,
+  onHoverDatum,
+  onLeaveDatum,
+  previewCounts,
+  onLiveBrushStart,
+  onLiveBrush,
+  onLiveBrushEnd,
+}: {
+  chart: VisualChartSpec;
+  layer: MapLayer | undefined;
+  layers: MapLayer[];
+  tables: string[];
+  tableDatasets: DatasetDescriptor[];
+  filters: VisualFilter[];
+  selectedFeatureIds: string[];
+  onUpdate: (patch: Partial<Omit<VisualChartSpec, 'id'>>) => void;
+  onRemove: () => void;
+  onDuplicate: () => void;
+  onMove: (offset: -1 | 1) => void;
+  /** Index and count, so the first and last chart cannot move past the ends. */
+  position: { index: number; count: number };
+  /** On the canvas the marks are the point, so settings start folded away. */
+  compact?: boolean;
+  onToggleFilter: (datum: VisualChartDatum) => void;
+  onBrushRange: (min: number, max: number) => void;
+  onClearRange: () => void;
+  onBrush2D: (brush: Brush2D) => void;
+  onClear2D: () => void;
+  onBrushTemporal: (start: string, end: string) => void;
+  onClearTemporal: () => void;
+  onHoverDatum: (datum: VisualChartDatum) => void;
+  /** Estimated bar counts while another chart is being brushed, one per bin. */
+  previewCounts?: number[] | null;
+  onLiveBrushStart?: () => void;
+  onLiveBrush?: (min: number, max: number) => void;
+  onLiveBrushEnd?: () => void;
+  onLeaveDatum: () => void;
+}) => {
+  const cardRef = useRef<HTMLElement | null>(null);
+  const addToast = useStore((state) => state.addToast);
+  const [data, setData] = useState<ChartExportData | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(!compact);
+  const [tableFields, setTableFields] = useState<ChartField[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const datasetSource = chartDatasetSource(chart);
+  const datasetId = chartDatasetId(chart);
+  const datasetDescriptor = useStore((state) => state.datasetRegistry[datasetId]);
+  const registerDataset = useStore((state) => state.registerDataset);
+  const tableName = datasetSource.kind === 'table'
+    ? datasetSource.tableName
+    : datasetSource.kind === 'workflow-node'
+      ? datasetDescriptor?.relationName
+      : undefined;
+  const rowIdColumn = datasetSource.kind === 'layer' ? undefined : datasetDescriptor?.rowIdColumn;
+  const isTableChart = datasetSource.kind !== 'layer';
+  const availableFields = isTableChart ? tableFields : fieldsForLayer(layer);
+  const typedNumericFields = availableFields.filter((field) => isNumericType(field.type));
+  const numericFields = typedNumericFields.length ? typedNumericFields : availableFields;
+  const temporalFields = availableFields.filter((field) => isTemporalType(field.type));
+  const filtersKey = JSON.stringify(filters);
+
+  useEffect(() => {
+    if (!tableName) {
+      setTableFields([]);
+      return;
+    }
+    let cancelled = false;
+    describeChartTable(tableName)
+      .then((fields) => { if (!cancelled) setTableFields(filterChartFields(fields)); })
+      .catch(() => { if (!cancelled) setTableFields([]); });
+    return () => { cancelled = true; };
+  }, [tableName]);
+
+  // A freshly table-bound chart has no fields yet — pick sensible defaults
+  // once the table schema arrives (or when the schema no longer has the field).
+  useEffect(() => {
+    if (!isTableChart || !tableFields.length) return;
+    if (chart.dimensionField && tableFields.some((field) => field.name === chart.dimensionField)) return;
+    const numerics = tableFields.filter((field) => isNumericType(field.type));
+    onUpdate({
+      dimensionField: tableFields[0].name,
+      measureField: (numerics[0] || tableFields[0]).name,
+    });
+  }, [isTableChart, tableFields, chart.dimensionField]);
+
+  const exportData = data;
+  const result = data?.kind === 'aggregate' ? data.result : null;
 
   const exportChartData = () => {
     if (!exportData) return;
@@ -1174,81 +1383,22 @@ const ChartCard = ({
   };
 
   useEffect(() => {
+    if ((isTableChart && !tableName) || (!isTableChart && !layer) || !chart.dimensionField) {
+      setData(null);
+      return;
+    }
     let cancelled = false;
-    const run = async () => {
-      if ((isTableChart && !tableName) || (!isTableChart && !layer) || !chart.dimensionField) {
-        setResult(null);
-        setScatter(null);
-        setTemporal(null);
-        setFacetResults(null);
-        return;
-      }
-      try {
-        setIsLoading(true);
-        setError(null);
-        if (chart.type === 'scatter') {
-          const nextScatter = isTableChart
-            ? await queryTableScatter({ tableName: tableName!, filters, chart })
-            : await queryLayerScatter({ layer: layer!, filters, chart });
-          if (!cancelled) {
-            setScatter(nextScatter);
-            setResult(null);
-            setTemporal(null);
-            setFacetResults(null);
-          }
-        } else if (isTemporalChart(chart.type)) {
-          const nextTemporal = isTableChart
-            ? await queryTableTemporalChart({ tableName: tableName!, filters, chart })
-            : await queryLayerTemporalChart({ layer: layer!, filters, chart });
-          if (!cancelled) {
-            setTemporal(nextTemporal);
-            setResult(null);
-            setScatter(null);
-            setFacetResults(null);
-          }
-        } else if (chart.facetField) {
-          const values = await queryChartFacetValues({
-            layer: isTableChart ? undefined : layer!,
-            tableName,
-            facetField: chart.facetField,
-          });
-          const results = await Promise.all(values.map((value) => {
-            const facet = { field: chart.facetField!, value };
-            return isTableChart
-              ? queryTableChart({ tableName: tableName!, rowIdColumn, filters, chart, facet })
-              : queryLayerChart({ layer: layer!, filters, chart, facet });
-          }));
-          if (!cancelled) {
-            setFacetResults(values.map((value, index) => ({ value, result: results[index] })));
-            setResult(null);
-            setScatter(null);
-            setTemporal(null);
-          }
-        } else {
-          const nextResult = isTableChart
-            ? await queryTableChart({ tableName: tableName!, rowIdColumn, filters, chart })
-            : await queryLayerChart({ layer: layer!, filters, chart });
-          if (!cancelled) {
-            setResult(nextResult);
-            setScatter(null);
-            setTemporal(null);
-            setFacetResults(null);
-          }
-        }
-      } catch (err: any) {
+    setIsLoading(true);
+    setError(null);
+    queryChartData({ chart, layer, tableName, rowIdColumn, filters })
+      .then((next) => { if (!cancelled) setData(next); })
+      .catch((err: any) => {
         if (!cancelled) {
           setError(err?.message || 'Chart query failed');
-          setResult(null);
-          setScatter(null);
-          setTemporal(null);
-          setFacetResults(null);
+          setData(null);
         }
-      } finally {
-        if (!cancelled) setIsLoading(false);
-      }
-    };
-
-    run();
+      })
+      .finally(() => { if (!cancelled) setIsLoading(false); });
     return () => { cancelled = true; };
   }, [layer?.id, layer?.styleVersion, tableName, rowIdColumn, filtersKey, chart.type, chart.dimensionField, chart.measureField, chart.aggregation, chart.paletteId, chart.maxCategories, chart.facetField, chart.timeGrain, chart.seriesField]);
 
@@ -1268,6 +1418,18 @@ const ChartCard = ({
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
+          {compact && (
+            <button
+              type="button"
+              onClick={() => setSettingsOpen(!settingsOpen)}
+              aria-expanded={settingsOpen}
+              className={cn('pressable rounded-md p-1.5 hover:bg-slate-100 hover:text-slate-700', settingsOpen ? 'bg-slate-100 text-slate-700' : 'text-slate-500')}
+              title={settingsOpen ? 'Hide chart settings' : 'Show chart settings'}
+              aria-label={`${settingsOpen ? 'Hide' : 'Show'} settings for ${chart.title}`}
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5" />
+            </button>
+          )}
           <button
             type="button"
             onClick={exportChartData}
@@ -1298,7 +1460,46 @@ const ChartCard = ({
           >
             <ImageDown className="h-3.5 w-3.5" />
           </button>
+          <button
+            type="button"
+            onClick={() => { if (exportData) pinChartEvidence(chart, filters, exportData); }}
+            disabled={!exportData}
+            className="pressable rounded-md p-1.5 text-slate-500 hover:bg-sky-50 hover:text-sky-700 disabled:cursor-not-allowed disabled:opacity-30"
+            title="Pin the plotted values, with their filters, to the report"
+            aria-label={`Pin ${chart.title} to the report`}
+          >
+            <Pin className="h-3.5 w-3.5" />
+          </button>
           <span className="mx-1 h-4 w-px bg-slate-200" aria-hidden="true" />
+          <button
+            type="button"
+            onClick={() => onMove(-1)}
+            disabled={position.index === 0}
+            className="pressable rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-30"
+            title="Move earlier"
+            aria-label={`Move ${chart.title} earlier`}
+          >
+            <ArrowUp className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => onMove(1)}
+            disabled={position.index === position.count - 1}
+            className="pressable rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-30"
+            title="Move later"
+            aria-label={`Move ${chart.title} later`}
+          >
+            <ArrowDown className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={onDuplicate}
+            className="pressable rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+            title="Duplicate, to try a variation beside the original"
+            aria-label={`Duplicate ${chart.title}`}
+          >
+            <Copy className="h-3.5 w-3.5" />
+          </button>
           <button
             type="button"
             onClick={onRemove}
@@ -1311,7 +1512,7 @@ const ChartCard = ({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 border-b p-3">
+      {settingsOpen && <div className="grid grid-cols-2 gap-2 border-b p-3">
         <label className="space-y-1">
           <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Source</span>
           <select
@@ -1516,10 +1717,10 @@ const ChartCard = ({
             </div>
           </details>
         )}
-      </div>
+      </div>}
 
       <div className="p-3">
-        {isLoading && !result && !scatter && !temporal && !facetResults ? (
+        {isLoading && !data ? (
           <div className="flex h-36 items-center justify-center text-slate-500">
             <Loader2 className="h-4 w-4 animate-spin" />
           </div>
@@ -1527,184 +1728,143 @@ const ChartCard = ({
           <div className="flex h-36 items-center justify-center px-4 text-center text-[11px] text-rose-500">
             {error}
           </div>
-        ) : isTemporalChart(chart.type) ? (
-          !temporal || !temporal.series.some((series) => series.points.some((point) => point.value !== null)) ? (
-            <div className="flex h-36 items-center justify-center px-4 text-center text-[11px] text-slate-500">
-              No valid temporal values for this field and aggregation.
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
-                <span>{chart.aggregation} · {temporal.grain} grain</span>
-                <span>{temporal.filteredRows.toLocaleString()} active / {temporal.totalRows.toLocaleString()} total</span>
-              </div>
-              <TemporalChart
-                result={temporal}
-                type={chart.type}
-                showPoints={chart.showPoints ?? true}
-                connectMissing={Boolean(chart.connectMissing)}
-                brush={temporalBrush}
-                onBrush={onBrushTemporal}
-                onClear={onClearTemporal}
-              />
-            </div>
-          )
-        ) : chart.type === 'scatter' ? (
-          !scatter || !scatter.points.length ? (
-            <div className="flex h-36 items-center justify-center px-4 text-center text-[11px] text-slate-500">
-              No numeric value pairs for these fields.
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between text-[11px] text-slate-500">
-                <span>{scatter.filteredRows.toLocaleString()} active rows</span>
-                <span>
-                  {scatter.sampled && <span className="text-slate-500">sampled · </span>}
-                  {scatter.totalRows.toLocaleString()} total
-                </span>
-              </div>
-              <ScatterChart
-                result={scatter}
-                color={pointColor}
-                brush={brush2D}
-                onBrush={onBrush2D}
-                onClear={onClear2D}
-              />
-            </div>
-          )
-        ) : chart.facetField ? (
-          !facetResults || !facetResults.length ? (
-            <div className="flex h-36 items-center justify-center px-4 text-center text-[11px] text-slate-500">
-              No facet values for this field.
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-2">
-              {(() => {
-                const sharedMax = Math.max(
-                  ...facetResults.flatMap((item) => item.result.data.map((datum) => datum.totalValue)),
-                  1,
-                );
-                return facetResults.map(({ value, result: facetResult }) => {
-                  const facetActiveKeys = new Set(
-                    facetResult.data.filter((datum) => isDatumActive(datum, filters) || datum.featureIds.some((id) => selectedFeatureIds.includes(id))).map((datum) => datum.key),
-                  );
-                  return (
-                    <div key={value} className="rounded-md border border-slate-100 bg-white p-1.5">
-                      <div className="mb-1 flex items-center justify-between gap-1">
-                        <span className="truncate text-[11px] font-semibold text-slate-600" title={value}>{value}</span>
-                        <span className="shrink-0 text-[11px] tabular-nums text-slate-500">
-                          {facetResult.totalRows.toLocaleString()}
-                        </span>
-                      </div>
-                      {!facetResult.data.length ? (
-                        <div className="py-4 text-center text-[11px] text-slate-500">no values</div>
-                      ) : chart.type === 'histogram' ? (
-                        <Histogram
-                          data={facetResult.data}
-                          brush={brush}
-                          maxScale={sharedMax}
-                          onHover={onHoverDatum}
-                          onLeave={onLeaveDatum}
-                          onBrushRange={onBrushRange}
-                          onClearRange={onClearRange}
-                        />
-                      ) : (
-                        <Bars
-                          data={facetResult.data}
-                          activeKeys={facetActiveKeys}
-                          maxScale={sharedMax}
-                          onHover={onHoverDatum}
-                          onLeave={onLeaveDatum}
-                          onClick={onToggleFilter}
-                        />
-                      )}
-                    </div>
-                  );
-                });
-              })()}
-            </div>
-          )
-        ) : !result || !result.data.length ? (
-          <div className="flex h-36 items-center justify-center px-4 text-center text-[11px] text-slate-500">
-            No chartable values for this field.
-          </div>
         ) : (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between text-[11px] text-slate-500">
-              <span>{result.filteredRows.toLocaleString()} active rows</span>
-              <span>{result.totalRows.toLocaleString()} total</span>
-            </div>
-            {chart.type === 'histogram' ? (
-              <Histogram
-                data={previewData ?? result.data}
-                brush={brush}
-                onHover={onHoverDatum}
-                onLeave={onLeaveDatum}
-                onBrushRange={onBrushRange}
-                onClearRange={onClearRange}
-                onLiveBrushStart={onLiveBrushStart}
-                onLiveBrush={onLiveBrush}
-                onLiveBrushEnd={onLiveBrushEnd}
-              />
-            ) : chart.type === 'violin' ? (
-              <Violins
-                data={result.data}
-                activeKeys={activeKeys}
-                onHover={onHoverDatum}
-                onLeave={onLeaveDatum}
-                onClick={onToggleFilter}
-              />
-            ) : chart.type === 'box' ? (
-              <BoxPlot
-                data={result.data}
-                activeKeys={activeKeys}
-                onHover={onHoverDatum}
-                onLeave={onLeaveDatum}
-                onClick={onToggleFilter}
-              />
-            ) : chart.type === 'donut' || chart.type === 'rose' ? (
-              <RadialChart
-                data={result.data}
-                type={chart.type}
-                activeKeys={activeKeys}
-                onHover={onHoverDatum}
-                onLeave={onLeaveDatum}
-                onClick={onToggleFilter}
-              />
-            ) : (
-              <Bars
-                data={result.data}
-                activeKeys={activeKeys}
-                onHover={onHoverDatum}
-                onLeave={onLeaveDatum}
-                onClick={onToggleFilter}
-              />
-            )}
-          </div>
+          <ChartMarks
+            chart={chart}
+            data={exportData}
+            filters={filters}
+            selectedFeatureIds={selectedFeatureIds}
+            interaction={{ onToggleFilter, onBrushRange, onClearRange, onBrush2D, onClear2D, onBrushTemporal, onClearTemporal, onHoverDatum, onLeaveDatum, previewCounts, onLiveBrushStart, onLiveBrush, onLiveBrushEnd }}
+          />
         )}
       </div>
     </section>
   );
 };
 
-export const ChartPanel = () => {
+/**
+ * Picks the dataset and the field a new chart starts from. The chart type and
+ * defaults follow the field's meaning, through the same command the table and
+ * the dataset overview use, so a chart looks the same however it was made.
+ */
+const AddChartMenu = ({ tables, onClose }: { tables: string[]; onClose: () => void }) => {
+  const mapLayers = useStore((state) => state.mapLayers);
+  const registry = useStore((state) => state.datasetRegistry);
+  const selectedLayerId = useStore((state) => state.selectedLayerId);
+  const addToast = useStore((state) => state.addToast);
+  const execute = useAnalyticsCommands();
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  const datasets = useMemo(() => {
+    const layerIds = new Set(mapLayers.map((layer) => layer.id));
+    return [
+      ...mapLayers.map(metadataForLayer),
+      ...Object.values(registry).filter((dataset) => !layerIds.has(dataset.id) && dataset.relationName).map(metadataForDataset),
+    ];
+  }, [mapLayers, registry]);
+  // DuckDB relations nobody has registered yet (SQL results, say) are offered
+  // too; choosing one registers it so its rows get a stable identity.
+  const unregistered = useMemo(() => {
+    const known = new Set(Object.values(registry).flatMap((dataset) => [dataset.relationName, dataset.originTableName]));
+    return tables.filter((name) => !known.has(name));
+  }, [registry, tables]);
+
+  const [datasetId, setDatasetId] = useState(() => datasets.find((item) => item.id === selectedLayerId)?.id || datasets[0]?.id || '');
+  const dataset = datasets.find((item) => item.id === datasetId);
+  const fields = dataset?.fields || [];
+  const [fieldName, setFieldName] = useState('');
+  const field = fields.find((item) => item.name === fieldName) || (dataset ? preferredExplorationField(dataset) : undefined);
+
+  useEffect(() => {
+    const close = (event: PointerEvent) => { if (!rootRef.current?.contains(event.target as Node)) onClose(); };
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
+    document.addEventListener('pointerdown', close);
+    document.addEventListener('keydown', escape);
+    return () => {
+      document.removeEventListener('pointerdown', close);
+      document.removeEventListener('keydown', escape);
+    };
+  }, [onClose]);
+
+  const chooseDataset = async (value: string) => {
+    setFieldName('');
+    if (!value.startsWith('table:new:')) {
+      setDatasetId(value);
+      return;
+    }
+    try {
+      const registered = await ensureStableTableDataset({ tableName: value.slice('table:new:'.length) });
+      useStore.getState().registerDataset(registered);
+      setDatasetId(registered.id);
+    } catch (error) {
+      addToast({ type: 'error', message: `Could not link table: ${error instanceof Error ? error.message : 'Unknown error'}` });
+    }
+  };
+
+  const create = async () => {
+    if (!dataset || !field) return;
+    const result = await execute({ type: 'create-chart', datasetId: dataset.id, field: field.name });
+    if (!result.ok) addToast({ type: 'warning', message: result.message });
+    else onClose();
+  };
+
+  const hint = !field
+    ? 'Choose a field to chart.'
+    : field.semanticType === 'numeric'
+      ? 'Starts as a histogram you can brush.'
+      : field.semanticType === 'temporal'
+        ? 'Starts as a line over time.'
+        : 'Starts as a bar per category.';
+
+  return (
+    <div ref={rootRef} role="dialog" aria-label="Add chart" className="absolute right-0 top-10 z-40 w-72 space-y-2 rounded-lg border border-slate-200 bg-white p-3 text-left shadow-xl">
+      <label className="block space-y-1">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Dataset</span>
+        <select value={datasetId} onChange={(event) => { void chooseDataset(event.target.value); }} className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] outline-none focus:border-slate-400">
+          {!datasets.length && <option value="">Pick a table below</option>}
+          {datasets.map((item) => <option key={item.id} value={item.id}>{item.name}{item.kind === 'layer' ? '' : ' (table)'}</option>)}
+          {unregistered.length > 0 && (
+            <optgroup label="Other DuckDB tables">
+              {unregistered.map((name) => <option key={name} value={`table:new:${name}`}>{name}</option>)}
+            </optgroup>
+          )}
+        </select>
+      </label>
+      <label className="block space-y-1">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Field</span>
+        <select value={field?.name || ''} onChange={(event) => setFieldName(event.target.value)} disabled={!fields.length} className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] outline-none focus:border-slate-400 disabled:bg-slate-100">
+          {!fields.length && <option value="">No fields</option>}
+          {fields.map((item) => <option key={item.name} value={item.name}>{item.name} · {item.semanticType}</option>)}
+        </select>
+      </label>
+      <p className="text-[11px] leading-4 text-slate-500">{hint} Type and measure can be changed on the chart.</p>
+      <button type="button" onClick={() => { void create(); }} disabled={!field} className="pressable flex h-8 w-full items-center justify-center gap-1.5 rounded-md bg-slate-900 text-[11px] font-semibold uppercase tracking-wider text-white hover:bg-slate-800 disabled:bg-slate-300">
+        <Plus className="h-3.5 w-3.5" /> Create chart
+      </button>
+    </div>
+  );
+};
+
+/** `canvas` lays the same charts out as a grid across the main area rather than a column. */
+export const ChartPanel = ({ layout = 'panel' }: { layout?: 'panel' | 'canvas' }) => {
   const {
     mapLayers,
     datasetRegistry,
-    selectedLayerId,
     visualAnalytics,
-    addChart,
     updateChart,
     removeChart,
+    duplicateChart,
+    reorderChart,
+    setChartCanvas,
     setLayerFilters,
     setHighlightedFeatures,
-    addToast,
   } = useStore();
 
-  const selectedLayer = mapLayers.find((layer) => layer.id === selectedLayerId) || mapLayers[0];
   const charts = visualAnalytics.charts;
   const tableDatasets = Object.values(datasetRegistry).filter((dataset) => !dataset.spatial && Boolean(dataset.relationName));
-  const hasChartableLayer = mapLayers.some((layer) => fieldsForLayer(layer).length > 0);
+  const isCanvas = layout === 'canvas';
+  const [isAddOpen, setAddOpen] = useState(false);
+  const closeAddMenu = useCallback(() => setAddOpen(false), []);
   const [tables, setTables] = useState<string[]>([]);
 
   const [tablesRefreshTick, setTablesRefreshTick] = useState(0);
@@ -1719,54 +1879,6 @@ export const ChartPanel = () => {
       .catch(() => { if (!cancelled) setTables([]); });
     return () => { cancelled = true; };
   }, [mapLayers, charts.length, tablesRefreshTick]);
-
-  const handleAddChart = async () => {
-    if (selectedLayer) {
-      const nextChart = buildDefaultChartForDataset(metadataForLayer(selectedLayer));
-      if (nextChart) {
-        addChart({ ...nextChart, source: { kind: 'layer', layerId: nextChart.layerId } });
-        return;
-      }
-    }
-    if (tableDatasets.length) {
-      const dataset = tableDatasets[0];
-      addChart({
-        id: `chart-${Date.now()}`,
-        title: `${dataset.name} distribution`,
-        layerId: '',
-        tableName: dataset.relationName,
-        source: dataset.source,
-        type: 'bar',
-        dimensionField: '',
-        aggregation: 'count',
-        paletteId: 'categorical',
-        maxCategories: 8,
-      });
-      return;
-    }
-    if (tables.length) {
-      try {
-        const dataset = await ensureStableTableDataset({ tableName: tables[0] });
-        useStore.getState().registerDataset(dataset);
-        addChart({
-          id: `chart-${Date.now()}`,
-          title: `${tables[0]} distribution`,
-          layerId: '',
-          tableName: dataset.relationName || tables[0],
-          source: dataset.source,
-          type: 'bar',
-          dimensionField: '',
-          aggregation: 'count',
-          paletteId: 'categorical',
-          maxCategories: 8,
-        });
-      } catch (sourceError: any) {
-        addToast({ type: 'error', message: `Could not link table: ${sourceError?.message || 'Unknown error'}` });
-      }
-      return;
-    }
-    addToast({ type: 'warning', message: 'No chartable layers or tables available' });
-  };
 
   const datasetFilters = (datasetId: string) => visualAnalytics.datasets[datasetId]?.filters || [];
 
@@ -1841,12 +1953,8 @@ export const ChartPanel = () => {
     if (cubes.current?.key === key) return;
 
     try {
-      const source = chartDatasetSource(active);
-      const tableName =
-        active.tableName ||
-        (source.kind === 'layer'
-          ? await analyticsTableForLayer(mapLayers.find((l) => l.id === source.layerId) as any)
-          : undefined);
+      const target = chartQueryTarget(active, mapLayers, datasetRegistry);
+      const tableName = target.tableName || (target.layer ? await analyticsTableForLayer(target.layer) : undefined);
       if (!tableName) return;
       // Sampling only where it buys something. Below a couple of hundred
       // thousand rows the exact cube is already quick, and a 5% sample of a
@@ -1963,13 +2071,27 @@ export const ChartPanel = () => {
             </button>
             <button
               type="button"
-              onClick={() => { void handleAddChart(); }}
-              disabled={!hasChartableLayer && !tables.length && !tableDatasets.length}
-              className="pressable flex h-8 items-center gap-1.5 rounded-md bg-slate-900 px-3 text-[11px] font-semibold uppercase tracking-wider text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+              onClick={() => setChartCanvas(!isCanvas)}
+              className="pressable flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-700"
+              title={isCanvas ? 'Dock charts back into the side panel' : 'Lay charts out across the main canvas'}
+              aria-label={isCanvas ? 'Dock charts into the panel' : 'Open charts on the canvas'}
             >
-              <Plus className="h-3.5 w-3.5" />
-              Add
+              {isCanvas ? <PanelLeft className="h-3.5 w-3.5" /> : <LayoutGrid className="h-3.5 w-3.5" />}
             </button>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setAddOpen(!isAddOpen)}
+                disabled={!mapLayers.length && !tables.length && !tableDatasets.length}
+                aria-expanded={isAddOpen}
+                aria-haspopup="dialog"
+                className="pressable flex h-8 items-center gap-1.5 rounded-md bg-slate-900 px-3 text-[11px] font-semibold uppercase tracking-wider text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add
+              </button>
+              {isAddOpen && <AddChartMenu tables={tables} onClose={closeAddMenu} />}
+            </div>
           </div>
         </div>
       </div>
@@ -1977,18 +2099,18 @@ export const ChartPanel = () => {
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
         {!mapLayers.length && !tables.length && !tableDatasets.length ? (
           <div className="flex h-full items-center justify-center px-6 text-center text-[11px] text-slate-500">
-            Add or run a layer before creating charts.
+            Load a file or run a workflow before creating charts.
           </div>
         ) : !charts.length ? (
           <div className="flex h-full flex-col items-center justify-center px-6 text-center text-[11px] text-slate-500">
             <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white">
               <Donut className="h-5 w-5" />
             </div>
-            Create linked charts from the selected layer, then use chart marks as visual filters.
+            Add a chart for any field, then click or drag its marks to filter every linked view.
           </div>
         ) : (
-          <div className="space-y-3">
-            {charts.map((chart) => {
+          <div className={isCanvas ? 'grid grid-cols-[repeat(auto-fill,minmax(min(100%,22rem),1fr))] items-start gap-3' : 'space-y-3'}>
+            {charts.map((chart, index) => {
               const source = chartDatasetSource(chart);
               const datasetId = chartDatasetId(chart);
               const layer = source.kind === 'layer' ? mapLayers.find((item) => item.id === source.layerId) : undefined;
@@ -2006,6 +2128,10 @@ export const ChartPanel = () => {
                   selectedFeatureIds={selectedFeatureIds}
                   onUpdate={(patch) => updateChart(chart.id, patch)}
                   onRemove={() => removeChart(chart.id)}
+                  onDuplicate={() => duplicateChart(chart.id)}
+                  onMove={(offset) => reorderChart(chart.id, index + offset)}
+                  position={{ index, count: charts.length }}
+                  compact={isCanvas}
                   onToggleFilter={(datum) => toggleFilter(chart, datum)}
                   onBrushRange={(min, max) => setRangeFilter(chart, min, max)}
                   onClearRange={() => clearRangeFilter(chart)}

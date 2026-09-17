@@ -312,7 +312,9 @@ type UIState = {
   isCommandPaletteOpen: boolean;
   /** The node whose note is open for editing, if any. */
   noteEditorNodeId: string | null;
-  datasetOverviewLayerId: string | null;
+  datasetOverviewId: string | null;
+  /** Charts fill the main canvas in a grid instead of stacking in the left panel. */
+  chartCanvas: boolean;
   layerStyleRequest?: { layerId: string; field?: string; requestedAt: number };
   /**
    * The geometry node currently being drawn into, and the shape in progress.
@@ -465,7 +467,8 @@ export interface AppState {
   setAboutOpen: (open: boolean) => void;
   setCommandPaletteOpen: (open: boolean) => void;
   dismissEmptyState: () => void;
-  setDatasetOverviewLayerId: (layerId: string | null) => void;
+  setDatasetOverviewId: (datasetId: string | null) => void;
+  setChartCanvas: (open: boolean) => void;
   setRecoverySave: (status: UIState["recoverySave"]) => void;
   setMapCamera: (camera: UIState["mapCamera"]) => void;
   setWorkspaceMode: (mode: UIState["workspaceMode"]) => void;
@@ -552,6 +555,8 @@ export interface AppState {
     patch: Partial<Omit<VisualChartSpec, "id">>,
   ) => void;
   removeChart: (chartId: string) => void;
+  duplicateChart: (chartId: string, newId?: string) => void;
+  reorderChart: (chartId: string, targetIndex: number) => void;
   addKpi: (kpi: KpiSpec) => void;
   updateKpi: (
     kpiId: string,
@@ -795,7 +800,8 @@ const initialUIState: UIState = {
   isAboutOpen: false,
   isCommandPaletteOpen: false,
   noteEditorNodeId: null,
-  datasetOverviewLayerId: null,
+  datasetOverviewId: null,
+  chartCanvas: false,
   layerStyleRequest: undefined,
   recoverySave: { status: "idle" },
   mapCamera: { longitude: 0, latitude: 20, zoom: 1.5, bearing: 0, pitch: 0 },
@@ -1391,10 +1397,12 @@ export const useStore = create<AppState>()(
         set((state) => ({
           ui: { ...state.ui, dismissedEmptyState: true },
         })),
-      setDatasetOverviewLayerId: (layerId) =>
+      setChartCanvas: (open) =>
+        set((state) => ({ ui: { ...state.ui, chartCanvas: open } })),
+      setDatasetOverviewId: (datasetId) =>
         set((state) => ({
-          selectedLayerId: layerId || state.selectedLayerId,
-          ui: { ...state.ui, datasetOverviewLayerId: layerId },
+          selectedLayerId: datasetId && state.mapLayers.some((layer) => layer.id === datasetId) ? datasetId : state.selectedLayerId,
+          ui: { ...state.ui, datasetOverviewId: datasetId },
         })),
       setRecoverySave: (recoverySave) =>
         set((state) => ({
@@ -1610,7 +1618,8 @@ export const useStore = create<AppState>()(
           loadingOperations: {},
           ui: {
             ...get().ui,
-            datasetOverviewLayerId: null,
+            datasetOverviewId: null,
+            chartCanvas: false,
             isCommandPaletteOpen: false,
             workspaceMode: "explore",
             isPresentationMode: false,
@@ -2885,6 +2894,34 @@ export const useStore = create<AppState>()(
             analysisHistory: recordCurrentAnalysis(state, {
               label: "Remove chart",
             }),
+          };
+        }),
+
+      duplicateChart: (chartId, newId = `chart-${Date.now()}`) =>
+        set((state) => {
+          const index = state.visualAnalytics.charts.findIndex((chart) => chart.id === chartId);
+          if (index < 0) return state;
+          const original = state.visualAnalytics.charts[index];
+          const charts = [...state.visualAnalytics.charts];
+          // Next to the original, where a variation is compared against it.
+          charts.splice(index + 1, 0, { ...structuredClone(original), id: newId, title: `${original.title} (copy)` });
+          return {
+            visualAnalytics: { ...state.visualAnalytics, charts },
+            analysisHistory: recordCurrentAnalysis(state, { label: "Duplicate chart" }),
+          };
+        }),
+
+      reorderChart: (chartId, targetIndex) =>
+        set((state) => {
+          const sourceIndex = state.visualAnalytics.charts.findIndex((chart) => chart.id === chartId);
+          if (sourceIndex < 0) return state;
+          const charts = [...state.visualAnalytics.charts];
+          const [chart] = charts.splice(sourceIndex, 1);
+          charts.splice(Math.max(0, Math.min(targetIndex, charts.length)), 0, chart);
+          if (sameJson(charts, state.visualAnalytics.charts)) return state;
+          return {
+            visualAnalytics: { ...state.visualAnalytics, charts },
+            analysisHistory: recordCurrentAnalysis(state, { label: "Reorder charts" }),
           };
         }),
 

@@ -8,6 +8,35 @@ export type ChartExportData =
   | { kind: 'temporal'; result: VisualTemporalResult }
   | { kind: 'scatter'; result: VisualScatterResult };
 
+/** What a chart pinned to the report freezes: its spec and plotted values, and the filters behind them. */
+export type ChartEvidenceCapture = {
+  chart: VisualChartSpec;
+  data: ChartExportData;
+  filters: VisualFilter[];
+};
+
+const EVIDENCE_KINDS = new Set(['aggregate', 'facets', 'temporal', 'scatter']);
+
+/** Guards frozen values that may have come from an old project or a shared story. */
+export const isChartEvidenceCapture = (value: unknown): value is ChartEvidenceCapture => {
+  if (!value || typeof value !== 'object') return false;
+  const { chart, data, filters } = value as Partial<ChartEvidenceCapture>;
+  return Boolean(chart && typeof chart.type === 'string' && data && EVIDENCE_KINDS.has(data.kind) && Array.isArray(filters));
+};
+
+/**
+ * A scatter can carry thousands of points; a report card needs its shape, not
+ * every point, and a story that embeds it should stay small enough to share.
+ */
+export const EVIDENCE_SCATTER_POINTS = 2000;
+
+export const compactChartEvidence = (data: ChartExportData): ChartExportData => {
+  if (data.kind !== 'scatter' || data.result.points.length <= EVIDENCE_SCATTER_POINTS) return data;
+  const step = data.result.points.length / EVIDENCE_SCATTER_POINTS;
+  const points = Array.from({ length: EVIDENCE_SCATTER_POINTS }, (_, index) => data.result.points[Math.floor(index * step)]);
+  return { kind: 'scatter', result: { ...data.result, points, sampled: true } };
+};
+
 type ChartExportMetadata = {
   title: string;
   aggregation: string;

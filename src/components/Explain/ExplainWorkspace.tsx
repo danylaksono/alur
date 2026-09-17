@@ -2,17 +2,22 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { DndContext, DragOverlay, KeyboardSensor, PointerSensor, closestCenter, useDroppable, useSensor, useSensors, type DragEndEvent, type DragStartEvent } from '@dnd-kit/core';
 import { SortableContext, arrayMove, rectSortingStrategy, sortableKeyboardCoordinates, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { AlertCircle, ArrowDown, ArrowUp, BarChart3, Database, GitCompareArrows, GripVertical, MonitorPlay, NotebookPen, PanelLeft, Plus, RefreshCw, Share2, SlidersHorizontal, Trash2 } from 'lucide-react';
+import { AlertCircle, ArrowDown, ArrowUp, Database, GitCompareArrows, GripVertical, MonitorPlay, NotebookPen, PanelLeft, Plus, RefreshCw, Share2, SlidersHorizontal, Trash2 } from 'lucide-react';
 import { duckdbService } from '../../services/duckdb';
 import { useStore } from '../../store/useStore';
 import type { ComparisonResult, ExplainCard, ExplainCardKind, ExplainDocument } from '../../types/visualAnalytics';
 import { quoteIdentifier } from '../../utils/visualFilterSql';
 import { cn } from '../../utils/cn';
 import { queryComparison } from '../../services/comparisonService';
+import { queryChartData, queryLayerKpi, queryTableKpi } from '../../services/visualAnalyticsService';
+import { compactChartEvidence, isChartEvidenceCapture } from '../../services/chartExportService';
+import { kpiEvidenceCaption } from '../../services/explainCapture';
+import { chartQueryTarget } from '../../utils/datasetSource';
 import { ComparisonMapEvidence, ComparisonRecordsEvidence, ComparisonTimeEvidence } from '../Compare/ComparisonEvidenceViews';
 import { ExplainOutline } from './ExplainOutline';
 import { ExplainInspector } from './ExplainInspector';
 import { MapEvidence } from './MapEvidence';
+import { ChartEvidence } from './ChartEvidence';
 import { VariantLineageCard } from './VariantLineageCard';
 import { SessionAccount } from './SessionAccount';
 import { eventsForSession } from '../../utils/provenance';
@@ -48,7 +53,6 @@ const ComparisonEvidence = ({ result, card, presenting }: { result: ComparisonRe
 const CardContent = ({ card, presenting = false }: { card: ExplainCard; presenting?: boolean }) => {
   const update = useStore((state) => state.updateExplainCard);
   const dataset = useStore((state) => card.datasetId ? state.datasetRegistry[card.datasetId] : undefined);
-  const chart = useStore((state) => state.visualAnalytics.charts.find((item) => item.id === card.referenceId));
   const kpi = useStore((state) => state.visualAnalytics.kpis.find((item) => item.id === card.referenceId));
   if (card.kind === 'comparison') return card.frozenValues ? <ComparisonEvidence result={card.frozenValues as ComparisonResult} card={card} presenting={presenting} /> : <p className="text-xs text-slate-500">Comparison evidence has no captured values.</p>;
   if (card.kind === 'table') {
@@ -60,8 +64,8 @@ const CardContent = ({ card, presenting = false }: { card: ExplainCard; presenti
   if (card.kind === 'lineage') return <VariantLineageCard presenting={presenting} />;
   if (card.kind === 'account') return <SessionAccount presenting={presenting} />;
   if (card.kind === 'map') return <MapEvidence card={card} />;
-  if (card.kind === 'chart') return <div><BarChart3 className="h-5 w-5 text-blue-600" /><h3 className="mt-3 text-sm font-bold text-slate-800">{card.title || chart?.title || 'Chart'}</h3><p className="mt-2 text-xs text-slate-500">{chart ? `${chart.type} · ${chart.dimensionField} · ${chart.aggregation}` : 'The source chart is no longer available.'}</p>{card.frozenValues ? <pre className="mt-3 max-h-36 overflow-auto text-[11px] text-slate-500">{JSON.stringify(card.frozenValues, null, 2)}</pre> : null}</div>;
-  if (card.kind === 'kpi') return <div><p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{card.title || kpi?.title || 'Metric'}</p><p className="mt-6 text-4xl font-black tabular-nums text-slate-900">{typeof card.frozenValues === 'number' ? card.frozenValues.toLocaleString() : '—'}</p><p className="mt-2 text-[11px] text-slate-500">Baseline, delta, denominator, and status are preserved when captured.</p></div>;
+  if (card.kind === 'chart') return <ChartEvidence card={card} />;
+  if (card.kind === 'kpi') return <div><p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{card.title || kpi?.title || 'Metric'}</p><p className="mt-6 text-4xl font-black tabular-nums text-slate-900">{typeof card.frozenValues === 'number' ? card.frozenValues.toLocaleString() : '—'}</p></div>;
   return <div className="flex h-full flex-col"><NotebookPen className="h-5 w-5 text-amber-500" /><input value={card.title || ''} onChange={(event) => update(card.id, { title: event.target.value })} placeholder="Heading" className="mt-3 text-sm font-extrabold text-slate-800 outline-none" /><textarea value={card.note || ''} onChange={(event) => update(card.id, { note: event.target.value })} placeholder="Write an interpretation, caveat, or next step…" className="mt-3 min-h-20 flex-1 resize-none text-xs leading-5 text-slate-600 outline-none" /></div>;
 };
 
@@ -82,9 +86,25 @@ const SortableCard = ({ card, presenting, selected, onSelect }: { card: ExplainC
         frozenValues = result.toArray().map((row) => Object.fromEntries(Object.entries(row as Record<string, unknown>).map(([key, value]) => [key, typeof value === 'bigint' ? Number(value) : value])));
       } else if (card.kind === 'comparison' && card.provenance?.comparisonSpec) frozenValues = await queryComparison(card.provenance.comparisonSpec, registry);
       else if (card.kind === 'lineage') frozenValues = lineageSnapshot();
+      else if (card.kind === 'chart' && isChartEvidenceCapture(card.frozenValues)) {
+        const { chart, filters } = card.frozenValues;
+        const data = await queryChartData({ chart, filters, ...chartQueryTarget(chart, useStore.getState().mapLayers, registry) });
+        frozenValues = { chart, filters, data: compactChartEvidence(data) };
+      } else if (card.kind === 'kpi') {
+        const spec = useStore.getState().visualAnalytics.kpis.find((item) => item.id === card.referenceId);
+        if (!spec) throw new Error('The metric this card was pinned from no longer exists.');
+        const filters = card.provenance?.filtersByDataset[spec.datasetId] || [];
+        const layer = useStore.getState().mapLayers.find((item) => item.id === spec.datasetId);
+        const dataset = registry[spec.datasetId];
+        const result = layer
+          ? await queryLayerKpi({ layer, filters, spec })
+          : await queryTableKpi({ tableName: dataset.relationName!, rowIdColumn: dataset.rowIdColumn, filters, spec });
+        frozenValues = result.value;
+        update(card.id, { caption: kpiEvidenceCaption(spec, result) });
+      }
       update(card.id, { frozenValues, provenance: { ...card.provenance!, capturedAt: Date.now(), sourceVersions: Object.fromEntries(sourceIds.map((id) => [id, registry[id]?.sourceUpdatedAt])) } });
       addToast({ type: 'success', message: 'Frozen evidence refreshed explicitly.' });
-    } catch { addToast({ type: 'error', message: 'Could not refresh this evidence.' }); }
+    } catch (error) { addToast({ type: 'error', message: error instanceof Error ? `Could not refresh this evidence: ${error.message}` : 'Could not refresh this evidence.' }); }
   };
   useEffect(() => {
     if (card.behaviour === 'live' && sourceChanged && !sourceMissing) void refresh();

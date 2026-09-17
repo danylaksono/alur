@@ -425,7 +425,8 @@ export const applyProjectManifest = (manifest: ProjectManifest | ProjectManifest
       workspaceMode: valid.workspace.workspaceMode || 'explore',
       isPresentationMode: false,
       mapCamera: valid.workspace.mapCamera || state.ui.mapCamera,
-      datasetOverviewLayerId: null,
+      datasetOverviewId: null,
+      chartCanvas: false,
       layerStyleRequest: undefined,
     },
   }));

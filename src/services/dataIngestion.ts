@@ -395,9 +395,15 @@ export const finaliseIngestedTable = async ({
     useStore.getState().setSelectedNodeId(nodeId);
     useStore.getState().finishLoadingOperation(operationId);
     addToast({
-      type: "warning",
-      message: `Registered ${totalRows.toLocaleString()} rows as ${tableName}, but found no renderable geometry or latitude/longitude fields.`,
+      type: "info",
+      message: `Loaded ${totalRows.toLocaleString()} rows from ${displayName} as a table. It has no geometry or latitude/longitude to map, so explore it with charts, the table and the dataset overview.`,
     });
+    // Nothing to map, so lead with the charts. Only when the map is still
+    // empty: a table loaded beside existing layers should not hide them.
+    if (!useStore.getState().mapLayers.length) {
+      useStore.getState().navigate("charts");
+      useStore.getState().setChartCanvas(true);
+    }
     return { tableName, layerId: null };
   }
 

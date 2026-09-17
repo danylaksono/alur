@@ -1,4 +1,5 @@
-import type { DatasetSource } from '../types/datasets';
+import type { MapLayer } from '../store/useStore';
+import type { DatasetDescriptor, DatasetSource } from '../types/datasets';
 import type { KpiSpec, VisualAnalyticsState, VisualChartSpec } from '../types/visualAnalytics';
 
 export const tableDatasetId = (tableName: string) => `table:${tableName}`;
@@ -23,3 +24,18 @@ export const migrateVisualAnalyticsSources = (analytics: VisualAnalyticsState): 
   kpis: analytics.kpis.map((kpi) => ({ ...kpi, source: kpiDatasetSource(kpi) })),
 });
 
+
+/** Where a chart's rows are read from: a map layer, or a registered table's relation. */
+export const chartQueryTarget = (
+  chart: VisualChartSpec,
+  layers: MapLayer[],
+  registry: Record<string, DatasetDescriptor>,
+) => {
+  const source = chartDatasetSource(chart);
+  if (source.kind === 'layer') return { layer: layers.find((layer) => layer.id === source.layerId) };
+  const descriptor = registry[source.datasetId];
+  return {
+    tableName: source.kind === 'table' ? source.tableName : descriptor?.relationName,
+    rowIdColumn: descriptor?.rowIdColumn,
+  };
+};

@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { LayoutGrid } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { ChartPanel } from '../Charts/ChartPanel';
 import { ErrorBoundary } from '../ErrorBoundary';
@@ -22,6 +23,8 @@ export const LeftPanel = () => {
   const isPanelCollapsed = useStore((s) => s.ui.isPanelCollapsed);
   const isRailExpanded = useStore((s) => s.ui.isRailExpanded);
   const panelWidth = useStore((s) => s.ui.panelWidth);
+  const chartCanvas = useStore((s) => s.ui.chartCanvas);
+  const setChartCanvas = useStore((s) => s.setChartCanvas);
   const setPanelWidth = useStore((s) => s.setPanelWidth);
   const [isResizing, setIsResizing] = useState(false);
   const rootRef = useRef<HTMLElement>(null);
@@ -66,9 +69,19 @@ export const LeftPanel = () => {
             <LayersTab />
           </ErrorBoundary>
         ) : activeRailTab === 'charts' ? (
-          <ErrorBoundary name="Chart Panel">
-            <ChartPanel />
-          </ErrorBoundary>
+          chartCanvas ? (
+            <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center text-[11px] text-slate-500">
+              <LayoutGrid className="h-5 w-5" />
+              Charts are laid out on the canvas.
+              <button type="button" onClick={() => setChartCanvas(false)} className="pressable rounded-md border border-slate-200 bg-white px-3 py-1.5 font-semibold text-slate-600 hover:bg-slate-50">
+                Dock them here instead
+              </button>
+            </div>
+          ) : (
+            <ErrorBoundary name="Chart Panel">
+              <ChartPanel />
+            </ErrorBoundary>
+          )
         ) : activeRailTab === 'nodes' ? (
           <ErrorBoundary name="Node Palette">
             <NodePalette />

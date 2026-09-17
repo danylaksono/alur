@@ -3,8 +3,8 @@ import { AlertTriangle, CheckCircle2, Database, Loader2, Search, X } from 'lucid
 import { useStore } from '../../store/useStore';
 import type { DatasetProfile } from '../../types/datasets';
 import type { VisualFilter } from '../../types/visualAnalytics';
-import { metadataForLayer } from '../../utils/datasetMetadata';
-import { queryLayerDatasetProfile } from '../../services/visualAnalyticsService';
+import { metadataForDataset, metadataForLayer } from '../../utils/datasetMetadata';
+import { queryLayerDatasetProfile, queryTableDatasetProfile } from '../../services/visualAnalyticsService';
 import { FieldQuickExploreMenu } from './FieldQuickExploreMenu';
 import { FilterEditorDialog } from './FilterEditorDialog';
 import { useAnalyticsCommands } from '../../hooks/useAnalyticsCommands';
@@ -12,9 +12,10 @@ import { useAnalyticsCommands } from '../../hooks/useAnalyticsCommands';
 const formatNumber = (value: number | undefined) => value === undefined ? 'n/a' : value.toLocaleString(undefined, { maximumFractionDigits: 2, notation: Math.abs(value) >= 100_000 ? 'compact' : 'standard' });
 
 export const DatasetOverviewDialog = () => {
-  const layerId = useStore((state) => state.ui.datasetOverviewLayerId);
-  const layer = useStore((state) => state.mapLayers.find((item) => item.id === state.ui.datasetOverviewLayerId));
-  const setOpen = useStore((state) => state.setDatasetOverviewLayerId);
+  const datasetId = useStore((state) => state.ui.datasetOverviewId);
+  const layer = useStore((state) => state.mapLayers.find((item) => item.id === state.ui.datasetOverviewId));
+  const dataset = useStore((state) => state.ui.datasetOverviewId ? state.datasetRegistry[state.ui.datasetOverviewId] : undefined);
+  const setOpen = useStore((state) => state.setDatasetOverviewId);
   const openDrawerTab = useStore((state) => state.openDrawerTab);
   const setLayerFilters = useStore((state) => state.setLayerFilters);
   const execute = useAnalyticsCommands();
@@ -23,31 +24,31 @@ export const DatasetOverviewDialog = () => {
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [newFilter, setNewFilter] = useState<VisualFilter | null>(null);
-  const metadata = useMemo(() => layer ? metadataForLayer(layer) : null, [layer]);
+  const metadata = useMemo(() => layer ? metadataForLayer(layer) : dataset ? metadataForDataset(dataset) : null, [layer, dataset]);
 
   useEffect(() => {
-    if (!layer) { setProfile(null); return; }
+    if (!layer && !dataset) { setProfile(null); return; }
     let cancelled = false;
     let timer = 0;
     setProfile(null);
     setError(null);
     setLoading(true);
-    const run = () => queryLayerDatasetProfile(layer)
+    const run = () => (layer ? queryLayerDatasetProfile(layer) : queryTableDatasetProfile(dataset!))
       .then((next) => { if (!cancelled) setProfile(next); })
       .catch((reason: unknown) => { if (!cancelled) setError(reason instanceof Error ? reason.message : 'Profile query failed'); })
       .finally(() => { if (!cancelled) setLoading(false); });
     timer = window.setTimeout(run, 0);
     return () => { cancelled = true; window.clearTimeout(timer); };
-  }, [layer]);
+  }, [layer, dataset]);
 
   useEffect(() => {
-    if (!layerId) return;
+    if (!datasetId) return;
     const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape' && !newFilter) setOpen(null); };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [layerId, newFilter, setOpen]);
+  }, [datasetId, newFilter, setOpen]);
 
-  if (!layerId || !layer || !metadata) return null;
+  if (!datasetId || !metadata) return null;
   // Always the full schema. Profiling covers only the columns the tile table
   // carries, so keying the list off the profile would make the rest of the
   // columns vanish once it landed; `detailed` below already renders the
@@ -56,8 +57,8 @@ export const DatasetOverviewDialog = () => {
   const runCommand = (command: Parameters<typeof execute>[0]) => { void execute(command); };
   const inspectField = (field?: string, missing = false) => {
     if (field && missing) {
-      const filters = useStore.getState().visualAnalytics.datasets[layer.id]?.filters || [];
-      setLayerFilters(layer.id, [...filters.filter((item) => !(item.kind === 'null' && item.field === field)), { kind: 'null', field, isNull: true }]);
+      const filters = useStore.getState().visualAnalytics.datasets[metadata.id]?.filters || [];
+      setLayerFilters(metadata.id, [...filters.filter((item) => !(item.kind === 'null' && item.field === field)), { kind: 'null', field, isNull: true }]);
     }
     openDrawerTab('table');
     setOpen(null);
@@ -68,7 +69,7 @@ export const DatasetOverviewDialog = () => {
       <section role="dialog" aria-modal="true" aria-labelledby="dataset-overview-title" className="flex max-h-[88vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
         <header className="flex shrink-0 items-start justify-between gap-4 border-b bg-slate-50 px-5 py-4">
           <div className="min-w-0">
-            <h2 id="dataset-overview-title" className="truncate text-base font-extrabold text-slate-800">{layer.name}</h2>
+            <h2 id="dataset-overview-title" className="truncate text-base font-extrabold text-slate-800">{metadata.name}</h2>
             <p className="mt-1 text-[11px] text-slate-500">Dataset overview · cheap metadata appears immediately; detailed statistics are cached by source version.</p>
           </div>
           <button type="button" onClick={() => setOpen(null)} aria-label="Close dataset overview" className="pressable rounded-md p-2 text-slate-500 hover:bg-slate-200 hover:text-slate-700"><X className="h-4 w-4" /></button>
@@ -77,10 +78,11 @@ export const DatasetOverviewDialog = () => {
         <div className="min-h-0 flex-1 overflow-y-auto p-5">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {[
-              ['Rows', (profile?.rowCount ?? metadata.rowCount ?? layer.featureCount).toLocaleString()],
+              ['Rows', (profile?.rowCount ?? metadata.rowCount ?? 0).toLocaleString()],
               ['Fields', (profile?.fieldCount ?? metadata.fields.length).toLocaleString()],
-              ['Geometry', metadata.geometryKind || 'Unknown'],
-              ['CRS', profile?.geometry?.crs || metadata.crs || 'Unknown'],
+              ...(layer
+                ? [['Geometry', metadata.geometryKind || 'Unknown'], ['CRS', profile?.geometry?.crs || metadata.crs || 'Unknown']]
+                : [['Source', metadata.kind === 'workflow-node' ? 'Workflow result' : 'Table'], ['Row identity', dataset?.rowIdQuality === 'validated-unique' ? 'Validated' : 'Row number']]),
             ].map(([label, value]) => <div key={label} className="rounded-lg border border-slate-200 bg-slate-50 p-3"><div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{label}</div><div className="mt-1 truncate text-lg font-extrabold capitalize text-slate-800" title={value}>{value}</div></div>)}
           </div>
 
@@ -104,7 +106,7 @@ export const DatasetOverviewDialog = () => {
                       <span className="min-w-0 truncate tabular-nums text-slate-500" title={detailed ? `${detailed.distinctCount.toLocaleString()} distinct` : 'Profiling'}>
                         {detailed?.semanticType === 'numeric' ? <span className="block"><span className="block truncate">{formatNumber(detailed.min)}–{formatNumber(detailed.max)}</span>{detailed.quantiles && detailed.quantiles.length > 1 && <span className="mt-0.5 flex h-1 items-center gap-px" aria-label={`Quantiles ${detailed.quantiles.map(formatNumber).join(', ')}`}>{detailed.quantiles.map((value, index) => <span key={`${value}-${index}`} className="h-1 flex-1 rounded-full bg-sky-400" style={{ opacity: 0.25 + index * 0.15 }} />)}</span>}</span> : detailed?.semanticType === 'temporal' ? `${detailed.temporalStart?.slice(0, 10) || 'n/a'}–${detailed.temporalEnd?.slice(0, 10) || 'n/a'}` : detailed ? `${detailed.distinctCount.toLocaleString()} distinct` : '…'}
                       </span>
-                      <FieldQuickExploreMenu field={field} onChart={() => runCommand({ type: 'create-chart', datasetId: layer.id, field: field.name })} onFilter={setNewFilter} onProfile={() => inspectField(field.name)} onStyle={() => runCommand({ type: 'open-layer-style', datasetId: layer.id, field: field.name })} onPinMetric={field.semanticType === 'numeric' ? () => runCommand({ type: 'pin-kpi', datasetId: layer.id, field: field.name }) : undefined} />
+                      <FieldQuickExploreMenu field={field} onChart={() => runCommand({ type: 'create-chart', datasetId: metadata.id, field: field.name })} onFilter={setNewFilter} onProfile={() => inspectField(field.name)} onStyle={layer ? () => runCommand({ type: 'open-layer-style', datasetId: metadata.id, field: field.name }) : undefined} onPinMetric={field.semanticType === 'numeric' ? () => runCommand({ type: 'pin-kpi', datasetId: metadata.id, field: field.name }) : undefined} />
                     </div>;
                   })}
                   {!fields.length && <div className="px-3 py-8 text-center text-xs text-slate-500">No matching fields.</div>}
@@ -123,7 +125,7 @@ export const DatasetOverviewDialog = () => {
           </div>
         </div>
       </section>
-      {newFilter && <FilterEditorDialog filter={newFilter} title={`Filter ${newFilter.field}`} onApply={(filter) => { const filters = useStore.getState().visualAnalytics.datasets[layer.id]?.filters || []; setLayerFilters(layer.id, [...filters.filter((item) => !(item.field === filter.field && item.kind === filter.kind)), filter]); setNewFilter(null); }} onCancel={() => setNewFilter(null)} />}
+      {newFilter && <FilterEditorDialog filter={newFilter} title={`Filter ${newFilter.field}`} onApply={(filter) => { const filters = useStore.getState().visualAnalytics.datasets[metadata.id]?.filters || []; setLayerFilters(metadata.id, [...filters.filter((item) => !(item.field === filter.field && item.kind === filter.kind)), filter]); setNewFilter(null); }} onCancel={() => setNewFilter(null)} />}
     </div>
   );
 };

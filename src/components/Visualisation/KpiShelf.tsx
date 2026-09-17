@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, ArrowRight, Gauge, Loader2, Trash2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Gauge, Loader2, Pin, Trash2 } from 'lucide-react';
 import { useStore, type MapLayer } from '../../store/useStore';
 import type { KpiFormat, KpiResult, KpiSpec } from '../../types/visualAnalytics';
 import { queryLayerKpi, queryTableKpi } from '../../services/visualAnalyticsService';
 import type { DatasetDescriptor } from '../../types/datasets';
+import { pinKpiEvidence } from '../../services/explainCapture';
 
 const formatKpiValue = (value: number | null, spec: KpiSpec) => {
   if (value === null || !Number.isFinite(value)) return 'n/a';
@@ -79,6 +80,7 @@ const KpiCard = ({ spec, dataset, layer, index, count }: { spec: KpiSpec; datase
         </select>
         <button type="button" disabled={index === 0} onClick={() => reorderKpi(spec.id, index - 1)} aria-label={`Move ${spec.title} left`} className="pressable rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-25"><ArrowLeft className="h-3 w-3" /></button>
         <button type="button" disabled={index === count - 1} onClick={() => reorderKpi(spec.id, index + 1)} aria-label={`Move ${spec.title} right`} className="pressable rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-25"><ArrowRight className="h-3 w-3" /></button>
+        <button type="button" disabled={!result || result.value === null} onClick={() => { if (result) pinKpiEvidence(spec, filters, result); }} aria-label={`Pin ${spec.title} to the report`} title="Pin this value, with its denominator, to the report" className="pressable rounded p-1 text-slate-500 hover:bg-sky-50 hover:text-sky-700 disabled:opacity-25"><Pin className="h-3 w-3" /></button>
         <button type="button" onClick={() => removeKpi(spec.id)} aria-label={`Remove ${spec.title}`} className="pressable rounded p-1 text-slate-500 hover:bg-rose-50 hover:text-rose-600"><Trash2 className="h-3 w-3" /></button>
       </div>
     </article>

@@ -10,6 +10,7 @@ import {
   queryLayerKpi,
   queryLayerColumnProfile,
   queryLayerDatasetProfile,
+  queryTableDatasetProfile,
   queryLayerSummary,
   queryLayerRows,
   queryLayerScatter,
@@ -682,6 +683,31 @@ describe('visual analytics cache helpers', () => {
 
     expect(String(query.mock.calls[0][0])).not.toContain('alternatelanguage');
     expect(profile.fields.map((field) => field.name)).toEqual(['addressstatus']);
+  });
+
+  it('profiles a registered table without geometry', async () => {
+    const query = vi.spyOn(duckdbService, 'query').mockResolvedValueOnce({
+      toArray: () => [{
+        profile_row_count: 4, p0_nulls: 2, p0_distinct: 2, p1_nulls: 0, p1_distinct: 3, p1_min: 1, p1_max: 5,
+        // DuckDB's shapes: a list as a typed-array vector, a timestamp as epoch ms.
+        p0_quantiles: { toArray: () => new Float64Array([1, 2, 3, 4, 5]) },
+        p2_nulls: 0, p2_distinct: 4, p2_start: Date.UTC(2025, 0, 1), p2_end: Date.UTC(2025, 11, 31),
+      }],
+    } as any);
+    const profile = await queryTableDatasetProfile({
+      id: 'table:sales', name: 'Sales', sourceVersion: 1, spatial: false, rowCount: 4, rowIdColumn: '__alur_row_id', rowIdQuality: 'materialised', sourceUpdatedAt: 7,
+      source: { kind: 'table', datasetId: 'table:sales', tableName: '__alur_dataset_sales', rowIdColumn: '__alur_row_id' },
+      relationName: '__alur_dataset_sales',
+      fields: [{ name: '__alur_row_id', type: 'BIGINT' }, { name: 'region', type: 'VARCHAR' }, { name: 'amount', type: 'DOUBLE' }, { name: 'sold_on', type: 'DATE' }],
+    });
+    expect(String(query.mock.calls[0][0])).toContain('"__alur_dataset_sales"');
+    expect(String(query.mock.calls[0][0])).not.toContain('__alur_row_id');
+    expect(profile.geometry).toBeUndefined();
+    expect(profile.fields.map((field) => field.name)).toEqual(['amount', 'region', 'sold_on']);
+    const quantiles = profile.fields[0].quantiles!;
+    expect(Array.isArray(quantiles) && quantiles.map((value) => `q${value}`)).toEqual(['q1', 'q2', 'q3', 'q4', 'q5']);
+    expect(profile.fields[2]).toMatchObject({ temporalStart: '2025-01-01T00:00:00.000Z', temporalEnd: '2025-12-31T00:00:00.000Z' });
+    expect(profile.issues.map((issue) => issue.id)).toContain('missing-amount');
   });
 
   it('links non-spatial table chart filters and stable row identities', async () => {

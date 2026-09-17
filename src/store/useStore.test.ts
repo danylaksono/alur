@@ -228,6 +228,23 @@ describe('layer state', () => {
     expect(useStore.getState().visualAnalytics.charts).toEqual([]);
   });
 
+  it('duplicates a chart beside its original and reorders charts within bounds', () => {
+    const store = useStore.getState();
+    store.addMapLayer({ id: 'areas', name: 'Areas', geojson: fc(3), sourceKind: 'manual' });
+    const chart = (id: string) => ({ id, title: id, layerId: 'areas', type: 'bar' as const, dimensionField: 'id', aggregation: 'count' as const, paletteId: 'categorical', maxCategories: 8 });
+    store.addChart(chart('a'));
+    store.addChart(chart('b'));
+    store.duplicateChart('a', 'a2');
+    expect(useStore.getState().visualAnalytics.charts.map((item) => item.id)).toEqual(['a', 'a2', 'b']);
+    expect(useStore.getState().visualAnalytics.charts[1].title).toBe('a (copy)');
+
+    store.reorderChart('b', 0);
+    store.reorderChart('a', 99);
+    expect(useStore.getState().visualAnalytics.charts.map((item) => item.id)).toEqual(['b', 'a2', 'a']);
+    store.undoAnalysis();
+    expect(useStore.getState().visualAnalytics.charts.map((item) => item.id)).toEqual(['b', 'a', 'a2']);
+  });
+
   it('undoes and redoes durable filters without recording hover state', () => {
     const store = useStore.getState();
     store.addMapLayer({ id: 'areas', name: 'Areas', geojson: fc(3), sourceKind: 'manual' });
